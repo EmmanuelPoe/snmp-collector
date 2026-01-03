@@ -42,6 +42,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_devices_name'), 'devices', ['name'], unique=True)
     
     # Create snmp_metrics table (will be converted to hypertable)
+    # Note: For TimescaleDB hypertables, the partitioning column (timestamp) 
+    # must be part of the primary key
     op.create_table(
         'snmp_metrics',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -54,10 +56,9 @@ def upgrade() -> None:
         sa.Column('value', sa.Float(), nullable=True),
         sa.Column('value_type', sa.String(length=50), nullable=True),
         sa.ForeignKeyConstraint(['device_id'], ['devices.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id')
+        sa.PrimaryKeyConstraint('id', 'timestamp')  # Composite key for TimescaleDB
     )
     op.create_index(op.f('ix_snmp_metrics_device_id'), 'snmp_metrics', ['device_id'], unique=False)
-    op.create_index(op.f('ix_snmp_metrics_id'), 'snmp_metrics', ['id'], unique=False)
     op.create_index(op.f('ix_snmp_metrics_interface_name'), 'snmp_metrics', ['interface_name'], unique=False)
     op.create_index(op.f('ix_snmp_metrics_oid'), 'snmp_metrics', ['oid'], unique=False)
     op.create_index(op.f('ix_snmp_metrics_timestamp'), 'snmp_metrics', ['timestamp'], unique=False)

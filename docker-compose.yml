@@ -15,7 +15,7 @@ services:
     networks:
       - snmp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-snmpuser}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-snmpuser}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,7 +34,7 @@ services:
     command:
       - '--config.file=/etc/snmp_exporter/snmp.yml'
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9116/"]
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9116/" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -81,6 +81,16 @@ services:
       - backend
     stdin_open: true
     tty: true
+
+  snmp-simulator:
+    build:
+      context: ./snmp-simulator
+      dockerfile: Dockerfile
+    container_name: snmp-simulator
+    ports:
+      - "1161:161/udp"
+    networks:
+      - snmp-network
 
 networks:
   snmp-network:

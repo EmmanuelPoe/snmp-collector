@@ -1,4 +1,4 @@
-.PHONY: help build up down logs clean reset migrate shell-backend shell-db test
+.PHONY: help build up down logs clean reset migrate shell-backend shell-db test simulation clean-simulation
 
 # Default target
 help:
@@ -19,6 +19,8 @@ help:
 	@echo "  shell-backend  - Open shell in backend container"
 	@echo "  shell-db       - Open PostgreSQL shell"
 	@echo "  test           - Run backend tests (if implemented)"
+	@echo "  simulation     - Run end-to-end simulation test with SNMP simulator"
+	@echo "  clean-simulation - Remove test data from simulation"
 	@echo ""
 
 # Build all containers
@@ -107,3 +109,29 @@ restart-frontend:
 
 restart-exporter:
 	docker-compose restart snmp-exporter
+
+# Run simulation test
+simulation:
+	@echo "🧪 Running SNMP simulation test..."
+	@echo "This will:"
+	@echo "  1. Start all containers (including SNMP simulator)"
+	@echo "  2. Add a test device via API"
+	@echo "  3. Trigger SNMP collection"
+	@echo "  4. Verify data storage in PostgreSQL"
+	@echo "  5. Confirm data is ready for UI visualization"
+	@echo ""
+	@docker-compose up -d
+	@echo "Waiting for services to start..."
+	@sleep 10
+	@bash scripts/run_simulation.sh
+
+# Clean simulation data
+clean-simulation:
+	@echo "Cleaning simulation test data..."
+	docker-compose exec -T postgres psql -U snmpuser -d snmp_metrics -c \
+		"DELETE FROM snmp_metrics WHERE device_id IN (SELECT id FROM devices WHERE name = 'Test-Simulator');" || true
+	docker-compose exec -T postgres psql -U snmpuser -d snmp_metrics -c \
+		"DELETE FROM collection_schedules WHERE device_id IN (SELECT id FROM devices WHERE name = 'Test-Simulator');" || true
+	docker-compose exec -T postgres psql -U snmpuser -d snmp_metrics -c \
+		"DELETE FROM devices WHERE name = 'Test-Simulator';" || true
+	@echo "✓ Simulation data cleaned"
