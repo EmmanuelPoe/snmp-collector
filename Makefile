@@ -123,6 +123,8 @@ simulation:
 	@docker-compose up -d
 	@echo "Waiting for services to start..."
 	@sleep 10
+	@echo "Running database migrations..."
+	@docker-compose exec -T backend alembic upgrade head
 	@bash scripts/run_simulation.sh
 
 # Clean simulation data

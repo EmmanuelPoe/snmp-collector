@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
 from database import SessionLocal
@@ -42,7 +42,7 @@ async def collect_device_metrics(device_id: int) -> bool:
         logger.info(f"Parsed {len(parsed_metrics)} metrics from {device.name}")
         
         # Store metrics in database
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
         stored_count = 0
         
         for metric in parsed_metrics:
@@ -122,7 +122,7 @@ async def run_scheduled_collection():
             
             for schedule in schedules:
                 # Check if it's time to collect
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 
                 if schedule.last_collection is None:
                     # First collection

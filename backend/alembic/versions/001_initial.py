@@ -46,7 +46,7 @@ def upgrade() -> None:
     # must be part of the primary key
     op.create_table(
         'snmp_metrics',
-        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('device_id', sa.Integer(), nullable=False),
         sa.Column('timestamp', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('interface_name', sa.String(length=255), nullable=True),

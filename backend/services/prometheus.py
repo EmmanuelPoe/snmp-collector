@@ -21,7 +21,8 @@ async def query_snmp_exporter(target: str, module: str = "if_mib") -> Optional[s
     url = f"{settings.snmp_exporter_url}/snmp"
     params = {
         "target": target,
-        "module": module
+        "module": module,
+        "auth": "public_v2"
     }
     
     try:
@@ -107,18 +108,88 @@ def update_prometheus_config(devices: List[Dict]) -> bool:
     """
     try:
         config = {
-            'if_mib': {
-                'walk': [
-                    '1.3.6.1.2.1.2.2.1.8',   # ifOperStatus
-                    '1.3.6.1.2.1.2.2.1.10',  # ifInOctets
-                    '1.3.6.1.2.1.2.2.1.16',  # ifOutOctets
-                    '1.3.6.1.2.1.2.2.1.11',  # ifInUcastPkts
-                    '1.3.6.1.2.1.2.2.1.17',  # ifOutUcastPkts
-                    '1.3.6.1.2.1.31.1.1.1.1', # ifName
-                ],
-                'version': 2,
-                'auth': {
-                    'community': 'public'
+            'auths': {
+                'public_v2': {
+                    'community': 'public',
+                    'security_level': 'noAuthNoPriv',
+                    'auth_protocol': 'MD5',
+                    'priv_protocol': 'DES',
+                    'version': 2
+                }
+            },
+            'modules': {
+                'if_mib': {
+                    'walk': [
+                        '1.3.6.1.2.1.2.2.1',
+                        '1.3.6.1.2.1.31.1.1.1.1'
+                    ],
+                    'metrics': [
+                        {
+                            'name': 'ifOperStatus',
+                            'oid': '1.3.6.1.2.1.2.2.1.8',
+                            'type': 'gauge',
+                            'help': 'Interface operational status',
+                            'indexes': [
+                                {'labelname': 'ifIndex', 'type': 'gauge'}
+                            ],
+                            'lookups': [
+                                {'labels': ['ifIndex'], 'labelname': 'ifDescr', 'oid': '1.3.6.1.2.1.2.2.1.2', 'type': 'DisplayString'},
+                                {'labels': ['ifIndex'], 'labelname': 'ifName', 'oid': '1.3.6.1.2.1.31.1.1.1.1', 'type': 'DisplayString'}
+                            ]
+                        },
+                        {
+                            'name': 'ifInOctets',
+                            'oid': '1.3.6.1.2.1.2.2.1.10',
+                            'type': 'counter',
+                            'help': 'Inbound octets',
+                            'indexes': [
+                                {'labelname': 'ifIndex', 'type': 'gauge'}
+                            ],
+                            'lookups': [
+                                {'labels': ['ifIndex'], 'labelname': 'ifDescr', 'oid': '1.3.6.1.2.1.2.2.1.2', 'type': 'DisplayString'},
+                                {'labels': ['ifIndex'], 'labelname': 'ifName', 'oid': '1.3.6.1.2.1.31.1.1.1.1', 'type': 'DisplayString'}
+                            ]
+                        },
+                        {
+                            'name': 'ifOutOctets',
+                            'oid': '1.3.6.1.2.1.2.2.1.16',
+                            'type': 'counter',
+                            'help': 'Outbound octets',
+                            'indexes': [
+                                {'labelname': 'ifIndex', 'type': 'gauge'}
+                            ],
+                            'lookups': [
+                                {'labels': ['ifIndex'], 'labelname': 'ifDescr', 'oid': '1.3.6.1.2.1.2.2.1.2', 'type': 'DisplayString'},
+                                {'labels': ['ifIndex'], 'labelname': 'ifName', 'oid': '1.3.6.1.2.1.31.1.1.1.1', 'type': 'DisplayString'}
+                            ]
+                        },
+                        {
+                            'name': 'ifInUcastPkts',
+                            'oid': '1.3.6.1.2.1.2.2.1.11',
+                            'type': 'counter',
+                            'help': 'Inbound unicast packets',
+                            'indexes': [
+                                {'labelname': 'ifIndex', 'type': 'gauge'}
+                            ],
+                            'lookups': [
+                                {'labels': ['ifIndex'], 'labelname': 'ifDescr', 'oid': '1.3.6.1.2.1.2.2.1.2', 'type': 'DisplayString'},
+                                {'labels': ['ifIndex'], 'labelname': 'ifName', 'oid': '1.3.6.1.2.1.31.1.1.1.1', 'type': 'DisplayString'}
+                            ]
+                        },
+                        {
+                            'name': 'ifOutUcastPkts',
+                            'oid': '1.3.6.1.2.1.2.2.1.17',
+                            'type': 'counter',
+                            'help': 'Outbound unicast packets',
+                            'indexes': [
+                                {'labelname': 'ifIndex', 'type': 'gauge'}
+                            ],
+                            'lookups': [
+                                {'labels': ['ifIndex'], 'labelname': 'ifDescr', 'oid': '1.3.6.1.2.1.2.2.1.2', 'type': 'DisplayString'},
+                                {'labels': ['ifIndex'], 'labelname': 'ifName', 'oid': '1.3.6.1.2.1.31.1.1.1.1', 'type': 'DisplayString'}
+                            ]
+                        }
+                    ]
                 }
             }
         }
