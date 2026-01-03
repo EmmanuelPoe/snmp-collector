@@ -1,0 +1,109 @@
+.PHONY: help build up down logs clean reset migrate shell-backend shell-db test
+
+# Default target
+help:
+	@echo "SNMP Metrics Collector - Makefile Commands"
+	@echo ""
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Available targets:"
+	@echo "  build          - Build all Docker containers"
+	@echo "  up             - Start the application"
+	@echo "  down           - Stop the application"
+	@echo "  logs           - View logs from all containers"
+	@echo "  logs-backend   - View backend logs"
+	@echo "  logs-frontend  - View frontend logs"
+	@echo "  clean          - Remove containers and volumes"
+	@echo "  reset          - Full reset (clean + rebuild + start)"
+	@echo "  migrate        - Run database migrations"
+	@echo "  shell-backend  - Open shell in backend container"
+	@echo "  shell-db       - Open PostgreSQL shell"
+	@echo "  test           - Run backend tests (if implemented)"
+	@echo ""
+
+# Build all containers
+build:
+	@echo "Building Docker containers..."
+	docker-compose build
+
+# Start the application
+up:
+	@echo "Starting SNMP Collector application..."
+	@cp -n .env.example .env 2>/dev/null || true
+	docker-compose up -d
+	@echo ""
+	@echo "✅ Application started successfully!"
+	@echo ""
+	@echo "Access the application:"
+	@echo "  Frontend: http://localhost:3000"
+	@echo "  Backend API: http://localhost:8000"
+	@echo "  API Docs: http://localhost:8000/docs"
+	@echo "  SNMP Exporter: http://localhost:9116"
+	@echo ""
+	@echo "View logs: make logs"
+	@echo "Stop application: make down"
+
+# Stop the application
+down:
+	@echo "Stopping SNMP Collector application..."
+	docker-compose down
+
+# View logs
+logs:
+	docker-compose logs -f
+
+logs-backend:
+	docker-compose logs -f backend
+
+logs-frontend:
+	docker-compose logs -f frontend
+
+# Clean up containers and volumes
+clean:
+	@echo "Cleaning up containers and volumes..."
+	docker-compose down -v
+	@echo "✅ Cleanup complete"
+
+# Full reset
+reset: clean build up
+	@echo "✅ Full reset complete"
+
+# Run database migrations
+migrate:
+	@echo "Running database migrations..."
+	docker-compose exec backend alembic upgrade head
+	@echo "✅ Migrations complete"
+
+# Open shell in backend container
+shell-backend:
+	docker-compose exec backend /bin/sh
+
+# Open PostgreSQL shell
+shell-db:
+	docker-compose exec postgres psql -U snmpuser -d snmp_metrics
+
+# Run tests
+test:
+	@echo "Running backend tests..."
+	docker-compose exec backend pytest tests/ -v
+
+# Development helpers
+dev-frontend:
+	cd frontend && npm start
+
+dev-backend:
+	cd backend && uvicorn main:app --reload
+
+# Check status
+status:
+	docker-compose ps
+
+# Restart specific service
+restart-backend:
+	docker-compose restart backend
+
+restart-frontend:
+	docker-compose restart frontend
+
+restart-exporter:
+	docker-compose restart snmp-exporter

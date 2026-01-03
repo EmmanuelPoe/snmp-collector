@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: snmp-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-snmp_metrics}
+      POSTGRES_USER: ${POSTGRES_USER:-snmpuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-snmppass}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - snmp-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-snmpuser}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  snmp-exporter:
+    build:
+      context: ./prometheus
+      dockerfile: Dockerfile
+    container_name: snmp-exporter
+    ports:
+      - "${SNMP_EXPORTER_PORT:-9116}:9116"
+    volumes:
+      - ./prometheus/snmp.yml:/etc/snmp_exporter/snmp.yml:ro
+    networks:
+      - snmp-network
+    command:
+      - '--config.file=/etc/snmp_exporter/snmp.yml'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9116/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: snmp-backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-snmpuser}:${POSTGRES_PASSWORD:-snmppass}@postgres:5432/${POSTGRES_DB:-snmp_metrics}
+      SNMP_EXPORTER_URL: http://snmp-exporter:9116
+      PROMETHEUS_CONFIG_PATH: /app/prometheus_config/snmp.yml
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - ./prometheus:/app/prometheus_config
+    networks:
+      - snmp-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      snmp-exporter:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: snmp-frontend
+    environment:
+      REACT_APP_API_URL: http://localhost:${BACKEND_PORT:-8000}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    networks:
+      - snmp-network
+    depends_on:
+      - backend
+    stdin_open: true
+    tty: true
+
+networks:
+  snmp-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
