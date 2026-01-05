@@ -4,24 +4,24 @@ A comprehensive SNMP metrics collection system using Docker containers with Prom
 
 ## 📋 Features
 
-- **Device Management**: Add, edit, and manage network devices (routers/switches)
-- **SNMP Metrics Collection**: Automated collection using Prometheus SNMP Exporter
+- **Multi-Module Collection**: Support for multiple SNMP modules per device (if_mib, host_resources, etc.)
+- **Modular Storage Architecture**: Hybrid storage using dedicated optimized wide tables for high-volume modules (like `if_mib_metrics`) and generic EAV fallback for others.
+- **Dynamic Configuration**: Manage SNMP modules and collection schedules for all devices from a centralized dashboard.
+- **Device Management**: Add, edit, and manage network devices with support for custom OID modules.
 - **Time-Series Storage**: PostgreSQL with TimescaleDB for efficient metric storage
-- **OID Configuration**: Flexible SNMP OID management
-- **Collection Scheduling**: Configurable collection intervals per device
-- **Real-Time Visualization**: Interactive charts showing interface status and metrics
-- **Modern UI**: Dark-mode interface with "Zinc/Cyan" theme and glassmorphism design
+- **Collection Scheduling**: Configurable collection intervals with a clear overview of polling status across all devices.
+- **Modern UI**: Dark-mode interface with hierarchical metric selection (Device -> Module -> Metric) and real-time visualization.
 - **End-to-End Simulation**: Built-in test workflow with a simulated SNMP agent
 
 ## 🏗️ Architecture
 
 The system consists of 5 Docker containers:
 
-1. **PostgreSQL + TimescaleDB**: Time-series optimized database
-2. **Prometheus SNMP Exporter**: Raw SNMP data collection
-3. **FastAPI Backend**: API server, orchestration, and data processing
-4. **React Frontend**: Modern web interface for management and visualization
-5. **SNMP Simulator**: `net-snmp` agent for automated testing and verification
+1. **PostgreSQL + TimescaleDB**: Optimized time-series database with custom schemas for performance.
+2. **Prometheus SNMP Exporter**: Metrics extraction based on dynamic module configurations.
+3. **FastAPI Backend**: API server, automated collection orchestrator, and data unpivoting layer.
+4. **React Frontend**: Premium dashboard for visualization and system administration.
+5. **SNMP Simulator**: Built-in simulator for robust testing and validation.
 
 ## 🚀 Quick Start
 
@@ -87,28 +87,18 @@ make clean-simulation
 
 ## 📚 Usage Guide
 
-### Managing Devices
+### Configuring Modules and Schedules
 
-1. Navigate to **Devices** page
-2. Click **"+ Add Device"**
-3. Fill in device information:
-   - Name (e.g., "Router-01")
-   - IP Address
-   - SNMP Version (1, 2c, or 3)
-   - SNMP Community string
-   - Device Type (Router, Switch, etc.)
-4. Click **Create**
+1. Navigate to **Configuration** page
+2. **Device Schedules Table**: View and manage polling intervals for all devices at once. You can pause collection or adjust frequencies directly.
+3. **Module Definitions**: Edit the YAML configuration for your SNMP modules directly in the browser. Changes are applied automatically to the exporter.
 
 ### Viewing Metrics
 
 1. Navigate to **Metrics** page
-2. Select a device from the dropdown
-3. Select an interface
-4. Choose time range (1 hour to 1 week)
-5. View interactive charts showing:
-   - Interface status (Up/Down)
-   - Packet statistics (In/Out)
-   - Bandwidth usage (Octets In/Out)
+2. Select a **Device**, then a **Module** (e.g., if_mib), and finally the specific **Metrics** you wish to graph.
+3. Choose an interface (if applicable) and time range.
+4. View interactive, synchronized charts for traffic, status, and error statistics.
 
 ## ⚙️ Configuration
 
@@ -154,12 +144,12 @@ make shell-db        # Open PostgreSQL shell
 
 ## �️ Database Schema
 
-The PostgreSQL database uses TimescaleDB for efficient time-series storage:
+The PostgreSQL database uses TimescaleDB and a modular schema:
 
-- **devices**: Network device information
-- **snmp_metrics**: Time-series metrics (hypertable). Primary key is composite `(id, timestamp)`.
-- **collection_configs**: SNMP OID configurations
-- **collection_schedules**: Collection timing per device
+- **devices**: Network device information with linked SNMP modules.
+- **if_mib_metrics**: Optimized wide table for interface statistics (high performance).
+- **snmp_metrics**: Generic time-series storage for other modules (fallback).
+- **collection_schedules**: Per-device collection timing and status.
 
 ## 🐛 Troubleshooting
 
