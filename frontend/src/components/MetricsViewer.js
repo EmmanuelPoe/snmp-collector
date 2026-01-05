@@ -162,97 +162,147 @@ function MetricsViewer() {
         });
     };
 
+    // Helper for formatting bytes
+    const formatValue = (val, type) => {
+        if (val === undefined || val === null) return 'N/A';
+        if (type === 'bytes') {
+            if (val === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(val) / Math.log(k));
+            return parseFloat((val / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        if (type === 'status') {
+            const mapping = { 1: 'Up', 2: 'Down', 3: 'Testing', 4: 'Unknown', 5: 'Dormant', 6: 'Not Present', 7: 'Lower Layer Down' };
+            return mapping[val] || val;
+        }
+        return val.toLocaleString();
+    };
+
     // Helper to render specific chart types
     const renderCharts = () => {
         if (!selectedModule || chartData.length === 0) return null;
 
-        // Custom render for if_mib
         if (selectedModule === 'if_mib') {
+            const groups = [
+                {
+                    title: 'Network Traffic',
+                    metrics: ['ifInOctets', 'ifOutOctets', 'ifHCInOctets', 'ifHCOutOctets'],
+                    type: 'area',
+                    unit: 'bytes'
+                },
+                {
+                    title: 'Packet Throughput',
+                    metrics: ['ifInUcastPkts', 'ifOutUcastPkts', 'ifInMulticastPkts', 'ifOutMulticastPkts', 'ifInBroadcastPkts', 'ifOutBroadcastPkts'],
+                    type: 'line',
+                    unit: 'packets'
+                },
+                {
+                    title: 'Errors & Integrity',
+                    metrics: ['ifInErrors', 'ifOutErrors', 'ifInUnknownProtos'],
+                    type: 'line',
+                    unit: 'count'
+                },
+                {
+                    title: 'Buffer Discards',
+                    metrics: ['ifInDiscards', 'ifOutDiscards'],
+                    type: 'bar',
+                    unit: 'count'
+                },
+                {
+                    title: 'Link Status',
+                    metrics: ['ifOperStatus', 'ifAdminStatus'],
+                    type: 'step',
+                    unit: 'status'
+                }
+            ];
+
+            const colors = ['#10b981', '#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+
             return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+                    {groups.map((group, groupIdx) => {
+                        const activeMetrics = selectedMetricNames.filter(m => group.metrics.includes(m));
+                        if (activeMetrics.length === 0) return null;
 
-                    {/* Traffic Chart (Octets) */}
-                    {(selectedMetricNames.includes('ifInOctets') || selectedMetricNames.includes('ifOutOctets') ||
-                        selectedMetricNames.includes('ifHCInOctets') || selectedMetricNames.includes('ifHCOutOctets')) && (
-                            <div className="glass-card">
-                                <h3>Network Traffic</h3>
-                                <div style={{ height: '300px', marginTop: '1rem' }}>
+                        return (
+                            <div key={group.title} className="glass-card">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                    <h3>{group.title}</h3>
+                                    <span className="text-muted" style={{ fontSize: '0.8rem' }}>{group.unit}</span>
+                                </div>
+                                <div style={{ height: '300px' }}>
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={chartData}>
-                                            <defs>
-                                                <linearGradient id="colorIn" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
-                                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                                                </linearGradient>
-                                                <linearGradient id="colorOut" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                            <XAxis dataKey="timeLabel" stroke="#9ca3af" />
-                                            <YAxis stroke="#9ca3af" tickFormatter={(val) => (val / 1024 / 1024).toFixed(1) + ' MB'} />
-                                            <Tooltip
-                                                contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }}
-                                                labelStyle={{ color: '#e5e7eb' }}
-                                            />
-                                            <Legend />
-                                            <Area type="monotone" dataKey="ifInOctets" stroke="#10b981" fillOpacity={1} fill="url(#colorIn)" name="Inbound (Octets)" />
-                                            <Area type="monotone" dataKey="ifOutOctets" stroke="#3b82f6" fillOpacity={1} fill="url(#colorOut)" name="Outbound (Octets)" />
-                                        </AreaChart>
+                                        {group.type === 'area' ? (
+                                            <AreaChart data={chartData}>
+                                                <defs>
+                                                    {activeMetrics.map((m, i) => (
+                                                        <linearGradient key={`grad-${m}`} id={`color-${m}`} x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor={colors[i % colors.length]} stopOpacity={0.3} />
+                                                            <stop offset="95%" stopColor={colors[i % colors.length]} stopOpacity={0} />
+                                                        </linearGradient>
+                                                    ))}
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                                <XAxis dataKey="timeLabel" stroke="#64748b" fontSize={11} />
+                                                <YAxis stroke="#64748b" fontSize={11} tickFormatter={(val) => formatValue(val, group.unit)} />
+                                                <Tooltip
+                                                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                                                    formatter={(val) => [formatValue(val, group.unit), '']}
+                                                />
+                                                <Legend iconType="circle" />
+                                                {activeMetrics.map((m, i) => (
+                                                    <Area key={m} type="monotone" dataKey={m} stroke={colors[i % colors.length]} fillOpacity={1} fill={`url(#color-${m})`} name={m.replace('if', '')} />
+                                                ))}
+                                            </AreaChart>
+                                        ) : (
+                                            <LineChart data={chartData}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                                <XAxis dataKey="timeLabel" stroke="#64748b" fontSize={11} />
+                                                <YAxis stroke="#64748b" fontSize={11} tickFormatter={(val) => formatValue(val, group.unit)} />
+                                                <Tooltip
+                                                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                                                    formatter={(val) => [formatValue(val, group.unit), '']}
+                                                />
+                                                <Legend iconType="circle" />
+                                                {activeMetrics.map((m, i) => (
+                                                    <Line key={m} type={group.type === 'step' ? 'stepAfter' : 'monotone'} dataKey={m} stroke={colors[i % colors.length]} dot={false} name={m.replace('if', '')} strokeWidth={2} />
+                                                ))}
+                                            </LineChart>
+                                        )}
                                     </ResponsiveContainer>
                                 </div>
                             </div>
-                        )}
+                        );
+                    })}
 
-                    {/* Discards / Errors Chart */}
-                    {(selectedMetricNames.includes('ifInErrors') || selectedMetricNames.includes('ifOutErrors') ||
-                        selectedMetricNames.includes('ifInDiscards') || selectedMetricNames.includes('ifOutDiscards')) && (
-                            <div className="glass-card">
-                                <h3>Errors & Discards</h3>
-                                <div style={{ height: '250px', marginTop: '1rem' }}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={chartData}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                            <XAxis dataKey="timeLabel" stroke="#9ca3af" />
-                                            <YAxis stroke="#9ca3af" />
-                                            <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }} />
-                                            <Legend />
-                                            <Line type="step" dataKey="ifInErrors" stroke="#ef4444" name="In Errors" />
-                                            <Line type="step" dataKey="ifOutErrors" stroke="#f87171" name="Out Errors" />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                        )}
-
-                    {/* Generic Fallback for other metrics */}
-                    {selectedMetricNames.filter(m => !['ifInOctets', 'ifOutOctets', 'ifInErrors', 'ifOutErrors'].includes(m)).length > 0 && (
+                    {/* Generic Fallback for other modules or miscellaneous if_mib metrics */}
+                    {selectedMetricNames.filter(m => !groups.some(g => g.metrics.includes(m))).length > 0 && (
                         <div className="glass-card">
-                            <h3>Other Metrics</h3>
-                            <div style={{ height: '250px', marginTop: '1rem' }}>
+                            <h3>Extended Metrics</h3>
+                            <div style={{ height: '300px', marginTop: '1rem' }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart data={chartData}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                        <XAxis dataKey="timeLabel" stroke="#9ca3af" />
-                                        <YAxis stroke="#9ca3af" />
-                                        <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }} />
-                                        <Legend />
-                                        {selectedMetricNames.filter(m => !['ifInOctets', 'ifOutOctets', 'ifInErrors', 'ifOutErrors'].includes(m)).map((metric, idx) => (
-                                            <Line key={metric} type="monotone" dataKey={metric} stroke={`hsl(${idx * 45 + 180}, 70%, 50%)`} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                        <XAxis dataKey="timeLabel" stroke="#64748b" fontSize={11} />
+                                        <YAxis stroke="#64748b" fontSize={11} />
+                                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} />
+                                        <Legend iconType="circle" />
+                                        {selectedMetricNames.filter(m => !groups.some(g => g.metrics.includes(m))).map((metric, idx) => (
+                                            <Line key={metric} type="monotone" dataKey={metric} stroke={`hsl(${idx * 45 + 200}, 70%, 60%)`} dot={false} name={metric} />
                                         ))}
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
                     )}
-
                 </div>
             );
         }
 
         return <div>Select metrics to view data.</div>;
     };
+
 
     return (
         <div className="container">
