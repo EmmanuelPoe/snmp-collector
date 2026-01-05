@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
     getDevices,
-    getSchedule,
+    getSchedules,
     updateSchedule,
+    createSchedule,
     reloadConfig,
     getModules,
     getModuleConfig,
@@ -12,8 +13,12 @@ import {
 function ConfigurationManager() {
     const [modules, setModules] = useState([]);
     const [devices, setDevices] = useState([]);
-    const [selectedDevice, setSelectedDevice] = useState('');
-    const [schedule, setSchedule] = useState(null);
+    const [schedules, setSchedules] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // Modal State
+    const [showModal, setShowModal] = useState(false);
+    const [newSchedule, setNewSchedule] = useState({ device_id: '', interval_seconds: 60, enabled: true });
 
     // Module Editor State
     const [selectedModule, setSelectedModule] = useState('');
@@ -23,14 +28,8 @@ function ConfigurationManager() {
     const [editorMessage, setEditorMessage] = useState('');
 
     useEffect(() => {
-        loadData();
+        loadInitialData();
     }, []);
-
-    useEffect(() => {
-        if (selectedDevice) {
-            loadSchedule();
-        }
-    }, [selectedDevice]);
 
     useEffect(() => {
         if (selectedModule) {
@@ -41,32 +40,25 @@ function ConfigurationManager() {
         }
     }, [selectedModule]);
 
-    const loadData = async () => {
+    const loadInitialData = async () => {
+        setLoading(true);
         try {
-            const [modulesData, devicesData] = await Promise.all([
+            const [modulesData, devicesData, schedulesData] = await Promise.all([
                 getModules(),
-                getDevices()
+                getDevices(),
+                getSchedules()
             ]);
             setModules(modulesData);
             setDevices(devicesData);
-            if (devicesData.length > 0) {
-                setSelectedDevice(devicesData[0].id);
-            }
+            setSchedules(schedulesData);
+
             if (modulesData.length > 0) {
                 setSelectedModule(modulesData[0]);
             }
         } catch (error) {
-            console.error('Error loading config data:', error);
-        }
-    };
-
-    const loadSchedule = async () => {
-        try {
-            const data = await getSchedule(selectedDevice);
-            setSchedule(data);
-        } catch (error) {
-            console.error('Error loading schedule:', error);
-            setSchedule(null);
+            console.error('Error loading initial data:', error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -92,68 +84,242 @@ function ConfigurationManager() {
             setOriginalYaml(yamlContent);
             setEditorStatus('success');
             setEditorMessage('Configuration saved and reloaded successfully');
-
-            // Clear success message after 3 seconds
-            setTimeout(() => {
-                if (editorStatus === 'success') {
-                    setEditorStatus('');
-                    setEditorMessage('');
-                }
-            }, 3000);
+            setTimeout(() => setEditorStatus(''), 3000);
         } catch (error) {
             console.error('Error saving module:', error);
             setEditorStatus('error');
-            setEditorMessage('Error saving configuration: ' + (error.response?.data?.detail || error.message));
+            setEditorMessage('Error: ' + (error.response?.data?.detail || error.message));
         }
     };
 
-    const handleResetModule = () => {
-        if (window.confirm('Reset changes to last saved version?')) {
-            setYamlContent(originalYaml);
-            setEditorStatus('');
-            setEditorMessage('');
-        }
-    };
-
-    const handleUpdateSchedule = async () => {
-        if (!schedule) return;
+    const handleToggleSchedule = async (deviceId, currentSchedule) => {
         try {
-            await updateSchedule(selectedDevice, {
-                interval_seconds: schedule.interval_seconds,
-                enabled: schedule.enabled
-            });
-            alert('Schedule updated successfully');
+            const updated = await updateSchedule(deviceId, { enabled: !currentSchedule.enabled });
+            setSchedules(prev => prev.map(s => s.device_id === deviceId ? updated : s));
         } catch (error) {
-            console.error('Error updating schedule:', error);
-            alert('Error updating schedule');
+            console.error('Error toggling schedule:', error);
+            alert('Failed to update schedule');
+        }
+    };
+
+    const handleIntervalChange = async (deviceId, interval) => {
+        try {
+            const updated = await updateSchedule(deviceId, { interval_seconds: parseInt(interval) });
+            setSchedules(prev => prev.map(s => s.device_id === deviceId ? updated : s));
+        } catch (error) {
+            console.error('Error updating interval:', error);
+        }
+    };
+
+    const handleCreateSchedule = async (e) => {
+        e.preventDefault();
+        try {
+            const created = await createSchedule(newSchedule);
+            setSchedules(prev => [...prev, created]);
+            setShowModal(false);
+            setNewSchedule({ device_id: '', interval_seconds: 60, enabled: true });
+        } catch (error) {
+            console.error('Error creating schedule:', error);
+            alert('Error: ' + (error.response?.data?.detail || 'Failed to create schedule'));
         }
     };
 
     const handleReloadConfig = async () => {
         try {
             await reloadConfig();
-            alert('Configuration reloaded successfully');
+            alert('Exporter reloaded successfully');
         } catch (error) {
-            console.error('Error reloading config:', error);
-            alert('Error reloading configuration');
+            console.error('Error reloading:', error);
+            alert('Reload failed');
         }
     };
 
+    // Helper to find schedule for a device
+    const getDeviceSchedule = (deviceId) => schedules.find(s => s.device_id === deviceId);
+
+    // Devices without schedules
+    const availableDevices = devices.filter(d => !getDeviceSchedule(d.id));
+
+    if (loading) return <div className="container" style={{ textAlign: 'center', padding: '5rem' }}>Loading Configuration...</div>;
+
     return (
-        <div className="container">
+        <div className="container" style={{ animation: 'fadeIn 0.5s' }}>
             <div className="page-header">
                 <h1>Configuration Manager</h1>
-                <p>Manage SNMP Modules and collection schedules</p>
+                <p>Fine-tune SNMP collection parameters and backend modules</p>
             </div>
 
-            {/* Module Editor Section */}
-            <div className="glass-card" style={{ marginBottom: 'var(--spacing-2xl)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
+            {/* 1. Collection Schedules Table */}
+            <div className="glass-card" style={{ marginBottom: '2.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                     <div>
-                        <h3>Module Editor</h3>
-                        <p className="text-muted">Select a module to view or edit its YAML configuration.</p>
+                        <h3>Device Collection Schedules</h3>
+                        <p className="text-muted">Manage polling intervals and status for each device.</p>
                     </div>
-                    <div style={{ width: '200px' }}>
+                    <button
+                        className="btn btn-primary"
+                        onClick={() => setShowModal(true)}
+                        disabled={availableDevices.length === 0}
+                    >
+                        + Add Device Schedule
+                    </button>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Device Name</th>
+                                <th>IP Address</th>
+                                <th>Interval</th>
+                                <th>Status</th>
+                                <th>Last Collection</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {devices.map(device => {
+                                const sched = getDeviceSchedule(device.id);
+                                return (
+                                    <tr key={device.id}>
+                                        <td style={{ fontWeight: '500' }}>{device.name}</td>
+                                        <td className="text-muted">{device.ip_address}</td>
+                                        <td>
+                                            {sched ? (
+                                                <select
+                                                    className="select"
+                                                    style={{ padding: '0.2rem 0.5rem', width: 'auto' }}
+                                                    value={sched.interval_seconds}
+                                                    onChange={(e) => handleIntervalChange(device.id, e.target.value)}
+                                                >
+                                                    <option value="30">30s</option>
+                                                    <option value="60">1m</option>
+                                                    <option value="300">5m</option>
+                                                    <option value="900">15m</option>
+                                                    <option value="3600">1h</option>
+                                                </select>
+                                            ) : (
+                                                <span className="text-muted" style={{ fontStyle: 'italic', fontSize: '0.85rem' }}>Not scheduled</span>
+                                            )}
+                                        </td>
+                                        <td>
+                                            {sched ? (
+                                                <span className={`badge ${sched.enabled ? 'badge-success' : 'badge-danger'}`}>
+                                                    {sched.enabled ? 'Active' : 'Paused'}
+                                                </span>
+                                            ) : (
+                                                <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#64748b' }}>None</span>
+                                            )}
+                                        </td>
+                                        <td className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                            {sched?.last_collection ? new Date(sched.last_collection).toLocaleString() : 'Never'}
+                                        </td>
+                                        <td>
+                                            {sched ? (
+                                                <button
+                                                    className={`btn ${sched.enabled ? 'btn-secondary' : 'btn-primary'}`}
+                                                    style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', minWidth: '80px' }}
+                                                    onClick={() => handleToggleSchedule(device.id, sched)}
+                                                >
+                                                    {sched.enabled ? 'Pause' : 'Resume'}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    className="btn btn-primary"
+                                                    style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', minWidth: '80px' }}
+                                                    onClick={() => {
+                                                        setNewSchedule({ ...newSchedule, device_id: device.id });
+                                                        setShowModal(true);
+                                                    }}
+                                                >
+                                                    Add
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Modal for Adding Schedule */}
+            {showModal && (
+                <div className="modal-overlay" style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+                    backdropFilter: 'blur(4px)'
+                }}>
+                    <div className="glass-card" style={{ width: '400px', maxWidth: '90%' }}>
+                        <h3 style={{ marginBottom: '1.5rem' }}>Configure Collection Schedule</h3>
+                        <form onSubmit={handleCreateSchedule}>
+                            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                                <label className="form-label">Device</label>
+                                <select
+                                    className="select"
+                                    required
+                                    value={newSchedule.device_id}
+                                    onChange={(e) => setNewSchedule({ ...newSchedule, device_id: e.target.value })}
+                                >
+                                    <option value="">Select a device...</option>
+                                    {availableDevices.map(d => (
+                                        <option key={d.id} value={d.id}>{d.name} ({d.ip_address})</option>
+                                    ))}
+                                    {/* Include already selected device if we came from 'Add' button */}
+                                    {newSchedule.device_id && !availableDevices.find(d => d.id === parseInt(newSchedule.device_id)) && (
+                                        <option value={newSchedule.device_id}>
+                                            {devices.find(d => d.id === parseInt(newSchedule.device_id))?.name}
+                                        </option>
+                                    )}
+                                </select>
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                                <label className="form-label">Polling Interval</label>
+                                <select
+                                    className="select"
+                                    value={newSchedule.interval_seconds}
+                                    onChange={(e) => setNewSchedule({ ...newSchedule, interval_seconds: parseInt(e.target.value) })}
+                                >
+                                    <option value="30">30 Seconds</option>
+                                    <option value="60">1 Minute</option>
+                                    <option value="300">5 Minutes</option>
+                                    <option value="900">15 Minutes</option>
+                                    <option value="3600">1 Hour</option>
+                                </select>
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '2rem' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={newSchedule.enabled}
+                                        onChange={(e) => setNewSchedule({ ...newSchedule, enabled: e.target.checked })}
+                                        style={{ width: '18px', height: '18px' }}
+                                    />
+                                    <span style={{ fontSize: '0.95rem' }}>Enable Collection Immediately</span>
+                                </label>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
+                                <button type="submit" className="btn btn-primary" disabled={!newSchedule.device_id}>Create Schedule</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* 2. Module Editor Section */}
+            <div className="glass-card" style={{ marginBottom: '2.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <div>
+                        <h3>Module Definitions</h3>
+                        <p className="text-muted">Directly modify YAML configuration for SNMP modules.</p>
+                    </div>
+                    <div style={{ width: '220px' }}>
                         <select
                             className="select"
                             value={selectedModule}
@@ -166,146 +332,56 @@ function ConfigurationManager() {
                     </div>
                 </div>
 
-                {editorStatus === 'loading' ? (
-                    <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
-                ) : (
-                    <div className="editor-container">
-                        <textarea
-                            className="code-editor"
-                            value={yamlContent}
-                            onChange={(e) => setYamlContent(e.target.value)}
-                            spellCheck="false"
-                            style={{
-                                width: '100%',
-                                minHeight: '400px',
-                                fontFamily: 'monospace',
-                                padding: '1rem',
-                                backgroundColor: '#1e1e1e',
-                                color: '#d4d4d4',
-                                border: '1px solid var(--color-border)',
-                                borderRadius: 'var(--radius-md)',
-                                resize: 'vertical'
-                            }}
-                        />
+                <textarea
+                    className="code-editor"
+                    value={yamlContent}
+                    onChange={(e) => setYamlContent(e.target.value)}
+                    spellCheck="false"
+                    style={{
+                        width: '100%', minHeight: '350px',
+                        fontFamily: "'Fira Code', 'Courier New', monospace",
+                        padding: '1.25rem', backgroundColor: '#0f172a', color: '#e2e8f0',
+                        border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px',
+                        lineHeight: '1.5', fontSize: '13px'
+                    }}
+                />
 
-                        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div className={`status-message ${editorStatus}`}>
-                                {editorMessage && (
-                                    <span style={{
-                                        color: editorStatus === 'error' ? 'var(--color-danger)' : 'var(--color-success)',
-                                        fontWeight: 'bold'
-                                    }}>
-                                        {editorMessage}
-                                    </span>
-                                )}
-                            </div>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <button
-                                    className="btn btn-secondary"
-                                    onClick={handleResetModule}
-                                    disabled={editorStatus === 'saving' || yamlContent === originalYaml}
-                                >
-                                    Reset
-                                </button>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={handleSaveModule}
-                                    disabled={editorStatus === 'saving' || yamlContent === originalYaml}
-                                >
-                                    {editorStatus === 'saving' ? 'Saving...' : 'Save Changes'}
-                                </button>
-                            </div>
-                        </div>
+                <div style={{ marginTop: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        {editorMessage && (
+                            <span style={{ color: editorStatus === 'error' ? '#ef4444' : '#10b981', fontSize: '0.9rem' }}>
+                                {editorMessage}
+                            </span>
+                        )}
                     </div>
-                )}
-            </div>
-
-            {/* Collection Schedule Section */}
-            <div className="glass-card" style={{ marginBottom: 'var(--spacing-2xl)' }}>
-                <h3>Collection Schedule</h3>
-
-                <div className="form-group" style={{ marginTop: 'var(--spacing-lg)' }}>
-                    <label className="form-label">Device</label>
-                    <select
-                        className="select"
-                        value={selectedDevice}
-                        onChange={(e) => setSelectedDevice(e.target.value)}
-                    >
-                        {devices.map(device => (
-                            <option key={device.id} value={device.id}>
-                                {device.name} ({device.ip_address})
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                {schedule && (
-                    <>
-                        <div className="form-row" style={{ marginTop: 'var(--spacing-lg)' }}>
-                            <div className="form-group">
-                                <label className="form-label">Collection Interval (seconds)</label>
-                                <input
-                                    className="input"
-                                    type="number"
-                                    value={schedule.interval_seconds}
-                                    onChange={(e) => setSchedule({ ...schedule, interval_seconds: parseInt(e.target.value) })}
-                                    min="10"
-                                    max="86400"
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">Last Collection</label>
-                                <input
-                                    className="input"
-                                    type="text"
-                                    value={schedule.last_collection ? new Date(schedule.last_collection).toLocaleString() : 'Never'}
-                                    disabled
-                                />
-                            </div>
-                        </div>
-
-                        <div className="form-group" style={{ marginTop: 'var(--spacing-lg)' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={schedule.enabled}
-                                    onChange={(e) => setSchedule({ ...schedule, enabled: e.target.checked })}
-                                />
-                                <span className="form-label" style={{ margin: 0 }}>Schedule Enabled</span>
-                            </label>
-                        </div>
-
+                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={() => setYamlContent(originalYaml)}
+                            disabled={yamlContent === originalYaml || editorStatus === 'saving'}
+                        >
+                            Reset
+                        </button>
                         <button
                             className="btn btn-primary"
-                            style={{ marginTop: 'var(--spacing-lg)' }}
-                            onClick={handleUpdateSchedule}
+                            onClick={handleSaveModule}
+                            disabled={yamlContent === originalYaml || editorStatus === 'saving'}
                         >
-                            Update Schedule
+                            {editorStatus === 'saving' ? 'Applying...' : 'Apply Changes'}
                         </button>
-                    </>
-                )}
-
-                {!schedule && selectedDevice && (
-                    <div style={{ marginTop: 'var(--spacing-lg)', color: 'var(--color-text-muted)' }}>
-                        No schedule found for this device
                     </div>
-                )}
+                </div>
             </div>
 
-            {/* Reload Configuration */}
-            <div className="glass-card">
-                <h3>Reload Configuration</h3>
-                <p className="text-muted" style={{ marginTop: 'var(--spacing-md)' }}>
-                    Reload the SNMP Exporter configuration manually if needed.
-                </p>
-                <button
-                    className="btn btn-warning"
-                    style={{ marginTop: 'var(--spacing-lg)' }}
-                    onClick={handleReloadConfig}
-                >
-                    Reload SNMP Exporter
-                </button>
+            {/* 3. Global Actions */}
+            <div className="glass-card" style={{ background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                <h3 style={{ color: '#f59e0b' }}>System Maintenance</h3>
+                <p className="text-muted">Use these tools only when manual intervention is required.</p>
+                <div style={{ marginTop: '1.25rem' }}>
+                    <button className="btn btn-warning" onClick={handleReloadConfig}>
+                        Reload SNMP Exporter Service
+                    </button>
+                </div>
             </div>
         </div>
     );

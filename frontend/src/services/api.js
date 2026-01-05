@@ -90,6 +90,11 @@ export const updateModuleConfig = async (moduleName, yamlContent) => {
     return response.data;
 };
 
+export const getSchedules = async () => {
+    const response = await api.get('/config/schedules');
+    return response.data;
+};
+
 export const getSchedule = async (deviceId) => {
     const response = await api.get(`/config/schedule/${deviceId}`);
     return response.data;

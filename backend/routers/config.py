@@ -68,6 +68,12 @@ async def update_module(module_name: str, config: ModuleConfigUpdate):
 
 # ===== Collection Schedule =====
 
+@router.get("/schedules", response_model=List[ScheduleResponse])
+def list_schedules(db: Session = Depends(get_db)):
+    """List all collection schedules"""
+    return db.query(CollectionSchedule).all()
+
+
 @router.get("/schedule/{device_id}", response_model=ScheduleResponse)
 def get_schedule(device_id: int, db: Session = Depends(get_db)):
     """Get collection schedule for a device"""
