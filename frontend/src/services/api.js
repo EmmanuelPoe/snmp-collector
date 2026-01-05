@@ -44,6 +44,11 @@ export const getMetrics = async (params = {}) => {
     return response.data;
 };
 
+export const getAvailableMetrics = async (deviceId) => {
+    const response = await api.get(`/metrics/available/${deviceId}`);
+    return response.data;
+};
+
 export const getLatestMetrics = async (deviceId, limit = 100) => {
     const response = await api.get(`/metrics/latest/${deviceId}`, {
         params: { limit }
@@ -70,20 +75,19 @@ export const triggerCollection = async (deviceId) => {
 
 // ===== Configuration =====
 
-export const getOIDs = async (enabledOnly = false) => {
-    const response = await api.get('/config/oids', {
-        params: { enabled_only: enabledOnly }
-    });
+export const getModules = async () => {
+    const response = await api.get('/config/modules');
     return response.data;
 };
 
-export const createOID = async (oidData) => {
-    const response = await api.post('/config/oids', oidData);
+export const getModuleConfig = async (moduleName) => {
+    const response = await api.get(`/config/modules/${moduleName}`);
     return response.data;
 };
 
-export const deleteOID = async (configId) => {
-    await api.delete(`/config/oids/${configId}`);
+export const updateModuleConfig = async (moduleName, yamlContent) => {
+    const response = await api.put(`/config/modules/${moduleName}`, { yaml_content: yamlContent });
+    return response.data;
 };
 
 export const getSchedule = async (deviceId) => {

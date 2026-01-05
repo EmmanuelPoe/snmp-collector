@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { getDevices, createDevice, updateDevice, deleteDevice, triggerCollection } from '../services/api';
+import { getDevices, createDevice, updateDevice, deleteDevice, triggerCollection, getModules } from '../services/api';
 
 function DeviceManagement() {
     const [devices, setDevices] = useState([]);
+    const [availableModules, setAvailableModules] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingDevice, setEditingDevice] = useState(null);
@@ -12,21 +13,26 @@ function DeviceManagement() {
         snmp_version: '2c',
         snmp_community: 'public',
         snmp_port: 161,
+        snmp_modules: ['if_mib'],
         device_type: 'switch',
         description: '',
         enabled: true
     });
 
     useEffect(() => {
-        loadDevices();
+        loadData();
     }, []);
 
-    const loadDevices = async () => {
+    const loadData = async () => {
         try {
-            const data = await getDevices();
-            setDevices(data);
+            const [devicesData, modulesData] = await Promise.all([
+                getDevices(),
+                getModules()
+            ]);
+            setDevices(devicesData);
+            setAvailableModules(modulesData);
         } catch (error) {
-            console.error('Error loading devices:', error);
+            console.error('Error loading data:', error);
         } finally {
             setLoading(false);
         }
@@ -42,7 +48,7 @@ function DeviceManagement() {
             }
             setShowModal(false);
             resetForm();
-            loadDevices();
+            loadData();
         } catch (error) {
             console.error('Error saving device:', error);
             alert('Error saving device: ' + (error.response?.data?.detail || error.message));
@@ -57,6 +63,7 @@ function DeviceManagement() {
             snmp_version: device.snmp_version,
             snmp_community: device.snmp_community,
             snmp_port: device.snmp_port,
+            snmp_modules: device.snmp_modules || ['if_mib'],
             device_type: device.device_type || 'switch',
             description: device.description || '',
             enabled: device.enabled
@@ -68,7 +75,7 @@ function DeviceManagement() {
         if (window.confirm('Are you sure you want to delete this device?')) {
             try {
                 await deleteDevice(deviceId);
-                loadDevices();
+                loadData(); // Reload both to be safe
             } catch (error) {
                 console.error('Error deleting device:', error);
                 alert('Error deleting device');
@@ -86,6 +93,11 @@ function DeviceManagement() {
         }
     };
 
+    const handleModuleChange = (e) => {
+        const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+        setFormData({ ...formData, snmp_modules: selectedOptions });
+    };
+
     const resetForm = () => {
         setEditingDevice(null);
         setFormData({
@@ -94,6 +106,7 @@ function DeviceManagement() {
             snmp_version: '2c',
             snmp_community: 'public',
             snmp_port: 161,
+            snmp_modules: ['if_mib'],
             device_type: 'switch',
             description: '',
             enabled: true
@@ -134,6 +147,7 @@ function DeviceManagement() {
                             <th>IP Address</th>
                             <th>Type</th>
                             <th>SNMP Version</th>
+                            <th>Modules</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -141,7 +155,7 @@ function DeviceManagement() {
                     <tbody>
                         {devices.length === 0 ? (
                             <tr>
-                                <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                                <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
                                     No devices found. Click "Add Device" to get started.
                                 </td>
                             </tr>
@@ -152,6 +166,13 @@ function DeviceManagement() {
                                     <td>{device.ip_address}</td>
                                     <td>{device.device_type || 'N/A'}</td>
                                     <td>{device.snmp_version}</td>
+                                    <td>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                            {device.snmp_modules && device.snmp_modules.map(mod => (
+                                                <span key={mod} className="badge" style={{ fontSize: '0.7em', padding: '2px 6px' }}>{mod}</span>
+                                            ))}
+                                        </div>
+                                    </td>
                                     <td>
                                         <span className={`badge badge-${device.enabled ? 'success' : 'danger'}`}>
                                             {device.enabled ? 'Enabled' : 'Disabled'}
@@ -251,18 +272,35 @@ function DeviceManagement() {
                                 </div>
 
                                 <div className="form-group">
-                                    <label className="form-label">Device Type</label>
+                                    <label className="form-label">SNMP Modules</label>
                                     <select
                                         className="select"
-                                        value={formData.device_type}
-                                        onChange={(e) => setFormData({ ...formData, device_type: e.target.value })}
+                                        multiple
+                                        size="4"
+                                        value={formData.snmp_modules}
+                                        onChange={handleModuleChange}
+                                        style={{ height: 'auto' }}
                                     >
-                                        <option value="router">Router</option>
-                                        <option value="switch">Switch</option>
-                                        <option value="firewall">Firewall</option>
-                                        <option value="other">Other</option>
+                                        {availableModules.map(mod => (
+                                            <option key={mod} value={mod}>{mod}</option>
+                                        ))}
                                     </select>
+                                    <small className="text-muted">Hold Ctrl/Cmd to select multiple. Default: if_mib</small>
                                 </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Device Type</label>
+                                <select
+                                    className="select"
+                                    value={formData.device_type}
+                                    onChange={(e) => setFormData({ ...formData, device_type: e.target.value })}
+                                >
+                                    <option value="router">Router</option>
+                                    <option value="switch">Switch</option>
+                                    <option value="firewall">Firewall</option>
+                                    <option value="other">Other</option>
+                                </select>
                             </div>
 
                             <div className="form-group">

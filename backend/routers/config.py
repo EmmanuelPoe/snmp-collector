@@ -8,64 +8,62 @@ from schemas import (
     CollectionConfigResponse,
     ScheduleCreate,
     ScheduleUpdate,
-    ScheduleResponse
+    ScheduleResponse,
+    ModuleConfigUpdate
 )
-from services.prometheus import reload_prometheus_config
+from services.prometheus import (
+    reload_prometheus_config, 
+    get_available_modules, 
+    get_module_config,
+    update_module_config
+)
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/config", tags=["configuration"])
 
 
-# ===== OID Configuration =====
+# ===== Modules Configuration =====
 
-@router.get("/oids", response_model=List[CollectionConfigResponse])
-def list_oids(
-    enabled_only: bool = False,
-    db: Session = Depends(get_db)
-):
-    """List SNMP OID configurations"""
-    query = db.query(CollectionConfig)
-    if enabled_only:
-        query = query.filter(CollectionConfig.enabled == True)
-    configs = query.all()
-    return configs
+@router.get("/modules", response_model=List[str])
+def list_modules():
+    """List available SNMP modules from snmp.yml"""
+    return get_available_modules()
 
-
-@router.post("/oids", response_model=CollectionConfigResponse, status_code=status.HTTP_201_CREATED)
-def create_oid_config(config: CollectionConfigCreate, db: Session = Depends(get_db)):
-    """Add new SNMP OID to collect"""
-    # Check if OID already exists
-    existing = db.query(CollectionConfig).filter(CollectionConfig.oid == config.oid).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"OID '{config.oid}' already exists"
-        )
-    
-    db_config = CollectionConfig(**config.model_dump())
-    db.add(db_config)
-    db.commit()
-    db.refresh(db_config)
-    
-    logger.info(f"Created OID config: {db_config.oid_name} ({db_config.oid})")
-    return db_config
-
-
-@router.delete("/oids/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_oid_config(config_id: int, db: Session = Depends(get_db)):
-    """Remove SNMP OID configuration"""
-    config = db.query(CollectionConfig).filter(CollectionConfig.id == config_id).first()
-    if not config:
+@router.get("/modules/{module_name}")
+def get_module(module_name: str):
+    """Get configuration for a specific module"""
+    config = get_module_config(module_name)
+    if config is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"OID configuration with ID {config_id} not found"
+            detail=f"Module '{module_name}' not found"
         )
-    
-    logger.info(f"Deleting OID config: {config.oid_name} ({config.oid})")
-    db.delete(config)
-    db.commit()
-    return None
+    return {"name": module_name, "yaml": config}
+
+@router.put("/modules/{module_name}")
+async def update_module(module_name: str, config: ModuleConfigUpdate):
+    """Update configuration for a specific module"""
+    try:
+        if update_module_config(module_name, config.yaml_content):
+            await reload_prometheus_config()
+            return {"message": f"Module '{module_name}' updated successfully"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update module configuration"
+            )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error updating module {module_name}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 
 # ===== Collection Schedule =====

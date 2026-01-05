@@ -12,6 +12,7 @@ class DeviceBase(BaseModel):
     snmp_version: str = Field(default="2c", pattern="^(1|2c|3)$")
     snmp_community: str = Field(default="public", min_length=1)
     snmp_port: int = Field(default=161, ge=1, le=65535)
+    snmp_modules: List[str] = Field(default=["if_mib"])
     device_type: Optional[str] = Field(None, max_length=50)
     description: Optional[str] = None
     enabled: bool = True
@@ -29,6 +30,7 @@ class DeviceUpdate(BaseModel):
     snmp_version: Optional[str] = Field(None, pattern="^(1|2c|3)$")
     snmp_community: Optional[str] = Field(None, min_length=1)
     snmp_port: Optional[int] = Field(None, ge=1, le=65535)
+    snmp_modules: Optional[List[str]] = None
     device_type: Optional[str] = Field(None, max_length=50)
     description: Optional[str] = None
     enabled: Optional[bool] = None
@@ -76,7 +78,12 @@ class MetricQuery(BaseModel):
     limit: int = Field(default=1000, ge=1, le=10000)
 
 
-# ===== Collection Config Schemas =====
+# ===== Config Schemas =====
+
+class ModuleConfigUpdate(BaseModel):
+    """Schema for updating SNMP module configuration"""
+    yaml_content: str = Field(..., min_length=1)
+
 
 class CollectionConfigBase(BaseModel):
     """Base collection config schema"""

@@ -10,16 +10,18 @@ A comprehensive SNMP metrics collection system using Docker containers with Prom
 - **OID Configuration**: Flexible SNMP OID management
 - **Collection Scheduling**: Configurable collection intervals per device
 - **Real-Time Visualization**: Interactive charts showing interface status and metrics
-- **Modern UI**: Premium dark-mode interface with glassmorphism design
+- **Modern UI**: Dark-mode interface with "Zinc/Cyan" theme and glassmorphism design
+- **End-to-End Simulation**: Built-in test workflow with a simulated SNMP agent
 
 ## 🏗️ Architecture
 
-The system consists of 4 Docker containers:
+The system consists of 5 Docker containers:
 
 1. **PostgreSQL + TimescaleDB**: Time-series optimized database
 2. **Prometheus SNMP Exporter**: Raw SNMP data collection
 3. **FastAPI Backend**: API server, orchestration, and data processing
 4. **React Frontend**: Modern web interface for management and visualization
+5. **SNMP Simulator**: `net-snmp` agent for automated testing and verification
 
 ## 🚀 Quick Start
 
@@ -33,13 +35,13 @@ The system consists of 4 Docker containers:
 
 1. **Clone the repository**
    ```bash
-   cd /Users/emmanuelpoe/Documents/dev-projects/snmp-collector
+   cd snmp-collector
    ```
 
-2. **Set up environment variables** (optional)
+2. **Set up environment variables**
    ```bash
    cp .env.example .env
-   # Edit .env if you want to change default values
+   # Edit .env if you want to change default values or ports
    ```
 
 3. **Build and start the application**
@@ -60,15 +62,28 @@ The system consists of 4 Docker containers:
    - API Documentation: http://localhost:8000/docs
    - SNMP Exporter: http://localhost:9116
 
-### First-Time Setup
+## 🧪 Simulation & Testing
 
-After starting the application:
+The project includes an automated end-to-end simulation workflow to verify the system without needing real hardware.
 
-1. Navigate to http://localhost:3000
-2. Go to "Devices" and add your first network device
-3. Configure SNMP settings (IP, community string, etc.)
-4. The system will automatically start collecting metrics
-5. View metrics in the "Metrics" tab
+To run the simulation:
+```bash
+make simulation
+```
+
+**What this does:**
+1. Starts all services, including a dedicated `snmp-simulator` container.
+2. Runs database migrations.
+3. Automatically adds a test device ("Test-Simulator") via the API.
+4. Triggers an immediate SNMP collection.
+5. Verifies that metrics (Interface Status, In/Out Octets, Packets) are physically stored in the database.
+6. Reports the number of interfaces found and metrics collected.
+
+**Cleanup:**
+To remove the test device and simulation data:
+```bash
+make clean-simulation
+```
 
 ## 📚 Usage Guide
 
@@ -94,13 +109,6 @@ After starting the application:
    - Interface status (Up/Down)
    - Packet statistics (In/Out)
    - Bandwidth usage (Octets In/Out)
-
-### Configuring Collection
-
-1. Navigate to **Configuration** page
-2. Manage SNMP OIDs to collect
-3. Adjust collection schedules per device
-4. Reload configuration when changes are made
 
 ## ⚙️ Configuration
 
@@ -128,16 +136,6 @@ FRONTEND_PORT=3000
 DEFAULT_COLLECTION_INTERVAL=60
 ```
 
-### Default SNMP OIDs
-
-The system comes pre-configured with common interface metrics:
-
-- `ifOperStatus` (1.3.6.1.2.1.2.2.1.8) - Interface status
-- `ifInOctets` (1.3.6.1.2.1.2.2.1.10) - Inbound octets
-- `ifOutOctets` (1.3.6.1.2.1.2.2.1.16) - Outbound octets
-- `ifInUcastPkts` (1.3.6.1.2.1.2.2.1.11) - Inbound packets
-- `ifOutUcastPkts` (1.3.6.1.2.1.2.2.1.17) - Outbound packets
-
 ## 🛠️ Makefile Commands
 
 ```bash
@@ -146,54 +144,31 @@ make build           # Build all Docker containers
 make up              # Start the application
 make down            # Stop the application
 make logs            # View logs from all containers
-make logs-backend    # View backend logs
-make logs-frontend   # View frontend logs
 make clean           # Remove containers and volumes
 make reset           # Full reset (clean + rebuild + start)
 make migrate         # Run database migrations
-make shell-backend   # Open shell in backend container
+make simulation      # Run end-to-end simulation test
+make clean-simulation # Remove simulation data
 make shell-db        # Open PostgreSQL shell
-make status          # Check container status
 ```
 
-## 🔌 API Documentation
-
-The FastAPI backend provides a comprehensive REST API:
-
-### Devices
-- `GET /devices` - List all devices
-- `POST /devices` - Create new device
-- `GET /devices/{id}` - Get device details
-- `PUT /devices/{id}` - Update device
-- `DELETE /devices/{id}` - Delete device
-
-### Metrics
-- `GET /metrics` - Query metrics with filters
-- `GET /metrics/latest/{device_id}` - Get latest metrics
-- `GET /metrics/interfaces/{device_id}` - List device interfaces
-- `GET /metrics/stats/{device_id}/{interface_name}` - Get interface stats
-- `POST /metrics/collect/{device_id}` - Trigger manual collection
-
-### Configuration
-- `GET /config/oids` - List SNMP OID configurations
-- `POST /config/oids` - Add new OID
-- `DELETE /config/oids/{id}` - Remove OID
-- `GET /config/schedule/{device_id}` - Get collection schedule
-- `PUT /config/schedule/{device_id}` - Update schedule
-- `POST /config/reload` - Reload SNMP Exporter config
-
-Full interactive documentation: http://localhost:8000/docs
-
-## 🗄️ Database Schema
+## �️ Database Schema
 
 The PostgreSQL database uses TimescaleDB for efficient time-series storage:
 
 - **devices**: Network device information
-- **snmp_metrics**: Time-series metrics (hypertable)
+- **snmp_metrics**: Time-series metrics (hypertable). Primary key is composite `(id, timestamp)`.
 - **collection_configs**: SNMP OID configurations
 - **collection_schedules**: Collection timing per device
 
 ## 🐛 Troubleshooting
+
+### Database connection failed: "FATAL: role 'snmpuser' does not exist"
+
+**Cause:** You likely have a local PostgreSQL instance running on your machine on port 5432, conflicting with the Docker container.
+**Solution:**
+1. Stop local Postgres: `brew services stop postgresql` or `pkill -f postgres`
+2. OR Change the Docker port in `.env`: `POSTGRES_PORT=5433` then run `make down && make up`.
 
 ### Application won't start
 
@@ -204,27 +179,12 @@ make build # Rebuild
 make up    # Start again
 ```
 
-### Database connection errors
-
-```bash
-make shell-db  # Check if database is accessible
-# Inside PostgreSQL shell:
-\dt  # List tables
-```
-
 ### SNMP collection not working
 
 1. Verify device IP is reachable
 2. Check SNMP community string is correct
-3. Ensure SNMP version matches device config
-4. Check device has SNMP enabled
-5. View backend logs: `make logs-backend`
-
-### Frontend can't connect to backend
-
-1. Verify backend is running: `make status`
-2. Check backend logs: `make logs-backend`
 3. Ensure ports are not blocked by firewall
+4. View backend logs: `make logs-backend`
 
 ## 📁 Project Structure
 
@@ -234,39 +194,21 @@ snmp-collector/
 │   ├── alembic/            # Database migrations
 │   ├── routers/            # API endpoints
 │   ├── services/           # Business logic
-│   ├── models.py           # SQLAlchemy models
-│   ├── schemas.py          # Pydantic schemas
 │   └── main.py             # Application entry
 ├── frontend/               # React application
-│   ├── public/            # Static files
 │   ├── src/               # Source code
-│   │   ├── components/    # React components
-│   │   └── services/      # API client
 │   └── package.json       # Dependencies
-├── prometheus/            # SNMP Exporter config
-│   ├── snmp.yml          # OID definitions
-│   └── Dockerfile        # Custom image
+├── prometheus/            # SNMP Exporter config (snmp.yml)
+├── snmp-simulator/        # Simulation container (net-snmp)
+├── scripts/               # Test scripts
 ├── docker-compose.yml    # Container orchestration
 ├── Makefile             # Build automation
 └── README.md            # This file
 ```
 
-## 🔮 Future Enhancements
-
-- Authentication and user management
-- Alert notifications for device status changes
-- Historical data retention policies
-- Custom dashboard creation
-- Export metrics to external monitoring systems
-- Multi-tenant support
-
 ## 📄 License
 
 See LICENSE file for details.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
 
 ---
 

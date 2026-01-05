@@ -1,7 +1,8 @@
 import httpx
 import yaml
 import logging
-from typing import Dict, List, Optional
+import os
+from typing import Dict, List, Optional, Any
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ async def query_snmp_exporter(target: str, module: str = "if_mib") -> Optional[s
             response.raise_for_status()
             return response.text
     except httpx.HTTPError as e:
-        logger.error(f"Error querying SNMP Exporter for {target}: {str(e)}")
+        logger.error(f"Error querying SNMP Exporter for {target} (module {module}): {str(e)}")
         return None
     except Exception as e:
         logger.error(f"Unexpected error querying SNMP Exporter: {str(e)}")
@@ -96,134 +97,190 @@ def parse_prometheus_metrics(metrics_text: str) -> List[Dict]:
     return metrics
 
 
-def update_prometheus_config(devices: List[Dict]) -> bool:
+def get_available_modules() -> List[str]:
     """
-    Update Prometheus SNMP Exporter configuration file
-    
-    Args:
-        devices: List of device configurations
+    Parse snmp.yml and return a list of available modules
     
     Returns:
-        True if successful, False otherwise
+        List of module names (strings)
     """
     try:
-        config = {
-            'auths': {
-                'public_v2': {
-                    'community': 'public',
-                    'security_level': 'noAuthNoPriv',
-                    'auth_protocol': 'MD5',
-                    'priv_protocol': 'DES',
-                    'version': 2
-                }
-            },
-            'modules': {
-                'if_mib': {
-                    'walk': [
-                        '1.3.6.1.2.1.2.2.1',
-                        '1.3.6.1.2.1.31.1.1.1.1'
-                    ],
-                    'metrics': [
-                        {
-                            'name': 'ifOperStatus',
-                            'oid': '1.3.6.1.2.1.2.2.1.8',
-                            'type': 'gauge',
-                            'help': 'Interface operational status',
-                            'indexes': [
-                                {'labelname': 'ifIndex', 'type': 'gauge'}
-                            ],
-                            'lookups': [
-                                {'labels': ['ifIndex'], 'labelname': 'ifDescr', 'oid': '1.3.6.1.2.1.2.2.1.2', 'type': 'DisplayString'},
-                                {'labels': ['ifIndex'], 'labelname': 'ifName', 'oid': '1.3.6.1.2.1.31.1.1.1.1', 'type': 'DisplayString'}
-                            ]
-                        },
-                        {
-                            'name': 'ifInOctets',
-                            'oid': '1.3.6.1.2.1.2.2.1.10',
-                            'type': 'counter',
-                            'help': 'Inbound octets',
-                            'indexes': [
-                                {'labelname': 'ifIndex', 'type': 'gauge'}
-                            ],
-                            'lookups': [
-                                {'labels': ['ifIndex'], 'labelname': 'ifDescr', 'oid': '1.3.6.1.2.1.2.2.1.2', 'type': 'DisplayString'},
-                                {'labels': ['ifIndex'], 'labelname': 'ifName', 'oid': '1.3.6.1.2.1.31.1.1.1.1', 'type': 'DisplayString'}
-                            ]
-                        },
-                        {
-                            'name': 'ifOutOctets',
-                            'oid': '1.3.6.1.2.1.2.2.1.16',
-                            'type': 'counter',
-                            'help': 'Outbound octets',
-                            'indexes': [
-                                {'labelname': 'ifIndex', 'type': 'gauge'}
-                            ],
-                            'lookups': [
-                                {'labels': ['ifIndex'], 'labelname': 'ifDescr', 'oid': '1.3.6.1.2.1.2.2.1.2', 'type': 'DisplayString'},
-                                {'labels': ['ifIndex'], 'labelname': 'ifName', 'oid': '1.3.6.1.2.1.31.1.1.1.1', 'type': 'DisplayString'}
-                            ]
-                        },
-                        {
-                            'name': 'ifInUcastPkts',
-                            'oid': '1.3.6.1.2.1.2.2.1.11',
-                            'type': 'counter',
-                            'help': 'Inbound unicast packets',
-                            'indexes': [
-                                {'labelname': 'ifIndex', 'type': 'gauge'}
-                            ],
-                            'lookups': [
-                                {'labels': ['ifIndex'], 'labelname': 'ifDescr', 'oid': '1.3.6.1.2.1.2.2.1.2', 'type': 'DisplayString'},
-                                {'labels': ['ifIndex'], 'labelname': 'ifName', 'oid': '1.3.6.1.2.1.31.1.1.1.1', 'type': 'DisplayString'}
-                            ]
-                        },
-                        {
-                            'name': 'ifOutUcastPkts',
-                            'oid': '1.3.6.1.2.1.2.2.1.17',
-                            'type': 'counter',
-                            'help': 'Outbound unicast packets',
-                            'indexes': [
-                                {'labelname': 'ifIndex', 'type': 'gauge'}
-                            ],
-                            'lookups': [
-                                {'labels': ['ifIndex'], 'labelname': 'ifDescr', 'oid': '1.3.6.1.2.1.2.2.1.2', 'type': 'DisplayString'},
-                                {'labels': ['ifIndex'], 'labelname': 'ifName', 'oid': '1.3.6.1.2.1.31.1.1.1.1', 'type': 'DisplayString'}
-                            ]
-                        }
-                    ]
-                }
-            }
-        }
+        if not os.path.exists(settings.prometheus_config_path):
+            logger.error(f"Config file not found: {settings.prometheus_config_path}")
+            return ["if_mib"]
+            
+        with open(settings.prometheus_config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            
+        if not config or 'modules' not in config:
+            return ["if_mib"]
+            
+        return list(config['modules'].keys())
         
-        # Write configuration file
+    except Exception as e:
+        logger.error(f"Error reading available modules: {str(e)}")
+        return ["if_mib"]
+
+
+def get_all_metric_oids() -> Dict[str, str]:
+    """
+    Parse snmp.yml and return a mapping of metric names to OIDs
+    for ALL modules.
+    
+    Returns:
+        Dictionary mapping {metric_name: oid}
+    """
+    oid_map = {}
+    try:
+        if not os.path.exists(settings.prometheus_config_path):
+            return oid_map
+            
+        with open(settings.prometheus_config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            
+        if not config or 'modules' not in config:
+            return oid_map
+            
+        for module_name, module_cfg in config['modules'].items():
+            if 'metrics' in module_cfg:
+                for metric in module_cfg['metrics']:
+                    name = metric.get('name')
+                    oid = metric.get('oid')
+                    if name and oid:
+                        oid_map[name] = oid
+                        
+        return oid_map
+        
+    except Exception as e:
+        logger.error(f"Error reading metric OIDs: {str(e)}")
+        return oid_map
+
+
+def get_module_config(module_name: str) -> Optional[str]:
+    """
+    Get the YAML configuration for a specific module
+    
+    Args:
+        module_name: Name of the module to retrieve
+        
+    Returns:
+        YAML string of the module configuration or None if not found
+    """
+    try:
+        if not os.path.exists(settings.prometheus_config_path):
+            return None
+            
+        with open(settings.prometheus_config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            
+        if not config or 'modules' not in config or module_name not in config['modules']:
+            return None
+            
+        return yaml.dump(config['modules'][module_name], default_flow_style=False)
+        
+    except Exception as e:
+        logger.error(f"Error getting module config: {str(e)}")
+        return None
+
+
+def validate_module_yaml(yaml_content: str) -> Dict[str, Any]:
+    """
+    Validate that the string is valid YAML and has basic required structure
+    
+    Args:
+        yaml_content: The YAML string to validate
+        
+    Returns:
+        Parsed dictionary if valid
+        
+    Raises:
+        ValueError: If invalid
+    """
+    try:
+        parsed = yaml.safe_load(yaml_content)
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid YAML syntax: {str(e)}")
+        
+    if not isinstance(parsed, dict):
+        raise ValueError("Module configuration must be a dictionary")
+        
+    # Basic structural check (a module typically has 'walk' or 'metrics', but strict requirement depends on use case)
+    # For snmp exporter, 'walk' is common but might be empty. 'metrics' is common.
+    # We'll just enforce it's a dict for now to allow flexibility, but could add stricter checks.
+    
+    return parsed
+
+
+def update_module_config(module_name: str, yaml_content: str) -> bool:
+    """
+    Update a specific module's configuration in snmp.yml
+    
+    Args:
+        module_name: Name of the module to update
+        yaml_content: New YAML content for the module
+        
+    Returns:
+        True if successful
+        
+    Raises:
+        ValueError: If validation fails
+        IOError: If file operations fail
+    """
+    # 1. Validate Input
+    new_module_config = validate_module_yaml(yaml_content)
+    
+    try:
+        # 2. Read Existing Config
+        config = {}
+        if os.path.exists(settings.prometheus_config_path):
+            with open(settings.prometheus_config_path, 'r') as f:
+                config = yaml.safe_load(f) or {}
+        
+        # Ensure structure
+        if 'modules' not in config:
+            config['modules'] = {}
+            
+        # 3. Update the specific module
+        config['modules'][module_name] = new_module_config
+        
+        # 4. Write back safely
+        # We could write to a temp file first, but for simplicity we'll overwrite since we validated the chunk.
+        # Ideally, we should validate the WHOLE file before saving, but yaml.dump guarantees valid syntax.
+        
         with open(settings.prometheus_config_path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
-        
-        logger.info(f"Updated Prometheus config: {settings.prometheus_config_path}")
+            
+        logger.info(f"Updated configuration for module '{module_name}'")
         return True
         
     except Exception as e:
-        logger.error(f"Error updating Prometheus config: {str(e)}")
-        return False
+        logger.error(f"Error updating module config: {str(e)}")
+        raise e
 
 
 async def reload_prometheus_config() -> bool:
     """
-    Reload Prometheus SNMP Exporter configuration
-    
-    Note: The SNMP Exporter doesn't have a reload endpoint,
-    so this is a placeholder. In production, you might need to
-    restart the container or send a SIGHUP signal.
+    Reload Prometheus SNMP Exporter configuration via HTTP endpoint
     
     Returns:
         True if successful, False otherwise
     """
+    url = f"{settings.snmp_exporter_url}/-/reload"
+    
     try:
-        # Check if exporter is healthy
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{settings.snmp_exporter_url}/")
-            response.raise_for_status()
-            logger.info("SNMP Exporter is healthy")
-            return True
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url)
+            
+            if response.status_code == 200:
+                logger.info("Successfully reloaded SNMP Exporter configuration")
+                return True
+            else:
+                logger.error(f"Failed to reload SNMP Exporter config. Status: {response.status_code}, Body: {response.text}")
+                return False
+                
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error reloading SNMP Exporter config: {str(e)}")
+        return False
     except Exception as e:
-        logger.error(f"Error checking SNMP Exporter health: {str(e)}")
+        logger.error(f"Unexpected error reloading SNMP Exporter config: {str(e)}")
         return False

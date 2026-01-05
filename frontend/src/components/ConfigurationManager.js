@@ -1,30 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import {
-    getOIDs,
-    createOID,
-    deleteOID,
     getDevices,
     getSchedule,
     updateSchedule,
-    reloadConfig
+    reloadConfig,
+    getModules,
+    getModuleConfig,
+    updateModuleConfig
 } from '../services/api';
 
 function ConfigurationManager() {
-    const [oids, setOids] = useState([]);
+    const [modules, setModules] = useState([]);
     const [devices, setDevices] = useState([]);
     const [selectedDevice, setSelectedDevice] = useState('');
     const [schedule, setSchedule] = useState(null);
-    const [showOidModal, setShowOidModal] = useState(false);
-    const [oidForm, setOidForm] = useState({
-        oid: '',
-        oid_name: '',
-        description: '',
-        enabled: true
-    });
+
+    // Module Editor State
+    const [selectedModule, setSelectedModule] = useState('');
+    const [yamlContent, setYamlContent] = useState('');
+    const [originalYaml, setOriginalYaml] = useState('');
+    const [editorStatus, setEditorStatus] = useState(''); // '', 'loading', 'saving', 'success', 'error'
+    const [editorMessage, setEditorMessage] = useState('');
 
     useEffect(() => {
-        loadOIDs();
-        loadDevices();
+        loadData();
     }, []);
 
     useEffect(() => {
@@ -33,24 +32,31 @@ function ConfigurationManager() {
         }
     }, [selectedDevice]);
 
-    const loadOIDs = async () => {
-        try {
-            const data = await getOIDs();
-            setOids(data);
-        } catch (error) {
-            console.error('Error loading OIDs:', error);
+    useEffect(() => {
+        if (selectedModule) {
+            loadModuleConfig(selectedModule);
+        } else {
+            setYamlContent('');
+            setOriginalYaml('');
         }
-    };
+    }, [selectedModule]);
 
-    const loadDevices = async () => {
+    const loadData = async () => {
         try {
-            const data = await getDevices();
-            setDevices(data);
-            if (data.length > 0) {
-                setSelectedDevice(data[0].id);
+            const [modulesData, devicesData] = await Promise.all([
+                getModules(),
+                getDevices()
+            ]);
+            setModules(modulesData);
+            setDevices(devicesData);
+            if (devicesData.length > 0) {
+                setSelectedDevice(devicesData[0].id);
+            }
+            if (modulesData.length > 0) {
+                setSelectedModule(modulesData[0]);
             }
         } catch (error) {
-            console.error('Error loading devices:', error);
+            console.error('Error loading config data:', error);
         }
     };
 
@@ -64,27 +70,48 @@ function ConfigurationManager() {
         }
     };
 
-    const handleAddOID = async (e) => {
-        e.preventDefault();
+    const loadModuleConfig = async (moduleName) => {
+        setEditorStatus('loading');
         try {
-            await createOID(oidForm);
-            setShowOidModal(false);
-            setOidForm({ oid: '', oid_name: '', description: '', enabled: true });
-            loadOIDs();
+            const data = await getModuleConfig(moduleName);
+            setYamlContent(data.yaml);
+            setOriginalYaml(data.yaml);
+            setEditorStatus('');
         } catch (error) {
-            console.error('Error adding OID:', error);
-            alert('Error adding OID: ' + (error.response?.data?.detail || error.message));
+            console.error('Error loading module config:', error);
+            setEditorStatus('error');
+            setEditorMessage('Failed to load module configuration');
         }
     };
 
-    const handleDeleteOID = async (oidId) => {
-        if (window.confirm('Are you sure you want to delete this OID?')) {
-            try {
-                await deleteOID(oidId);
-                loadOIDs();
-            } catch (error) {
-                console.error('Error deleting OID:', error);
-            }
+    const handleSaveModule = async () => {
+        setEditorStatus('saving');
+        setEditorMessage('');
+        try {
+            await updateModuleConfig(selectedModule, yamlContent);
+            setOriginalYaml(yamlContent);
+            setEditorStatus('success');
+            setEditorMessage('Configuration saved and reloaded successfully');
+
+            // Clear success message after 3 seconds
+            setTimeout(() => {
+                if (editorStatus === 'success') {
+                    setEditorStatus('');
+                    setEditorMessage('');
+                }
+            }, 3000);
+        } catch (error) {
+            console.error('Error saving module:', error);
+            setEditorStatus('error');
+            setEditorMessage('Error saving configuration: ' + (error.response?.data?.detail || error.message));
+        }
+    };
+
+    const handleResetModule = () => {
+        if (window.confirm('Reset changes to last saved version?')) {
+            setYamlContent(originalYaml);
+            setEditorStatus('');
+            setEditorMessage('');
         }
     };
 
@@ -116,60 +143,81 @@ function ConfigurationManager() {
         <div className="container">
             <div className="page-header">
                 <h1>Configuration Manager</h1>
-                <p>Manage SNMP OIDs and collection schedules</p>
+                <p>Manage SNMP Modules and collection schedules</p>
             </div>
 
-            {/* SNMP OIDs Section */}
+            {/* Module Editor Section */}
             <div className="glass-card" style={{ marginBottom: 'var(--spacing-2xl)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-                    <h3>SNMP OIDs</h3>
-                    <button className="btn btn-primary" onClick={() => setShowOidModal(true)}>
-                        + Add OID
-                    </button>
+                    <div>
+                        <h3>Module Editor</h3>
+                        <p className="text-muted">Select a module to view or edit its YAML configuration.</p>
+                    </div>
+                    <div style={{ width: '200px' }}>
+                        <select
+                            className="select"
+                            value={selectedModule}
+                            onChange={(e) => setSelectedModule(e.target.value)}
+                        >
+                            {modules.map(mod => (
+                                <option key={mod} value={mod}>{mod}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <th>OID</th>
-                            <th>Name</th>
-                            <th>Description</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {oids.length === 0 ? (
-                            <tr>
-                                <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
-                                    No OIDs configured
-                                </td>
-                            </tr>
-                        ) : (
-                            oids.map(oid => (
-                                <tr key={oid.id}>
-                                    <td><code style={{ fontSize: '0.875rem' }}>{oid.oid}</code></td>
-                                    <td><strong>{oid.oid_name}</strong></td>
-                                    <td className="text-sm text-muted">{oid.description || 'N/A'}</td>
-                                    <td>
-                                        <span className={`badge badge-${oid.enabled ? 'success' : 'danger'}`}>
-                                            {oid.enabled ? 'Enabled' : 'Disabled'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <button
-                                            className="btn btn-danger"
-                                            style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}
-                                            onClick={() => handleDeleteOID(oid.id)}
-                                        >
-                                            Delete
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                {editorStatus === 'loading' ? (
+                    <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
+                ) : (
+                    <div className="editor-container">
+                        <textarea
+                            className="code-editor"
+                            value={yamlContent}
+                            onChange={(e) => setYamlContent(e.target.value)}
+                            spellCheck="false"
+                            style={{
+                                width: '100%',
+                                minHeight: '400px',
+                                fontFamily: 'monospace',
+                                padding: '1rem',
+                                backgroundColor: '#1e1e1e',
+                                color: '#d4d4d4',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: 'var(--radius-md)',
+                                resize: 'vertical'
+                            }}
+                        />
+
+                        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div className={`status-message ${editorStatus}`}>
+                                {editorMessage && (
+                                    <span style={{
+                                        color: editorStatus === 'error' ? 'var(--color-danger)' : 'var(--color-success)',
+                                        fontWeight: 'bold'
+                                    }}>
+                                        {editorMessage}
+                                    </span>
+                                )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={handleResetModule}
+                                    disabled={editorStatus === 'saving' || yamlContent === originalYaml}
+                                >
+                                    Reset
+                                </button>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={handleSaveModule}
+                                    disabled={editorStatus === 'saving' || yamlContent === originalYaml}
+                                >
+                                    {editorStatus === 'saving' ? 'Saving...' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Collection Schedule Section */}
@@ -249,7 +297,7 @@ function ConfigurationManager() {
             <div className="glass-card">
                 <h3>Reload Configuration</h3>
                 <p className="text-muted" style={{ marginTop: 'var(--spacing-md)' }}>
-                    Reload the SNMP Exporter configuration to apply changes
+                    Reload the SNMP Exporter configuration manually if needed.
                 </p>
                 <button
                     className="btn btn-warning"
@@ -259,75 +307,6 @@ function ConfigurationManager() {
                     Reload SNMP Exporter
                 </button>
             </div>
-
-            {/* Add OID Modal */}
-            {showOidModal && (
-                <div className="modal-overlay" onClick={() => setShowOidModal(false)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3>Add SNMP OID</h3>
-                            <button className="modal-close" onClick={() => setShowOidModal(false)}>×</button>
-                        </div>
-
-                        <form onSubmit={handleAddOID}>
-                            <div className="form-group">
-                                <label className="form-label">OID *</label>
-                                <input
-                                    className="input"
-                                    type="text"
-                                    value={oidForm.oid}
-                                    onChange={(e) => setOidForm({ ...oidForm, oid: e.target.value })}
-                                    required
-                                    placeholder="e.g., 1.3.6.1.2.1.2.2.1.10"
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">OID Name *</label>
-                                <input
-                                    className="input"
-                                    type="text"
-                                    value={oidForm.oid_name}
-                                    onChange={(e) => setOidForm({ ...oidForm, oid_name: e.target.value })}
-                                    required
-                                    placeholder="e.g., ifInOctets"
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">Description</label>
-                                <input
-                                    className="input"
-                                    type="text"
-                                    value={oidForm.description}
-                                    onChange={(e) => setOidForm({ ...oidForm, description: e.target.value })}
-                                    placeholder="Optional description"
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={oidForm.enabled}
-                                        onChange={(e) => setOidForm({ ...oidForm, enabled: e.target.checked })}
-                                    />
-                                    <span className="form-label" style={{ margin: 0 }}>Enabled</span>
-                                </label>
-                            </div>
-
-                            <div className="action-buttons">
-                                <button type="button" className="btn btn-secondary" onClick={() => setShowOidModal(false)}>
-                                    Cancel
-                                </button>
-                                <button type="submit" className="btn btn-primary">
-                                    Add OID
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
