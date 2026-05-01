@@ -33,3 +33,5 @@ async def ingest(
         raise HTTPException(status_code=400, detail=str(exc))
     except DuplicateFileError:
         return {"ok": True, "rows_ingested": 0, "duplicate": True}
+    finally:
+        tmp_path.unlink(missing_ok=True)
