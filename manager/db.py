@@ -5,6 +5,7 @@ from config import settings
 
 _conn: duckdb.DuckDBPyConnection | None = None
 _write_lock = asyncio.Lock()
+_ALLOWED_TABLES = frozenset({"snmp_polls", "snmp_traps"})
 
 _SCHEMA = [
     """CREATE TABLE IF NOT EXISTS snmp_polls (
@@ -44,6 +45,7 @@ _SCHEMA = [
 
 
 def get_db() -> duckdb.DuckDBPyConnection:
+    """Return the shared DuckDB connection, initializing schema on first call."""
     global _conn
     if _conn is None:
         Path(settings.db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -54,6 +56,7 @@ def get_db() -> duckdb.DuckDBPyConnection:
 
 
 def close_db() -> None:
+    """Close and release the shared DuckDB connection."""
     global _conn
     if _conn:
         _conn.close()
@@ -61,16 +64,18 @@ def close_db() -> None:
 
 
 def query(sql: str, params: list | None = None) -> list[tuple]:
+    """Execute a read query and return all rows as a list of tuples."""
     conn = get_db()
-    if params:
+    if params is not None:
         return conn.execute(sql, params).fetchall()
     return conn.execute(sql).fetchall()
 
 
 async def execute(sql: str, params: list | None = None) -> None:
+    """Execute a write statement under the async write lock."""
     async with _write_lock:
         conn = get_db()
-        if params:
+        if params is not None:
             conn.execute(sql, params)
         else:
             conn.execute(sql)
@@ -78,6 +83,8 @@ async def execute(sql: str, params: list | None = None) -> None:
 
 async def ingest_parquet(table: str, file_path: str) -> int:
     """Bulk load parquet file into table. Returns number of rows inserted."""
+    if table not in _ALLOWED_TABLES:
+        raise ValueError(f"Unknown table: {table!r}")
     async with _write_lock:
         conn = get_db()
         before = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
