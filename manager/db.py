@@ -91,3 +91,22 @@ async def ingest_parquet(table: str, file_path: str) -> int:
         conn.execute(f"INSERT INTO {table} SELECT * FROM read_parquet($1)", [file_path])
         after = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         return after - before
+
+
+async def transactional_ingest(table: str, file_path: str, file_id: str, ingested_at, row_count: int) -> None:
+    """Load parquet and record ingest_log entry atomically."""
+    if table not in _ALLOWED_TABLES:
+        raise ValueError(f"Unknown table: {table!r}")
+    async with _write_lock:
+        conn = get_db()
+        conn.execute("BEGIN")
+        try:
+            conn.execute(f"INSERT INTO {table} SELECT * FROM read_parquet($1)", [file_path])
+            conn.execute(
+                "INSERT INTO ingest_log VALUES (?, ?, ?)",
+                [file_id, ingested_at, row_count],
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise

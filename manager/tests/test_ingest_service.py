@@ -61,7 +61,7 @@ async def test_wrong_checksum_raises_and_dead_letters(reset_db, tmp_path):
         await ingest_file("agent-01_1001_polls", "deadbeef" * 8, path, "snmp_polls")
     dl_dir = Path(config.settings.dead_letter_path)
     assert (dl_dir / "agent-01_1001_polls.parquet").exists()
-    assert (dl_dir / "agent-01_1001_polls.error.json").exists()
+    assert any(dl_dir.glob("agent-01_1001_polls.*.error.json"))
 
 @pytest.mark.asyncio
 async def test_duplicate_file_id_raises(reset_db, tmp_path):
@@ -81,3 +81,20 @@ async def test_tmp_file_deleted_after_success(reset_db, tmp_path):
     sha = _sha256(path)
     await ingest_file("agent-01_1003_polls", sha, path, "snmp_polls")
     assert not path.exists()
+
+@pytest.mark.asyncio
+async def test_ingest_failure_dead_letters(reset_db, tmp_path):
+    """When parquet load fails (schema mismatch), file lands in dead-letter."""
+    from services.ingest import ingest_file
+    import config
+    # Create parquet with wrong schema (missing required columns)
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    bad_table = pa.table({"wrong_column": pa.array(["data"])})
+    path = tmp_path / "bad.parquet"
+    pq.write_table(bad_table, path)
+    sha = _sha256(path)
+    with pytest.raises(Exception):
+        await ingest_file("agent-01_9999_polls", sha, path, "snmp_polls")
+    dl_dir = Path(config.settings.dead_letter_path)
+    assert (dl_dir / "agent-01_9999_polls.parquet").exists()

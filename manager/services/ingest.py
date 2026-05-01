@@ -3,8 +3,11 @@ import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+import pyarrow.parquet as pq
 import config
-from db import execute, query, ingest_parquet
+from db import query, transactional_ingest
+
+_VALID_TABLES = frozenset({"snmp_polls", "snmp_traps"})
 
 
 class ChecksumError(Exception):
@@ -18,6 +21,9 @@ class DuplicateFileError(Exception):
 async def ingest_file(
     file_id: str, claimed_sha256: str, tmp_path: Path, table: str
 ) -> int:
+    if table not in _VALID_TABLES:
+        raise ValueError(f"Unknown table: {table!r}")
+
     actual_sha256 = _sha256(tmp_path)
     if actual_sha256 != claimed_sha256.lower():
         _dead_letter(file_id, tmp_path, f"SHA256 mismatch: got {actual_sha256}")
@@ -28,11 +34,9 @@ async def ingest_file(
         raise DuplicateFileError(f"Already ingested: {file_id}")
 
     try:
-        row_count = await ingest_parquet(table, str(tmp_path))
-        await execute(
-            "INSERT INTO ingest_log VALUES (?, ?, ?)",
-            [file_id, datetime.now(timezone.utc), row_count],
-        )
+        row_count = pq.read_table(str(tmp_path)).num_rows
+        now = datetime.now(timezone.utc)
+        await transactional_ingest(table, str(tmp_path), file_id, now, row_count)
         return row_count
     except Exception as exc:
         _dead_letter(file_id, tmp_path, str(exc))
@@ -55,7 +59,8 @@ def _dead_letter(file_id: str, src: Path, error: str) -> None:
     dest = dl_dir / f"{file_id}.parquet"
     if src.exists():
         shutil.move(str(src), dest)
-    (dl_dir / f"{file_id}.error.json").write_text(
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    (dl_dir / f"{file_id}.{ts}.error.json").write_text(
         json.dumps({
             "file_id": file_id,
             "error": error,
