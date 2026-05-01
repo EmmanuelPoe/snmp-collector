@@ -1,0 +1,11 @@
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    manager_api_key: str
+    db_path: str = "/data/db/metrics.db"
+    registry_path: str = "/data/registry/registry.json"
+    dead_letter_path: str = "/data/dead-letter"
+
+    model_config = {"env_file": ".env"}
+
+settings = Settings()
