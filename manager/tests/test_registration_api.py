@@ -30,6 +30,9 @@ def test_heartbeat_updates_agent(client, auth_headers):
     resp = client.post("/heartbeat", json={"agent_id": agent_id, "pending_uploads": 2}, headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
+    agents = client.get("/agents", headers=auth_headers).json()
+    agent = next(a for a in agents if a["agent_id"] == agent_id)
+    assert agent["pending_uploads"] == 2
 
 
 def test_heartbeat_unknown_agent_returns_404(client, auth_headers):
