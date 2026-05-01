@@ -18,6 +18,7 @@ def test_add_device_returns_201(client, auth_headers):
     assert data["hostname"] == "sw-core-01"
     assert "id" in data
     assert "auth_password" not in data  # passwords not returned in response
+    assert "priv_password" not in data
 
 def test_list_devices_returns_added(client, auth_headers):
     client.post("/devices", json=DEVICE_PAYLOAD, headers=auth_headers)
