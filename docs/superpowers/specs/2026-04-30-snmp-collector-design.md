@@ -474,3 +474,145 @@ The full README.md (for project root) covers:
 - Architecture decision notes
 
 README.md is generated as part of the implementation plan.
+
+---
+
+## 11. Test Plan
+
+Tests are organized into four layers: unit, integration, end-to-end, and pre-push checklist.
+
+---
+
+### Layer 1 — Unit Tests
+
+Run without Docker. No network, no filesystem side effects.
+
+#### Agent (Go — `go test ./...`)
+
+| Test | What it verifies |
+|------|-----------------|
+| `poller/stagger_test.go` | `hash(ip) % 60` distributes 1000 IPs evenly across 60 slots (no slot > 2x average) |
+| `buffer/flush_test.go` | In-memory buffer flushes to Parquet on 5-min wall-clock boundary; partial window stays open |
+| `buffer/flush_test.go` | SIGTERM mid-window flushes partial buffer to Parquet before exit |
+| `parquet/schema_test.go` | Written Parquet files contain correct columns: `agent_id`, `device_ip`, `oid`, `value`, `collected_at` |
+| `parquet/schema_test.go` | Trap Parquet files contain: `agent_id`, `device_ip`, `trap_oid`, `varbinds`, `received_at` |
+| `offload/checksum_test.go` | SHA-256 computed correctly; matches reference hash for known input |
+| `offload/fileid_test.go` | File ID format: `{agent_id}_{window_start_epoch}_{type}` — deterministic for same inputs |
+| `offload/prune_test.go` | Files with `collected_at` > 24h ago are pruned; recent files are retained |
+| `offload/retry_test.go` | Failed upload retains file; successful upload deletes file |
+| `health/handler_test.go` | `/health` returns 200 with all required fields present |
+
+#### Manager (Python — `pytest`)
+
+| Test | What it verifies |
+|------|-----------------|
+| `test_registry.py` | Register agent → stored in memory + `registry.json` written |
+| `test_registry.py` | Load manager with existing `registry.json` → registry restored on startup |
+| `test_registry.py` | Heartbeat within 90s → status `online`; 90s–5min → `degraded`; > 5min → `offline` |
+| `test_ingest.py` | Valid Parquet + correct SHA-256 → rows inserted into DuckDB |
+| `test_ingest.py` | Valid Parquet + wrong SHA-256 → 400, no rows inserted |
+| `test_ingest.py` | Duplicate `file_id` → 200 (idempotent), no duplicate rows in DuckDB |
+| `test_ingest.py` | Corrupt Parquet file → file moved to dead-letter, error JSON written, no crash |
+| `test_devices.py` | Add device → stored in `devices` table with all v3 credential fields |
+| `test_devices.py` | Delete device → removed from `devices` table |
+| `test_devices.py` | `GET /config/{agent_id}` returns only devices assigned to that agent |
+| `test_query_ui.py` | SQL tab rejects `DROP TABLE`, `INSERT`, `UPDATE`, `DELETE` with 400 |
+| `test_query_ui.py` | SQL tab accepts `SELECT COUNT(*) FROM snmp_polls` and returns result |
+
+---
+
+### Layer 2 — Integration Tests
+
+Require the manager container running locally (`docker-compose up manager`). No agent, no simulator.
+
+| Test | What it verifies |
+|------|-----------------|
+| `test_registration_flow.py` | POST `/register` → 200, returns `agent_id` + device list |
+| `test_registration_flow.py` | POST `/register` with invalid API key → 401 |
+| `test_heartbeat_flow.py` | POST `/heartbeat` updates `last_seen`; GET `/agents` reflects new timestamp |
+| `test_ingest_flow.py` | POST `/ingest` with real Parquet file → DuckDB query returns expected row count |
+| `test_ingest_flow.py` | POST `/ingest` same file twice → idempotent, row count unchanged |
+| `test_ingest_flow.py` | POST `/ingest` with mismatched SHA-256 → 400, dead-letter file created |
+| `test_deadletter.py` | Dead-letter directory contains `.parquet` + `.error.json` pair after failed ingest |
+| `test_ui_pages.py` | GET `/` → 200, contains agent count section |
+| `test_ui_pages.py` | GET `/ui/agents` → 200, registered agent appears in table |
+| `test_ui_pages.py` | GET `/ui/devices` → 200, add-device form present |
+| `test_ui_pages.py` | GET `/ui/query` → 200, both Polls and Traps tabs present |
+
+---
+
+### Layer 3 — End-to-End Tests
+
+Full dev stack: `make up` (all 4 containers). Validates the complete data pipeline.
+
+#### E2E-1: Agent Registration
+1. `make up`
+2. `curl http://localhost:8000/agents` → agent `dev-agent-01` present with status `online`
+3. `curl http://localhost:8000/config/dev-agent-01` → returns list of 10 simulated device IPs
+
+#### E2E-2: Poll Data Pipeline (wait ~6 minutes)
+1. After first 5-min window closes, agent uploads Parquet to manager
+2. `make query` → `SELECT COUNT(*) FROM snmp_polls;` returns > 0
+3. Query confirms `agent_id = 'dev-agent-01'` and `device_ip` matches one of the 10 simulated IPs
+4. `collected_at` timestamps fall within expected 5-min window
+
+#### E2E-3: Trap Pipeline
+1. `make sim-trap` → fires one manual trap to agent
+2. Within 5 minutes: `SELECT COUNT(*) FROM snmp_traps;` returns > 0
+3. Trap row has correct `trap_oid` matching the sent trap
+
+#### E2E-4: Manager Offline Resilience
+1. `docker stop snmp-collector-manager`
+2. Wait 10 minutes (agent accumulates 2 Parquet windows locally)
+3. Verify agent health: `curl http://localhost:8080/health` → `manager_connected: false`, `pending_uploads: 2`
+4. `docker start snmp-collector-manager`
+5. Wait 2 minutes for agent to re-register and replay
+6. `SELECT COUNT(*) FROM snmp_polls;` shows rows from both missed windows
+
+#### E2E-5: Web UI Smoke Test
+1. Open `http://localhost:8000` → dashboard loads, agent shows `online` badge
+2. Navigate to `/ui/agents` → agent row present, last_seen < 60s ago
+3. Navigate to `/ui/devices` → 10 simulated devices listed
+4. Navigate to `/ui/query` → Polls tab → filter by agent → results table populated
+5. SQL tab → `SELECT COUNT(*) FROM snmp_traps;` → returns numeric result
+6. SQL tab → `DROP TABLE snmp_polls;` → returns error, table still exists
+
+#### E2E-6: Graceful Shutdown
+1. While agent is actively polling: `docker stop snmp-collector-agent` (sends SIGTERM)
+2. Check agent logs: "flushing buffer to Parquet" message present
+3. Check `/data/agent/polls/` — Parquet file exists for the partial window
+4. `docker start snmp-collector-agent` — agent re-registers and uploads pending file
+5. `SELECT COUNT(*) FROM snmp_polls;` — row count increased (no data lost)
+
+---
+
+### Layer 4 — Pre-Push Checklist
+
+Run before every `git push`. All items must pass.
+
+```
+[ ] go test ./...                          # all agent unit tests pass
+[ ] go vet ./...                           # no Go vet warnings
+[ ] go build ./cmd/agent                   # binary compiles cleanly
+[ ] pytest manager/tests/unit/             # all manager unit tests pass
+[ ] pytest manager/tests/integration/      # all integration tests pass (manager container up)
+[ ] make up && make e2e                    # E2E-1 through E2E-3 automated assertions pass
+[ ] make down                              # clean shutdown, no orphan containers
+[ ] No secrets in git: grep -r "password\|api_key\|auth_pass" --include="*.yaml" .
+[ ]   (only agent.yaml.example with placeholder values)
+[ ] README.md renders correctly (preview in browser or GitHub)
+[ ] docker build agent/ --no-cache         # agent Docker image builds clean
+[ ] docker build manager/ --no-cache       # manager Docker image builds clean
+```
+
+Automate layers 1–3 under `make test` for a single pre-push command:
+
+```makefile
+test:
+    go test ./agent/...
+    go vet ./agent/...
+    pytest manager/tests/unit/
+    docker-compose -f dev/docker-compose.dev.yml up -d
+    pytest manager/tests/integration/ manager/tests/e2e/
+    docker-compose -f dev/docker-compose.dev.yml down
+```
