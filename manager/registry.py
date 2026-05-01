@@ -92,7 +92,7 @@ class AgentRegistry:
             for d in json.loads(path.read_text()):
                 agent = AgentInfo.from_dict(d)
                 self._agents[agent.agent_id] = agent
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError, ValueError):
             pass
 
 
