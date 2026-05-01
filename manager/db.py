@@ -1,7 +1,7 @@
 import duckdb
 import asyncio
 from pathlib import Path
-from config import settings
+import config
 
 _conn: duckdb.DuckDBPyConnection | None = None
 _write_lock = asyncio.Lock()
@@ -48,8 +48,8 @@ def get_db() -> duckdb.DuckDBPyConnection:
     """Return the shared DuckDB connection, initializing schema on first call."""
     global _conn
     if _conn is None:
-        Path(settings.db_path).parent.mkdir(parents=True, exist_ok=True)
-        _conn = duckdb.connect(settings.db_path)
+        Path(config.settings.db_path).parent.mkdir(parents=True, exist_ok=True)
+        _conn = duckdb.connect(config.settings.db_path)
         for stmt in _SCHEMA:
             _conn.execute(stmt)
     return _conn
