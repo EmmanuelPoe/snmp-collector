@@ -31,6 +31,8 @@ def reset_db():
 def reset_registry():
     import registry as reg_mod
     reg_mod.registry._agents.clear()
+    yield
+    reg_mod.registry._agents.clear()
 
 @pytest.fixture
 def client(patch_settings, reset_db, reset_registry):
