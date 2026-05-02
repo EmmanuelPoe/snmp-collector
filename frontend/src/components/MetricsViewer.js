@@ -142,9 +142,12 @@ function MetricsViewer() {
                 };
             }
 
-            // If viewing multiple interfaces, this might look weird (overlapping values)
-            // Ideally we filter by interface_name
-            grouped[timeKey][m.oid_name] = m.value;
+            // Sum across interfaces when no specific interface is selected
+            if (!selectedInterface) {
+                grouped[timeKey][m.oid_name] = (grouped[timeKey][m.oid_name] || 0) + (m.value || 0);
+            } else {
+                grouped[timeKey][m.oid_name] = m.value;
+            }
         });
 
         // Convert to array and sort

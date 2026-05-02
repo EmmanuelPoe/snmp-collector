@@ -114,7 +114,7 @@ def query_metrics(
 
     # --- Generic Handling ---
     query = db.query(SNMPMetric)
-    
+
     if device_id:
         query = query.filter(SNMPMetric.device_id == device_id)
     if module:
@@ -127,9 +127,50 @@ def query_metrics(
         query = query.filter(SNMPMetric.timestamp >= start_time)
     if end_time:
         query = query.filter(SNMPMetric.timestamp <= end_time)
-    
+
     metrics = query.order_by(desc(SNMPMetric.timestamp)).limit(limit).all()
-    return metrics
+    if metrics:
+        return metrics
+
+    # No module specified and snmp_metrics is empty — fall back to if_mib table
+    if module:
+        return []
+
+    ifq = db.query(IfMibMetric)
+    if device_id:
+        ifq = ifq.filter(IfMibMetric.device_id == device_id)
+    if interface_name:
+        ifq = ifq.filter(IfMibMetric.interface_name == interface_name)
+    if start_time:
+        ifq = ifq.filter(IfMibMetric.timestamp >= start_time)
+    if end_time:
+        ifq = ifq.filter(IfMibMetric.timestamp <= end_time)
+
+    rows = ifq.order_by(desc(IfMibMetric.timestamp)).limit(limit).all()
+    results = []
+    for row in rows:
+        for col in row.__table__.columns.keys():
+            if col in ['id', 'device_id', 'timestamp', 'interface_name', 'interface_index']:
+                continue
+            val = getattr(row, col)
+            if val is not None:
+                oid_name = to_camel_case(col)
+                if oid and oid != oid_name:
+                    continue
+                results.append(MetricResponse(
+                    id=row.id,
+                    device_id=row.device_id,
+                    timestamp=row.timestamp,
+                    interface_name=row.interface_name,
+                    interface_index=row.interface_index,
+                    oid=oid_name,
+                    oid_name=oid_name,
+                    value=float(val),
+                    value_type='gauge',
+                ))
+        if len(results) >= limit:
+            break
+    return results[:limit]
 
 
 @router.get("/available/{device_id}")
@@ -190,8 +231,33 @@ def get_available_metrics(device_id: int, db: Session = Depends(get_db)):
 
 @router.get("/latest/{device_id}", response_model=List[MetricResponse])
 def get_latest_metrics(device_id: int, limit: int = 100, db: Session = Depends(get_db)):
-    # Basic impl for backwards compat listing
-    return db.query(SNMPMetric).filter(SNMPMetric.device_id == device_id).order_by(desc(SNMPMetric.timestamp)).limit(limit).all()
+    generic = db.query(SNMPMetric).filter(SNMPMetric.device_id == device_id).order_by(desc(SNMPMetric.timestamp)).limit(limit).all()
+    if generic:
+        return generic
+
+    # Fall back to if_mib table — unpivot rows into MetricResponse shape
+    rows = db.query(IfMibMetric).filter(IfMibMetric.device_id == device_id).order_by(desc(IfMibMetric.timestamp)).limit(limit).all()
+    results = []
+    for row in rows:
+        for col in row.__table__.columns.keys():
+            if col in ['id', 'device_id', 'timestamp', 'interface_name', 'interface_index']:
+                continue
+            val = getattr(row, col)
+            if val is not None:
+                results.append(MetricResponse(
+                    id=row.id,
+                    device_id=row.device_id,
+                    timestamp=row.timestamp,
+                    interface_name=row.interface_name,
+                    interface_index=row.interface_index,
+                    oid=to_camel_case(col),
+                    oid_name=to_camel_case(col),
+                    value=float(val),
+                    value_type='gauge',
+                ))
+        if len(results) >= limit:
+            break
+    return results[:limit]
 
 @router.get("/interfaces/{device_id}")
 def get_device_interfaces(device_id: int, db: Session = Depends(get_db)):
