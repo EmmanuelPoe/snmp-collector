@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -80,9 +81,9 @@ class AgentRegistry:
     def _persist(self) -> None:
         path = Path(config.settings.registry_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps([a.to_dict() for a in self._agents.values()], indent=2)
-        )
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps([a.to_dict() for a in self._agents.values()], indent=2))
+        os.replace(tmp, path)
 
     def _load(self) -> None:
         path = Path(config.settings.registry_path)

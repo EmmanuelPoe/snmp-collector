@@ -29,7 +29,7 @@ async def ingest_file(
         _dead_letter(file_id, tmp_path, f"SHA256 mismatch: got {actual_sha256}")
         raise ChecksumError("SHA256 mismatch")
 
-    if query("SELECT file_id FROM ingest_log WHERE file_id = ?", [file_id]):
+    if await query("SELECT file_id FROM ingest_log WHERE file_id = ?", [file_id]):
         tmp_path.unlink(missing_ok=True)
         raise DuplicateFileError(f"Already ingested: {file_id}")
 
@@ -56,7 +56,8 @@ def _sha256(path: Path) -> str:
 def _dead_letter(file_id: str, src: Path, error: str) -> None:
     dl_dir = Path(config.settings.dead_letter_path)
     dl_dir.mkdir(parents=True, exist_ok=True)
-    dest = dl_dir / f"{file_id}.parquet"
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dest = dl_dir / f"{file_id}.{ts}.parquet"
     if src.exists():
         shutil.move(str(src), dest)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

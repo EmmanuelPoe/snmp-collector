@@ -42,7 +42,8 @@ def test_ingest_wrong_checksum_returns_400(client, auth_headers, sample_polls_pa
         )
     assert resp.status_code == 400
 
-def test_ingest_duplicate_is_idempotent(client, auth_headers, sample_polls_parquet):
+@pytest.mark.asyncio
+async def test_ingest_duplicate_is_idempotent(client, auth_headers, sample_polls_parquet):
     sha = _sha256(sample_polls_parquet)
     for _ in range(2):
         with open(sample_polls_parquet, "rb") as f:
@@ -54,7 +55,7 @@ def test_ingest_duplicate_is_idempotent(client, auth_headers, sample_polls_parqu
         assert resp.status_code == 200
     # Only 5 rows total, not 10
     from db import query
-    count = query("SELECT COUNT(*) FROM snmp_polls")[0][0]
+    count = (await query("SELECT COUNT(*) FROM snmp_polls"))[0][0]
     assert count == 5
 
 def test_ingest_invalid_file_id_format_returns_400(client, auth_headers, sample_polls_parquet):

@@ -8,9 +8,9 @@ router = APIRouter(tags=["registration"])
 
 
 @router.post("/register", response_model=RegisterResponse)
-def register(req: RegisterRequest, _: str = Depends(require_api_key)):
+async def register(req: RegisterRequest, _: str = Depends(require_api_key)):
     agent_id = registry.register(req.hostname, req.ip)
-    return RegisterResponse(agent_id=agent_id, devices=_devices_for(agent_id))
+    return RegisterResponse(agent_id=agent_id, devices=await _devices_for(agent_id))
 
 
 @router.post("/heartbeat")
@@ -23,10 +23,10 @@ def heartbeat(req: HeartbeatRequest, _: str = Depends(require_api_key)):
 
 
 @router.get("/config/{agent_id}", response_model=list[DeviceConfig])
-def get_config(agent_id: str, _: str = Depends(require_api_key)):
+async def get_config(agent_id: str, _: str = Depends(require_api_key)):
     if not registry.get(agent_id):
         raise HTTPException(status_code=404, detail="Agent not found")
-    return _devices_for(agent_id)
+    return await _devices_for(agent_id)
 
 
 @router.get("/agents")
@@ -51,8 +51,8 @@ def deregister_agent(agent_id: str, _: str = Depends(require_api_key)):
     registry.deregister(agent_id)
 
 
-def _devices_for(agent_id: str) -> list[DeviceConfig]:
-    rows = query(
+async def _devices_for(agent_id: str) -> list[DeviceConfig]:
+    rows = await query(
         "SELECT id, ip, hostname, snmp_version, username, auth_protocol, "
         "auth_password, priv_protocol, priv_password "
         "FROM devices WHERE assigned_agent_id = ?",

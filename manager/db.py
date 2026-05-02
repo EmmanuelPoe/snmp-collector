@@ -63,12 +63,13 @@ def close_db() -> None:
         _conn = None
 
 
-def query(sql: str, params: list | None = None) -> list[tuple]:
+async def query(sql: str, params: list | None = None) -> list[tuple]:
     """Execute a read query and return all rows as a list of tuples."""
-    conn = get_db()
-    if params is not None:
-        return conn.execute(sql, params).fetchall()
-    return conn.execute(sql).fetchall()
+    async with _write_lock:
+        conn = get_db()
+        if params is not None:
+            return conn.execute(sql, params).fetchall()
+        return conn.execute(sql).fetchall()
 
 
 async def execute(sql: str, params: list | None = None) -> None:

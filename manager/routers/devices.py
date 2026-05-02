@@ -9,8 +9,8 @@ router = APIRouter(prefix="/devices", tags=["devices"])
 
 
 @router.get("", response_model=list[DeviceResponse])
-def list_devices(_: str = Depends(require_api_key)):
-    rows = query(
+async def list_devices(_: str = Depends(require_api_key)):
+    rows = await query(
         "SELECT id, ip, hostname, snmp_version, username, auth_protocol, "
         "priv_protocol, assigned_agent_id, created_at, last_polled_at FROM devices"
     )
@@ -30,7 +30,7 @@ async def add_device(req: AddDeviceRequest, _: str = Depends(require_api_key)):
             req.assigned_agent_id, now,
         ],
     )
-    rows = query(
+    rows = await query(
         "SELECT id, ip, hostname, snmp_version, username, auth_protocol, "
         "priv_protocol, assigned_agent_id, created_at, last_polled_at "
         "FROM devices WHERE id = ?",
@@ -41,7 +41,7 @@ async def add_device(req: AddDeviceRequest, _: str = Depends(require_api_key)):
 
 @router.delete("/{device_id}", status_code=204)
 async def delete_device(device_id: str, _: str = Depends(require_api_key)):
-    if not query("SELECT id FROM devices WHERE id = ?", [device_id]):
+    if not await query("SELECT id FROM devices WHERE id = ?", [device_id]):
         raise HTTPException(status_code=404, detail="Device not found")
     await execute("DELETE FROM devices WHERE id = ?", [device_id])
 
