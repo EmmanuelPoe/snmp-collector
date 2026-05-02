@@ -101,6 +101,7 @@ services:
 
   manager:
     build: ./manager
+    container_name: snmp-manager
     ports:
       - "8001:8000"
     volumes:
@@ -116,7 +117,7 @@ services:
     networks:
       - snmp-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
