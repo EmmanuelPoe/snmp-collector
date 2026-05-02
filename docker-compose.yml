@@ -99,6 +99,28 @@ services:
     networks:
       - snmp-network
 
+  manager:
+    build: ./manager
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./data/db:/data/db
+      - ./data/dead-letter:/data/dead-letter
+      - ./data/registry:/data/registry
+    environment:
+      - MANAGER_API_KEY=${MANAGER_API_KEY:-change-me-in-production}
+      - DB_PATH=/data/db/metrics.db
+      - REGISTRY_PATH=/data/registry/registry.json
+      - DEAD_LETTER_PATH=/data/dead-letter
+    restart: unless-stopped
+    networks:
+      - snmp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 networks:
   snmp-network:
     driver: bridge
