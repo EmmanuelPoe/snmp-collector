@@ -50,6 +50,8 @@ def sample_polls_parquet(tmp_path):
     table = pa.table({
         "agent_id": pa.array(["agent-01"] * rows),
         "device_ip": pa.array(["192.168.1.1"] * rows),
+        "interface_name": pa.array([None] * rows, type=pa.string()),
+        "oid_name": pa.array([None] * rows, type=pa.string()),
         "oid": pa.array(["1.3.6.1.2.1.1.3.0"] * rows),
         "value": pa.array(["12345"] * rows),
         "collected_at": pa.array([datetime.now(timezone.utc)] * rows, type=pa.timestamp("us", tz="UTC")),

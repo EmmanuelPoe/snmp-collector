@@ -9,11 +9,13 @@ _ALLOWED_TABLES = frozenset({"snmp_polls", "snmp_traps"})
 
 _SCHEMA = [
     """CREATE TABLE IF NOT EXISTS snmp_polls (
-        agent_id     VARCHAR NOT NULL,
-        device_ip    VARCHAR NOT NULL,
-        oid          VARCHAR NOT NULL,
-        value        VARCHAR,
-        collected_at TIMESTAMPTZ NOT NULL
+        agent_id       VARCHAR NOT NULL,
+        device_ip      VARCHAR NOT NULL,
+        interface_name VARCHAR,
+        oid_name       VARCHAR,
+        oid            VARCHAR NOT NULL,
+        value          VARCHAR,
+        collected_at   TIMESTAMPTZ NOT NULL
     )""",
     """CREATE TABLE IF NOT EXISTS snmp_traps (
         agent_id     VARCHAR NOT NULL,
@@ -27,36 +29,33 @@ _SCHEMA = [
         ingested_at  TIMESTAMPTZ NOT NULL,
         row_count    INTEGER NOT NULL
     )""",
-    """CREATE TABLE IF NOT EXISTS devices (
-        id                VARCHAR PRIMARY KEY,
-        ip                VARCHAR NOT NULL,
-        hostname          VARCHAR,
-        snmp_version      VARCHAR DEFAULT 'v3',
-        username          VARCHAR NOT NULL,
-        auth_protocol     VARCHAR NOT NULL,
-        auth_password     VARCHAR NOT NULL,
-        priv_protocol     VARCHAR NOT NULL,
-        priv_password     VARCHAR NOT NULL,
-        assigned_agent_id VARCHAR,
-        created_at        TIMESTAMPTZ NOT NULL,
-        last_polled_at    TIMESTAMPTZ
-    )""",
 ]
 
 
+def _migrate(conn: duckdb.DuckDBPyConnection) -> None:
+    """Add new columns to snmp_polls for existing databases."""
+    try:
+        cols = {row[0] for row in conn.execute("DESCRIBE snmp_polls").fetchall()}
+        if "interface_name" not in cols:
+            conn.execute("ALTER TABLE snmp_polls ADD COLUMN interface_name VARCHAR")
+        if "oid_name" not in cols:
+            conn.execute("ALTER TABLE snmp_polls ADD COLUMN oid_name VARCHAR")
+    except Exception:
+        pass  # Table may not exist yet — _SCHEMA will create it
+
+
 def get_db() -> duckdb.DuckDBPyConnection:
-    """Return the shared DuckDB connection, initializing schema on first call."""
     global _conn
     if _conn is None:
         Path(config.settings.db_path).parent.mkdir(parents=True, exist_ok=True)
         _conn = duckdb.connect(config.settings.db_path)
+        _migrate(_conn)
         for stmt in _SCHEMA:
             _conn.execute(stmt)
     return _conn
 
 
 def close_db() -> None:
-    """Close and release the shared DuckDB connection."""
     global _conn
     if _conn:
         _conn.close()
@@ -64,7 +63,6 @@ def close_db() -> None:
 
 
 async def query(sql: str, params: list | None = None) -> list[tuple]:
-    """Execute a read query and return all rows as a list of tuples."""
     async with _write_lock:
         conn = get_db()
         if params is not None:
@@ -73,7 +71,6 @@ async def query(sql: str, params: list | None = None) -> list[tuple]:
 
 
 async def execute(sql: str, params: list | None = None) -> None:
-    """Execute a write statement under the async write lock."""
     async with _write_lock:
         conn = get_db()
         if params is not None:
@@ -83,26 +80,40 @@ async def execute(sql: str, params: list | None = None) -> None:
 
 
 async def ingest_parquet(table: str, file_path: str) -> int:
-    """Bulk load parquet file into table. Returns number of rows inserted."""
     if table not in _ALLOWED_TABLES:
         raise ValueError(f"Unknown table: {table!r}")
     async with _write_lock:
         conn = get_db()
         before = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-        conn.execute(f"INSERT INTO {table} SELECT * FROM read_parquet($1)", [file_path])
+        if table == "snmp_polls":
+            conn.execute(
+                "INSERT INTO snmp_polls (agent_id, device_ip, interface_name, oid_name, oid, value, collected_at) "
+                "SELECT agent_id, device_ip, interface_name, oid_name, oid, value, collected_at "
+                "FROM read_parquet($1)",
+                [file_path],
+            )
+        else:
+            conn.execute(f"INSERT INTO {table} SELECT * FROM read_parquet($1)", [file_path])
         after = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         return after - before
 
 
 async def transactional_ingest(table: str, file_path: str, file_id: str, ingested_at, row_count: int) -> None:
-    """Load parquet and record ingest_log entry atomically."""
     if table not in _ALLOWED_TABLES:
         raise ValueError(f"Unknown table: {table!r}")
     async with _write_lock:
         conn = get_db()
         conn.execute("BEGIN")
         try:
-            conn.execute(f"INSERT INTO {table} SELECT * FROM read_parquet($1)", [file_path])
+            if table == "snmp_polls":
+                conn.execute(
+                    "INSERT INTO snmp_polls (agent_id, device_ip, interface_name, oid_name, oid, value, collected_at) "
+                    "SELECT agent_id, device_ip, interface_name, oid_name, oid, value, collected_at "
+                    "FROM read_parquet($1)",
+                    [file_path],
+                )
+            else:
+                conn.execute(f"INSERT INTO {table} SELECT * FROM read_parquet($1)", [file_path])
             conn.execute(
                 "INSERT INTO ingest_log VALUES (?, ?, ?)",
                 [file_id, ingested_at, row_count],

@@ -1,7 +1,3 @@
-import uuid
-from datetime import datetime, timezone
-
-
 def test_register_returns_agent_id(client, auth_headers):
     resp = client.post("/register", json={"hostname": "nyc-01", "ip": "10.0.0.1"}, headers=auth_headers)
     assert resp.status_code == 200
@@ -40,28 +36,13 @@ def test_heartbeat_unknown_agent_returns_404(client, auth_headers):
     assert resp.status_code == 404
 
 
-def test_get_config_returns_devices(client, auth_headers, reset_db):
+def test_get_config_returns_devices(client, auth_headers):
     reg = client.post("/register", json={"hostname": "nyc-03", "ip": "10.0.0.3"}, headers=auth_headers)
     agent_id = reg.json()["agent_id"]
-    # Insert device directly via DB to avoid depending on Task 6's devices router
-    import db
-    device_id = uuid.uuid4().hex
-    db.get_db().execute(
-        """INSERT INTO devices
-           (id, ip, hostname, snmp_version, username, auth_protocol, auth_password,
-            priv_protocol, priv_password, assigned_agent_id, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [
-            device_id, "192.168.1.1", None, "v3", "admin",
-            "SHA256", "authpass123", "AES256", "privpass123",
-            agent_id, datetime.now(timezone.utc).isoformat(),
-        ],
-    )
+    # Device inventory is now fetched from backend HTTP API, not stored in DuckDB.
     resp = client.get(f"/config/{agent_id}", headers=auth_headers)
     assert resp.status_code == 200
-    devices = resp.json()
-    assert len(devices) == 1
-    assert devices[0]["ip"] == "192.168.1.1"
+    assert resp.json() == []
 
 
 def test_get_config_unknown_agent_returns_404(client, auth_headers):
