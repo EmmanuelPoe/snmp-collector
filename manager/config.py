@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     db_path: str = "/data/db/metrics.db"
     registry_path: str = "/data/registry/registry.json"
     dead_letter_path: str = "/data/dead-letter"
+    backend_url: str = "http://backend:8000"
 
     model_config = {"env_file": ".env"}
 
