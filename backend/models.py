@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON
 from sqlalchemy.sql import func
 from database import Base
 
@@ -13,7 +12,7 @@ class Device(Base):
     snmp_version = Column(String(10), default="2c")
     snmp_community = Column(String(255), default="public")
     snmp_port = Column(Integer, default=161)
-    snmp_modules = Column(JSONB, default=["if_mib"])
+    snmp_modules = Column(JSON, default=["if_mib"])
     device_type = Column(String(50))
     description = Column(Text)
     enabled = Column(Boolean, default=True)
