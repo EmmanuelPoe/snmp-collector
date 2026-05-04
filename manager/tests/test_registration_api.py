@@ -36,13 +36,34 @@ def test_heartbeat_unknown_agent_returns_404(client, auth_headers):
     assert resp.status_code == 404
 
 
-def test_get_config_returns_devices(client, auth_headers):
+def test_get_config_returns_devices(client, auth_headers, respx_mock):
+    import httpx
+    device_payload = [{
+        "id": "device-abc",
+        "ip": "192.168.1.1",
+        "hostname": None,
+        "snmp_version": "2c",
+        "snmp_community": "public",
+        "snmp_port": 161,
+        "username": None,
+        "auth_protocol": None,
+        "auth_password": None,
+        "priv_protocol": None,
+        "priv_password": None,
+    }]
+    respx_mock.get("http://backend-mock:8000/internal/devices").mock(
+        return_value=httpx.Response(200, json=device_payload)
+    )
+
     reg = client.post("/register", json={"hostname": "nyc-03", "ip": "10.0.0.3"}, headers=auth_headers)
     agent_id = reg.json()["agent_id"]
-    # Device inventory is now fetched from backend HTTP API, not stored in DuckDB.
+
     resp = client.get(f"/config/{agent_id}", headers=auth_headers)
     assert resp.status_code == 200
-    assert resp.json() == []
+    devices = resp.json()
+    assert len(devices) == 1
+    assert devices[0]["ip"] == "192.168.1.1"
+    assert devices[0]["snmp_version"] == "2c"
 
 
 def test_get_config_unknown_agent_returns_404(client, auth_headers):
@@ -70,3 +91,12 @@ def test_deregister_agent(client, auth_headers):
 def test_deregister_unknown_agent_returns_404(client, auth_headers):
     resp = client.delete("/agents/ghost-id", headers=auth_headers)
     assert resp.status_code == 404
+
+
+def test_internal_agents_requires_no_auth(client, mock_backend_empty):
+    reg = client.post("/register", json={"hostname": "nyc-int", "ip": "10.1.1.1"}, headers={"Authorization": "Bearer test-key"})
+    assert reg.status_code == 200
+    resp = client.get("/internal/agents")   # no auth header
+    assert resp.status_code == 200
+    agents = resp.json()
+    assert any(a["hostname"] == "nyc-int" for a in agents)
