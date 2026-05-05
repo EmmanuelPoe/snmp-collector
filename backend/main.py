@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 from config import settings
-from routers import devices, metrics, config, internal
+from routers import devices, metrics, config, internal, agents
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ app.include_router(devices.router)
 app.include_router(metrics.router)
 app.include_router(config.router)
 app.include_router(internal.router)
+app.include_router(agents.router)
 
 
 @app.get("/")
