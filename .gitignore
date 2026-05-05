@@ -211,3 +211,6 @@ worktrees/
 
 # Documentation / planning files
 docs/
+
+# Docker data volumes
+data/

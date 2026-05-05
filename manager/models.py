@@ -7,12 +7,14 @@ class DeviceConfig(BaseModel):
     id: str
     ip: str
     hostname: Optional[str] = None
-    snmp_version: str = "v3"
-    username: str
-    auth_protocol: str
-    auth_password: str
-    priv_protocol: str
-    priv_password: str
+    snmp_version: str = "2c"
+    snmp_community: Optional[str] = None
+    snmp_port: int = 161
+    username: Optional[str] = None
+    auth_protocol: Optional[str] = None
+    auth_password: Optional[str] = None
+    priv_protocol: Optional[str] = None
+    priv_password: Optional[str] = None
 
 
 class RegisterRequest(BaseModel):

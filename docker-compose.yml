@@ -15,29 +15,10 @@ services:
     networks:
       - snmp-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  snmp-exporter:
-    build:
-      context: ./prometheus
-      dockerfile: Dockerfile
-    container_name: snmp-exporter
-    ports:
-      - "${SNMP_EXPORTER_PORT:-9116}:9116"
-    volumes:
-      - ./prometheus/snmp.yml:/etc/snmp_exporter/snmp.yml:ro
-    networks:
-      - snmp-network
-    command:
-      - '--config.file=/etc/snmp_exporter/snmp.yml'
-    healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9116/" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   backend:
     build:
@@ -45,26 +26,25 @@ services:
       dockerfile: Dockerfile
     container_name: snmp-backend
     environment:
-      # Inject DATABASE_URL if manually provided, otherwise backend constructs it from components below
       DATABASE_URL: ${DATABASE_URL:-}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_HOST: postgres
-      SNMP_EXPORTER_URL: http://snmp-exporter:9116
-      PROMETHEUS_CONFIG_PATH: /app/prometheus_config/snmp.yml
+      DUCKDB_PATH: /data/db/metrics.db
+      MANAGER_URL: http://manager:8000
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
-      - ./prometheus:/app/prometheus_config
+      - ./data/db:/data/db:ro
     networks:
       - snmp-network
     depends_on:
       postgres:
         condition: service_healthy
-      snmp-exporter:
+      manager:
         condition: service_healthy
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
@@ -89,16 +69,6 @@ services:
     stdin_open: true
     tty: true
 
-  snmp-simulator:
-    build:
-      context: ./snmp-simulator
-      dockerfile: Dockerfile
-    container_name: snmp-simulator
-    ports:
-      - "1161:161/udp"
-    networks:
-      - snmp-network
-
   manager:
     build: ./manager
     container_name: snmp-manager
@@ -113,14 +83,51 @@ services:
       - DB_PATH=/data/db/metrics.db
       - REGISTRY_PATH=/data/registry/registry.json
       - DEAD_LETTER_PATH=/data/dead-letter
+      - BACKEND_URL=http://backend:8000
     restart: unless-stopped
     networks:
       - snmp-network
+    depends_on:
+      backend:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  agent:
+    build: ./agent
+    container_name: snmp-agent
+    environment:
+      - MANAGER_URL=http://manager:8000
+      - MANAGER_API_KEY=${MANAGER_API_KEY:-change-me-in-production}
+      - AGENT_HOSTNAME=${AGENT_HOSTNAME:-snmp-agent-01}
+      - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-60}
+      - UPLOAD_MAX_ROWS=500
+      - UPLOAD_MAX_AGE_SECONDS=60
+      - RETRY_MAX_AGE_SECONDS=3600
+      - QUEUE_PATH=/data/queue
+      - AGENT_ID_PATH=/data/agent_id
+    volumes:
+      - ./data/agent-queue:/data/queue
+      - ./data/agent-id:/data
+    networks:
+      - snmp-network
+    depends_on:
+      manager:
+        condition: service_healthy
+    restart: unless-stopped
+
+  snmp-simulator:
+    build:
+      context: ./snmp-simulator
+      dockerfile: Dockerfile
+    container_name: snmp-simulator
+    ports:
+      - "1161:161/udp"
+    networks:
+      - snmp-network
 
 networks:
   snmp-network:

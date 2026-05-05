@@ -122,4 +122,11 @@ export const healthCheck = async () => {
     return response.data;
 };
 
+// ===== Agents =====
+
+export const getAgents = async () => {
+    const response = await api.get('/agents');
+    return response.data;
+};
+
 export default api;

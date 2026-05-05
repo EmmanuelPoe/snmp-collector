@@ -1,56 +1,75 @@
-from pydantic import BaseModel, Field, IPvAnyAddress
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional, List
 
 
-# ===== Device Schemas =====
-
 class DeviceBase(BaseModel):
-    """Base device schema"""
     name: str = Field(..., min_length=1, max_length=255)
     ip_address: str
-    snmp_version: str = Field(default="2c", pattern="^(1|2c|3)$")
+    snmp_version: str = Field(default="2c", pattern="^(2c|3)$")
     snmp_community: str = Field(default="public", min_length=1)
     snmp_port: int = Field(default=161, ge=1, le=65535)
     snmp_modules: List[str] = Field(default=["if_mib"])
     device_type: Optional[str] = Field(None, max_length=50)
     description: Optional[str] = None
     enabled: bool = True
+    username: Optional[str] = None
+    auth_protocol: Optional[str] = None
+    auth_password: Optional[str] = None
+    priv_protocol: Optional[str] = None
+    priv_password: Optional[str] = None
+    assigned_agent_id: Optional[str] = None
 
 
 class DeviceCreate(DeviceBase):
-    """Schema for creating a device"""
     pass
 
 
 class DeviceUpdate(BaseModel):
-    """Schema for updating a device"""
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     ip_address: Optional[str] = None
-    snmp_version: Optional[str] = Field(None, pattern="^(1|2c|3)$")
+    snmp_version: Optional[str] = Field(None, pattern="^(2c|3)$")
     snmp_community: Optional[str] = Field(None, min_length=1)
     snmp_port: Optional[int] = Field(None, ge=1, le=65535)
     snmp_modules: Optional[List[str]] = None
     device_type: Optional[str] = Field(None, max_length=50)
     description: Optional[str] = None
     enabled: Optional[bool] = None
+    username: Optional[str] = None
+    auth_protocol: Optional[str] = None
+    auth_password: Optional[str] = None
+    priv_protocol: Optional[str] = None
+    priv_password: Optional[str] = None
+    assigned_agent_id: Optional[str] = None
 
 
-class DeviceResponse(DeviceBase):
-    """Schema for device response"""
+class DeviceResponse(BaseModel):
     id: int
+    name: str
+    ip_address: str
+    snmp_version: str
+    snmp_community: str
+    snmp_port: int
+    snmp_modules: Optional[List[str]] = None
+    device_type: Optional[str] = None
+    description: Optional[str] = None
+    enabled: bool
+    username: Optional[str] = None
+    auth_protocol: Optional[str] = None
+    # auth_password and priv_password intentionally excluded from response
+    priv_protocol: Optional[str] = None
+    assigned_agent_id: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
 
-# ===== Metric Schemas =====
-
-class MetricBase(BaseModel):
-    """Base metric schema"""
+class MetricResponse(BaseModel):
+    id: int
     device_id: int
+    timestamp: datetime
     interface_name: Optional[str] = None
     interface_index: Optional[int] = None
     oid: str
@@ -58,35 +77,11 @@ class MetricBase(BaseModel):
     value: Optional[float] = None
     value_type: Optional[str] = None
 
-
-class MetricResponse(MetricBase):
-    """Schema for metric response"""
-    id: int
-    timestamp: datetime
-    
     class Config:
         from_attributes = True
 
 
-class MetricQuery(BaseModel):
-    """Schema for querying metrics"""
-    device_id: Optional[int] = None
-    interface_name: Optional[str] = None
-    oid: Optional[str] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    limit: int = Field(default=1000, ge=1, le=10000)
-
-
-# ===== Config Schemas =====
-
-class ModuleConfigUpdate(BaseModel):
-    """Schema for updating SNMP module configuration"""
-    yaml_content: str = Field(..., min_length=1)
-
-
 class CollectionConfigBase(BaseModel):
-    """Base collection config schema"""
     oid: str = Field(..., min_length=1)
     oid_name: str = Field(..., min_length=1)
     description: Optional[str] = None
@@ -94,61 +89,12 @@ class CollectionConfigBase(BaseModel):
 
 
 class CollectionConfigCreate(CollectionConfigBase):
-    """Schema for creating collection config"""
     pass
 
 
 class CollectionConfigResponse(CollectionConfigBase):
-    """Schema for collection config response"""
     id: int
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
-
-
-# ===== Schedule Schemas =====
-
-class ScheduleBase(BaseModel):
-    """Base schedule schema"""
-    interval_seconds: int = Field(default=60, ge=10, le=86400)  # 10 seconds to 24 hours
-    enabled: bool = True
-
-
-class ScheduleCreate(ScheduleBase):
-    """Schema for creating schedule"""
-    device_id: int
-
-
-class ScheduleUpdate(BaseModel):
-    """Schema for updating schedule"""
-    interval_seconds: Optional[int] = Field(None, ge=10, le=86400)
-    enabled: Optional[bool] = None
-
-
-class ScheduleResponse(ScheduleBase):
-    """Schema for schedule response"""
-    id: int
-    device_id: int
-    last_collection: Optional[datetime] = None
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
-
-
-# ===== Interface Schemas =====
-
-class InterfaceInfo(BaseModel):
-    """Interface information"""
-    interface_name: str
-    interface_index: int
-    status: Optional[str] = None  # up, down, testing, etc.
-
-
-class DeviceMetricsSummary(BaseModel):
-    """Summary of device metrics"""
-    device: DeviceResponse
-    interfaces: List[InterfaceInfo]
-    latest_metrics: List[MetricResponse]

@@ -19,6 +19,8 @@ def _make_parquet(tmp_path: Path, table: str) -> Path:
         data = pa.table({
             "agent_id": pa.array(["a1"]),
             "device_ip": pa.array(["1.2.3.4"]),
+            "interface_name": pa.array([None], type=pa.string()),
+            "oid_name": pa.array([None], type=pa.string()),
             "oid": pa.array(["1.3.6.1.2.1.1.3.0"]),
             "value": pa.array(["100"]),
             "collected_at": pa.array([datetime.now(timezone.utc)], type=pa.timestamp("us", tz="UTC")),

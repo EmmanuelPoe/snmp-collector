@@ -7,29 +7,27 @@ def test_schema_creates_all_tables(reset_db):
     assert "snmp_polls" in tables
     assert "snmp_traps" in tables
     assert "ingest_log" in tables
-    assert "devices" in tables
 
 @pytest.mark.asyncio
 async def test_query_returns_rows(reset_db):
     import db
     conn = db.get_db()
     conn.execute(
-        "INSERT INTO devices VALUES ('id1','1.2.3.4',NULL,'v3','user','SHA256',"
-        "'authpass','AES256','privpass',NULL,current_timestamp,NULL)"
+        "INSERT INTO snmp_polls (agent_id, device_ip, oid, collected_at) VALUES ('agent-01','1.2.3.4','1.3.6.1.2.1.1.3.0',current_timestamp)"
     )
-    rows = await db.query("SELECT id FROM devices WHERE id = ?", ["id1"])
+    rows = await db.query("SELECT agent_id FROM snmp_polls WHERE agent_id = ?", ["agent-01"])
     assert len(rows) == 1
-    assert rows[0][0] == "id1"
+    assert rows[0][0] == "agent-01"
 
 @pytest.mark.asyncio
 async def test_execute_write(reset_db):
     import db
     await db.execute(
-        "INSERT INTO devices VALUES (?,?,NULL,'v3',?,?,?,?,?,NULL,current_timestamp,NULL)",
-        ["id2", "1.2.3.5", "user", "SHA256", "auth", "AES256", "priv"]
+        "INSERT INTO snmp_polls (agent_id, device_ip, oid, collected_at) VALUES (?,?,?,current_timestamp)",
+        ["agent-02", "1.2.3.5", "1.3.6.1.2.1.1.3.0"]
     )
-    rows = await db.query("SELECT id FROM devices WHERE id = ?", ["id2"])
-    assert rows[0][0] == "id2"
+    rows = await db.query("SELECT agent_id FROM snmp_polls WHERE agent_id = ?", ["agent-02"])
+    assert rows[0][0] == "agent-02"
 
 @pytest.mark.asyncio
 async def test_ingest_parquet_polls(reset_db, sample_polls_parquet):
@@ -52,8 +50,22 @@ async def test_close_and_reopen(reset_db, tmp_path, monkeypatch):
     config.settings = config.Settings()
     db._conn = None
     conn1 = db.get_db()
-    conn1.execute("INSERT INTO devices VALUES ('id3','1.2.3.6',NULL,'v3','u','SHA256','a','AES256','p',NULL,current_timestamp,NULL)")
+    conn1.execute("INSERT INTO snmp_polls (agent_id, device_ip, oid, collected_at) VALUES ('agent-03','1.2.3.6','1.3.6.1.2.1.1.3.0',current_timestamp)")
     db.close_db()
     conn2 = db.get_db()
-    rows = await db.query("SELECT id FROM devices WHERE id = ?", ["id3"])
-    assert rows[0][0] == "id3"
+    rows = await db.query("SELECT agent_id FROM snmp_polls WHERE agent_id = ?", ["agent-03"])
+    assert rows[0][0] == "agent-03"
+
+
+def test_snmp_polls_has_interface_name_and_oid_name_columns(reset_db):
+    import db
+    conn = db.get_db()
+    cols = {row[0] for row in conn.execute("DESCRIBE snmp_polls").fetchall()}
+    assert "interface_name" in cols
+    assert "oid_name" in cols
+
+def test_devices_table_does_not_exist(reset_db):
+    import db
+    conn = db.get_db()
+    tables = {row[0] for row in conn.execute("SHOW TABLES").fetchall()}
+    assert "devices" not in tables

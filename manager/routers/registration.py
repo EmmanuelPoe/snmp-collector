@@ -1,8 +1,9 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from models import RegisterRequest, RegisterResponse, HeartbeatRequest, DeviceConfig
 from registry import registry
 from auth import require_api_key
-from db import query
+import config
 
 router = APIRouter(tags=["registration"])
 
@@ -31,6 +32,22 @@ async def get_config(agent_id: str, _: str = Depends(require_api_key)):
 
 @router.get("/agents")
 def list_agents(_: str = Depends(require_api_key)):
+    return _agent_list()
+
+
+@router.get("/internal/agents")
+def internal_list_agents():
+    return _agent_list()
+
+
+@router.delete("/agents/{agent_id}", status_code=204)
+def deregister_agent(agent_id: str, _: str = Depends(require_api_key)):
+    if not registry.get(agent_id):
+        raise HTTPException(status_code=404, detail="Agent not found")
+    registry.deregister(agent_id)
+
+
+def _agent_list() -> list[dict]:
     return [
         {
             "agent_id": a.agent_id,
@@ -44,25 +61,15 @@ def list_agents(_: str = Depends(require_api_key)):
     ]
 
 
-@router.delete("/agents/{agent_id}", status_code=204)
-def deregister_agent(agent_id: str, _: str = Depends(require_api_key)):
-    if not registry.get(agent_id):
-        raise HTTPException(status_code=404, detail="Agent not found")
-    registry.deregister(agent_id)
-
-
 async def _devices_for(agent_id: str) -> list[DeviceConfig]:
-    rows = await query(
-        "SELECT id, ip, hostname, snmp_version, username, auth_protocol, "
-        "auth_password, priv_protocol, priv_password "
-        "FROM devices WHERE assigned_agent_id = ?",
-        [agent_id],
-    )
-    return [
-        DeviceConfig(
-            id=r[0], ip=r[1], hostname=r[2], snmp_version=r[3],
-            username=r[4], auth_protocol=r[5], auth_password=r[6],
-            priv_protocol=r[7], priv_password=r[8],
-        )
-        for r in rows
-    ]
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                f"{config.settings.backend_url}/internal/devices",
+                params={"agent_id": agent_id},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            return [DeviceConfig(**d) for d in resp.json()]
+        except httpx.RequestError:
+            return []
