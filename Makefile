@@ -1,4 +1,4 @@
-.PHONY: help build up down logs clean reset migrate shell-backend shell-db test simulation clean-simulation
+.PHONY: help build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend
 
 # Default target
 help:
@@ -13,12 +13,13 @@ help:
 	@echo "  logs           - View logs from all containers"
 	@echo "  logs-backend   - View backend logs"
 	@echo "  logs-frontend  - View frontend logs"
+	@echo "  logs-manager   - View manager logs"
 	@echo "  clean          - Remove containers and volumes"
 	@echo "  reset          - Full reset (clean + rebuild + start)"
 	@echo "  migrate        - Run database migrations"
 	@echo "  shell-backend  - Open shell in backend container"
 	@echo "  shell-db       - Open PostgreSQL shell"
-	@echo "  test           - Run backend tests (if implemented)"
+	@echo "  test           - Run manager tests"
 	@echo "  simulation     - Run end-to-end simulation test with SNMP simulator"
 	@echo "  clean-simulation - Remove test data from simulation"
 	@echo ""
@@ -40,6 +41,7 @@ up:
 	@echo "  Frontend: http://localhost:3000"
 	@echo "  Backend API: http://localhost:8000"
 	@echo "  API Docs: http://localhost:8000/docs"
+	@echo "  Manager API: http://localhost:8001"
 	@echo "  SNMP Exporter: http://localhost:9116"
 	@echo ""
 	@echo "View logs: make logs"
@@ -59,6 +61,9 @@ logs-backend:
 
 logs-frontend:
 	docker-compose logs -f frontend
+
+logs-manager:
+	docker-compose logs -f manager
 
 # Clean up containers and volumes
 clean:
@@ -86,8 +91,8 @@ shell-db:
 
 # Run tests
 test:
-	@echo "Running backend tests..."
-	docker-compose exec backend pytest tests/ -v
+	@echo "Running manager tests..."
+	docker-compose exec manager pytest tests/ -v
 
 # Development helpers
 dev-frontend:
