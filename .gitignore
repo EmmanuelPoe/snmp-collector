@@ -209,8 +209,5 @@ __marimo__/
 # Git worktrees
 worktrees/
 
-# Documentation / planning files
-docs/
-
 # Docker data volumes
 data/
