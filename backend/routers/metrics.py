@@ -4,8 +4,9 @@ from typing import List, Optional
 from datetime import datetime
 import duckdb
 
+from auth import get_current_user
 from database import get_db
-from models import Device
+from models import Device, User
 from schemas import MetricResponse
 from config import settings
 
@@ -49,6 +50,7 @@ def query_metrics(
     end_time: Optional[datetime] = None,
     limit: int = 1000,
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     if not device_id:
         return []
@@ -84,7 +86,7 @@ def query_metrics(
 
 
 @router.get("/latest/{device_id}", response_model=List[MetricResponse])
-def get_latest_metrics(device_id: int, limit: int = 100, db: Session = Depends(get_db)):
+def get_latest_metrics(device_id: int, limit: int = 100, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     device_ip = _device_ip(device_id, db)
     conn = _duckdb()
     try:
@@ -99,7 +101,7 @@ def get_latest_metrics(device_id: int, limit: int = 100, db: Session = Depends(g
 
 
 @router.get("/available/{device_id}")
-def get_available_metrics(device_id: int, db: Session = Depends(get_db)):
+def get_available_metrics(device_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     device_ip = _device_ip(device_id, db)
     conn = _duckdb()
     try:
@@ -130,6 +132,7 @@ def get_interface_stats(
     interface_name: str,
     hours: int = 24,
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     from datetime import timedelta, timezone
     device_ip = _device_ip(device_id, db)

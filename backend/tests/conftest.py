@@ -57,3 +57,16 @@ def client(db_session, monkeypatch):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function")
+def admin_headers(client, db_session):
+    """Return Authorization headers for a seeded admin user."""
+    from auth import hash_password
+    from models import User, UserRole
+    admin = User(email="admin@test.com", hashed_password=hash_password("testpass"), role=UserRole.admin)
+    db_session.add(admin)
+    db_session.commit()
+    resp = client.post("/auth/login", data={"username": "admin@test.com", "password": "testpass"})
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}

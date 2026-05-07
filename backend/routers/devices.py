@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+
+from auth import get_current_user, require_role
 from database import get_db
-from models import Device
+from models import Device, User
 from schemas import DeviceCreate, DeviceUpdate, DeviceResponse
 import logging
 
@@ -11,7 +13,11 @@ router = APIRouter(prefix="/devices", tags=["devices"])
 
 
 @router.get("", response_model=List[DeviceResponse])
-def list_devices(skip: int = 0, limit: int = 100, enabled_only: bool = False, db: Session = Depends(get_db)):
+def list_devices(
+    skip: int = 0, limit: int = 100, enabled_only: bool = False,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
     q = db.query(Device)
     if enabled_only:
         q = q.filter(Device.enabled == True)
@@ -19,7 +25,11 @@ def list_devices(skip: int = 0, limit: int = 100, enabled_only: bool = False, db
 
 
 @router.post("", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)
-def create_device(device: DeviceCreate, db: Session = Depends(get_db)):
+def create_device(
+    device: DeviceCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("editor", "admin")),
+):
     existing = db.query(Device).filter(Device.name == device.name).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Device '{device.name}' already exists")
@@ -31,7 +41,11 @@ def create_device(device: DeviceCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{device_id}", response_model=DeviceResponse)
-def get_device(device_id: int, db: Session = Depends(get_db)):
+def get_device(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Device {device_id} not found")
@@ -39,7 +53,12 @@ def get_device(device_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{device_id}", response_model=DeviceResponse)
-def update_device(device_id: int, device_update: DeviceUpdate, db: Session = Depends(get_db)):
+def update_device(
+    device_id: int,
+    device_update: DeviceUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("editor", "admin")),
+):
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Device {device_id} not found")
@@ -51,7 +70,11 @@ def update_device(device_id: int, device_update: DeviceUpdate, db: Session = Dep
 
 
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_device(device_id: int, db: Session = Depends(get_db)):
+def delete_device(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Device {device_id} not found")
