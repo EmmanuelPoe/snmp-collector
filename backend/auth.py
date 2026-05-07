@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Header, status
@@ -24,7 +25,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(data: dict) -> str:
-    expire = datetime.utcnow() + timedelta(hours=settings.jwt_expire_hours)
+    expire = datetime.now(timezone.utc) + timedelta(hours=settings.jwt_expire_hours)
     return jwt.encode({**data, "exp": expire}, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
@@ -62,6 +63,6 @@ def require_role(*roles: str):
 def require_manager_key(authorization: str = Header(None)) -> bool:
     """Validate Authorization: Bearer <MANAGER_API_KEY> for service-to-service calls."""
     expected = f"Bearer {settings.manager_api_key}"
-    if authorization != expected:
+    if not secrets.compare_digest(authorization or "", expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid manager API key")
     return True

@@ -9,7 +9,10 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 import pytest
 from unittest.mock import MagicMock
 import config
-config.settings.database_url = "sqlite:///./test_auth_bootstrap.db"
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from database import Base
+config.settings.database_url = "sqlite:///:memory:"
 config.settings.jwt_secret = "test-secret"
 
 from auth import hash_password, verify_password, create_access_token, get_current_user, require_role, require_manager_key
@@ -57,3 +60,62 @@ def test_require_manager_key_accepts_correct_key(monkeypatch):
     monkeypatch.setattr(config.settings, "manager_api_key", "real-key")
     result = require_manager_key(authorization="Bearer real-key")
     assert result is True
+
+
+@pytest.fixture
+def db(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path}/auth.db", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.close()
+
+
+def test_get_current_user_rejects_invalid_token(db):
+    from auth import get_current_user
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc:
+        get_current_user(token="not-a-valid-token", db=db)
+    assert exc.value.status_code == 401
+
+
+def test_get_current_user_rejects_expired_token(db):
+    from datetime import datetime, timedelta, timezone
+    from jose import jwt
+    expired_payload = {"sub": "user@test.com", "exp": datetime.now(timezone.utc) - timedelta(hours=1)}
+    expired_token = jwt.encode(expired_payload, "test-secret", algorithm="HS256")
+    with pytest.raises(HTTPException) as exc:
+        get_current_user(token=expired_token, db=db)
+    assert exc.value.status_code == 401
+
+
+def test_get_current_user_rejects_missing_sub(db):
+    token = create_access_token({"role": "viewer"})  # no "sub"
+    with pytest.raises(HTTPException) as exc:
+        get_current_user(token=token, db=db)
+    assert exc.value.status_code == 401
+
+
+def test_get_current_user_rejects_nonexistent_user(db):
+    token = create_access_token({"sub": "ghost@test.com", "role": "viewer"})
+    with pytest.raises(HTTPException) as exc:
+        get_current_user(token=token, db=db)
+    assert exc.value.status_code == 401
+
+
+def test_get_current_user_returns_user(db):
+    from models import User, UserRole
+    user = User(email="real@test.com", hashed_password=hash_password("pw"), role=UserRole.viewer, is_active=True)
+    db.add(user)
+    db.commit()
+    token = create_access_token({"sub": "real@test.com", "role": "viewer"})
+    result = get_current_user(token=token, db=db)
+    assert result.email == "real@test.com"
+
+
+def test_require_manager_key_rejects_missing_header(monkeypatch):
+    monkeypatch.setattr(config.settings, "manager_api_key", "real-key")
+    with pytest.raises(HTTPException) as exc:
+        require_manager_key(authorization=None)
+    assert exc.value.status_code == 401
