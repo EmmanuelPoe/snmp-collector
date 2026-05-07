@@ -10,3 +10,6 @@ pyyaml==6.0.1
 python-multipart==0.0.6
 duckdb==1.1.0
 respx==0.21.1
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+prometheus-fastapi-instrumentator==7.0.0

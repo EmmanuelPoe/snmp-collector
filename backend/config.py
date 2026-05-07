@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     manager_url: str = "http://manager:8000"
     api_title: str = "SNMP Metrics Collector API"
     api_version: str = "1.0.0"
+    manager_api_key: str = "change-me-in-production"
+    jwt_secret: str
+    jwt_algorithm: str = "HS256"
+    jwt_expire_hours: int = 8
+    frontend_url: str = "http://localhost"
 
     class Config:
         env_file = ".env"
