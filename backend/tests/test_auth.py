@@ -138,6 +138,16 @@ def auth_client(tmp_path, monkeypatch):
     Session = sessionmaker(bind=engine)
     session = Session()
 
+    # Seed admin user so login tests work
+    admin = User(
+        email="admin@localhost",
+        hashed_password=hash_password("admin"),
+        role=UserRole.admin,
+        is_active=True,
+    )
+    session.add(admin)
+    session.commit()
+
     from main import app
     app.dependency_overrides[get_db] = lambda: session
     with TestClient(app) as c:
@@ -186,3 +196,32 @@ def test_register_creates_user(auth_client):
     )
     assert resp.status_code == 201
     assert resp.json()["role"] == "editor"
+
+
+def test_register_rejects_invalid_role(auth_client):
+    login = auth_client.post("/auth/login", data={"username": "admin@localhost", "password": "admin"})
+    token = login.json()["access_token"]
+    resp = auth_client.post(
+        "/auth/register",
+        json={"email": "x@x.com", "password": "pw", "role": "superuser"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 400
+
+
+def test_register_rejects_duplicate_email(auth_client):
+    login = auth_client.post("/auth/login", data={"username": "admin@localhost", "password": "admin"})
+    token = login.json()["access_token"]
+    # Register once
+    auth_client.post(
+        "/auth/register",
+        json={"email": "dup@x.com", "password": "pw", "role": "viewer"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    # Register again with same email
+    resp = auth_client.post(
+        "/auth/register",
+        json={"email": "dup@x.com", "password": "pw2", "role": "viewer"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 409
