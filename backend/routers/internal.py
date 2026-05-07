@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+
+from auth import require_manager_key
 from database import get_db
 from models import Device
 
@@ -7,7 +9,11 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 
 
 @router.get("/devices")
-def get_devices_for_agent(agent_id: str, db: Session = Depends(get_db)):
+def get_devices_for_agent(
+    agent_id: str,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_manager_key),
+):
     devices = db.query(Device).filter(
         Device.assigned_agent_id == agent_id,
         Device.enabled == True,
