@@ -16,6 +16,7 @@ config.settings.database_url = "sqlite:///:memory:"
 config.settings.jwt_secret = "test-secret"
 
 from auth import hash_password, verify_password, create_access_token, get_current_user, require_role, require_manager_key
+from database import get_db
 from jose import jwt
 from fastapi import HTTPException
 from models import User, UserRole
@@ -119,3 +120,69 @@ def test_require_manager_key_rejects_missing_header(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         require_manager_key(authorization=None)
     assert exc.value.status_code == 401
+
+
+# ---- Router-level tests (need full app client) ----
+
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture(scope="function")
+def auth_client(tmp_path, monkeypatch):
+    monkeypatch.setattr(config.settings, "jwt_secret", "test-secret")
+    monkeypatch.setattr(config.settings, "manager_api_key", "mgr-key")
+    monkeypatch.setattr(config.settings, "frontend_url", "http://localhost")
+    db_url = f"sqlite:///{tmp_path}/auth_test.db"
+    engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    from main import app
+    app.dependency_overrides[get_db] = lambda: session
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+    session.close()
+
+
+def test_login_with_seeded_admin(auth_client):
+    resp = auth_client.post("/auth/login", data={"username": "admin@localhost", "password": "admin"})
+    assert resp.status_code == 200
+    assert "access_token" in resp.json()
+
+
+def test_login_wrong_password(auth_client):
+    resp = auth_client.post("/auth/login", data={"username": "admin@localhost", "password": "wrong"})
+    assert resp.status_code == 401
+
+
+def test_me_requires_auth(auth_client):
+    resp = auth_client.get("/auth/me")
+    assert resp.status_code == 401
+
+
+def test_me_returns_current_user(auth_client):
+    login = auth_client.post("/auth/login", data={"username": "admin@localhost", "password": "admin"})
+    token = login.json()["access_token"]
+    resp = auth_client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    assert resp.json()["email"] == "admin@localhost"
+    assert resp.json()["role"] == "admin"
+
+
+def test_register_requires_admin(auth_client):
+    resp = auth_client.post("/auth/register", json={"email": "new@x.com", "password": "pw", "role": "viewer"})
+    assert resp.status_code == 401
+
+
+def test_register_creates_user(auth_client):
+    login = auth_client.post("/auth/login", data={"username": "admin@localhost", "password": "admin"})
+    token = login.json()["access_token"]
+    resp = auth_client.post(
+        "/auth/register",
+        json={"email": "editor@x.com", "password": "pw123", "role": "editor"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["role"] == "editor"
