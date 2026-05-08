@@ -1,4 +1,4 @@
-.PHONY: help build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend
+.PHONY: help build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend up-full down-full logs-grafana logs-loki logs-promtail
 
 # Default target
 help:
@@ -131,6 +131,27 @@ simulation:
 	@echo "Running database migrations..."
 	@docker-compose exec -T backend alembic upgrade head
 	@bash scripts/run_simulation.sh
+
+up-full: ## Start core stack + observability
+	@if [ ! -f .env ]; then cp .env.example .env; fi
+	docker-compose up -d
+	docker-compose -f docker-compose.observability.yml up -d
+	@echo "App:      http://localhost"
+	@echo "Grafana:  http://localhost:3001  (admin / see GF_SECURITY_ADMIN_PASSWORD in .env)"
+	@echo "Manager:  http://localhost:8001"
+
+down-full: ## Stop core stack + observability
+	docker-compose -f docker-compose.observability.yml down
+	docker-compose down
+
+logs-grafana: ## Tail Grafana logs
+	docker-compose -f docker-compose.observability.yml logs -f grafana
+
+logs-loki: ## Tail Loki logs
+	docker-compose -f docker-compose.observability.yml logs -f loki
+
+logs-promtail: ## Tail Promtail logs
+	docker-compose -f docker-compose.observability.yml logs -f promtail
 
 # Clean simulation data
 clean-simulation:
