@@ -1,0 +1,19 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {"id":1,"title":"Active Agents","type":"gauge","gridPos":{"h":6,"w":4,"x":0,"y":0},"datasource":"Prometheus","targets":[{"expr":"sum(up{job=\"manager\"})","legendFormat":"agents"}],"options":{"reduceOptions":{"calcs":["lastNotNull"]}}},
+    {"id":2,"title":"Polls per Minute","type":"timeseries","gridPos":{"h":6,"w":10,"x":4,"y":0},"datasource":"Prometheus","targets":[{"expr":"rate(http_requests_total{job=\"manager\",handler=\"/ingest\",method=\"POST\",status_code=\"200\"}[1m])*60","legendFormat":"ingest/min"}]},
+    {"id":3,"title":"Ingest Rows per Minute","type":"timeseries","gridPos":{"h":6,"w":10,"x":14,"y":0},"datasource":"Prometheus","targets":[{"expr":"rate(http_requests_total{job=\"manager\",handler=\"/ingest\"}[1m])*60","legendFormat":"{{status_code}}"}]},
+    {"id":4,"title":"HTTP Error Rate by Service","type":"timeseries","gridPos":{"h":6,"w":12,"x":0,"y":6},"datasource":"Prometheus","targets":[{"expr":"rate(http_requests_total{status_code=~\"5..\"}[5m])","legendFormat":"{{job}} {{handler}}"}]},
+    {"id":5,"title":"Manager RSS (proxy for DuckDB size)","type":"stat","gridPos":{"h":6,"w":6,"x":12,"y":6},"datasource":"Prometheus","targets":[{"expr":"process_resident_memory_bytes{job=\"manager\"}","legendFormat":"RSS"}],"options":{"reduceOptions":{"calcs":["lastNotNull"]},"unit":"bytes"}},
+    {"id":6,"title":"Agent Heartbeat Logs","type":"table","gridPos":{"h":6,"w":6,"x":18,"y":6},"datasource":"Loki","targets":[{"expr":"{service=\"manager\"} |= \"heartbeat\"","legendFormat":""}]}
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["snmp"],
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "SNMP Collection",
+  "uid": "snmp-collection-v1",
+  "version": 1
+}
