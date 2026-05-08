@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,7 +11,20 @@ from models import DeviceConfig
 from snmp import walk_device
 from uploader import UploadBuffer
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+class _JsonFormatter(logging.Formatter):
+    def format(self, record):
+        return json.dumps({
+            "time": self.formatTime(record),
+            "level": record.levelname,
+            "service": "agent",
+            "logger": record.name,
+            "message": record.getMessage(),
+        })
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(_JsonFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[_handler], force=True)
 log = logging.getLogger(__name__)
 
 _agent_id: str | None = None
