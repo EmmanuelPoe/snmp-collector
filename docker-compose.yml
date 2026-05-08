@@ -26,7 +26,6 @@ services:
       dockerfile: Dockerfile
     container_name: snmp-backend
     environment:
-      DATABASE_URL: ${DATABASE_URL:-}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
@@ -34,10 +33,11 @@ services:
       POSTGRES_HOST: postgres
       DUCKDB_PATH: /data/db/metrics.db
       MANAGER_URL: http://manager:8000
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      MANAGER_API_KEY: ${MANAGER_API_KEY:-change-me-in-production}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS:-8}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
     volumes:
-      - ./backend:/app
       - ./data/db:/data/db:ro
     networks:
       - snmp-network
@@ -46,28 +46,34 @@ services:
         condition: service_healthy
       manager:
         condition: service_healthy
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: development
+      target: production
+      args:
+        - NODE_ENV=production
+        - REACT_APP_API_URL=/api
     container_name: snmp-frontend
-    environment:
-      REACT_APP_API_URL: http://localhost:${BACKEND_PORT:-8000}
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
     networks:
       - snmp-network
     depends_on:
-      backend:
-        condition: service_started
-    stdin_open: true
-    tty: true
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: snmp-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    networks:
+      - snmp-network
+    depends_on:
+      - backend
+      - frontend
 
   manager:
     build: ./manager
