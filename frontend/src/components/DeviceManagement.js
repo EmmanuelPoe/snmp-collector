@@ -9,6 +9,8 @@ export default function DeviceManagement() {
   const [availableModules, setAvailableModules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState({ col: 'name', dir: 'asc' });
   const [editingDevice, setEditingDevice] = useState(null);
   const [formData, setFormData] = useState({
     name: '', ip_address: '', snmp_version: '2c', snmp_community: 'public',
@@ -102,6 +104,28 @@ export default function DeviceManagement() {
     });
   };
 
+  const filtered = devices
+    .filter(d =>
+      d.name.toLowerCase().includes(search.toLowerCase()) ||
+      d.ip_address.includes(search)
+    )
+    .sort((a, b) => {
+      const valA = (a[sort.col] || '').toString().toLowerCase();
+      const valB = (b[sort.col] || '').toString().toLowerCase();
+      return sort.dir === 'asc'
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+
+  function toggleSort(col) {
+    setSort(prev => ({ col, dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc' }));
+  }
+
+  function sortIndicator(col) {
+    if (sort.col !== col) return '';
+    return sort.dir === 'asc' ? ' ↑' : ' ↓';
+  }
+
   if (loading) return <div className="loading-center"><div className="spinner" /></div>;
 
   return (
@@ -111,33 +135,42 @@ export default function DeviceManagement() {
           <div className="page-title">Devices</div>
           <div className="page-subtitle">Manage network devices for SNMP collection</div>
         </div>
-        <button className="btn btn-primary" onClick={() => { resetForm(); setShowModal(true); }}>
-          + Add Device
-        </button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <input
+            className="input table-search"
+            type="search"
+            placeholder="Search by name or IP…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <button className="btn btn-primary" onClick={() => { resetForm(); setShowModal(true); }}>
+            + Add Device
+          </button>
+        </div>
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <table className="data-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>IP Address</th>
+              <th className="sortable" onClick={() => toggleSort('name')}>Name{sortIndicator('name')}</th>
+              <th className="sortable" onClick={() => toggleSort('ip_address')}>IP Address{sortIndicator('ip_address')}</th>
               <th>Type</th>
               <th>SNMP Version</th>
               <th>Agent</th>
-              <th>Status</th>
+              <th className="sortable" onClick={() => toggleSort('enabled')}>Status{sortIndicator('enabled')}</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {devices.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
                 <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-text-faint)' }}>
-                  No devices found. Click "+ Add Device" to get started.
+                  {search ? `No devices match "${search}"` : 'No devices found. Click "+ Add Device" to get started.'}
                 </td>
               </tr>
             ) : (
-              devices.map(device => (
+              filtered.map(device => (
                 <tr key={device.id}>
                   <td><strong>{device.name}</strong></td>
                   <td className="font-mono text-sm">{device.ip_address}</td>
