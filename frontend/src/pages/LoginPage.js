@@ -6,12 +6,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setLoading(true);
     const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:8000';
     const body = new URLSearchParams({ username: email, password });
     try {
@@ -21,7 +23,7 @@ export default function LoginPage() {
         body: body.toString(),
       });
       if (!resp.ok) {
-        setError('Invalid email or password');
+        setError('Invalid email or password.');
         return;
       }
       const data = await resp.json();
@@ -29,26 +31,66 @@ export default function LoginPage() {
       navigate('/');
     } catch {
       setError('Network error — is the backend running?');
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div style={{ maxWidth: 360, margin: '120px auto', padding: '2rem', border: '1px solid #ccc', borderRadius: 8 }}>
-      <h2>SNMP Collector Login</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label>Email<br />
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required style={{ width: '100%' }} />
-          </label>
+    <div className="login-shell">
+      <div className="login-brand-panel">
+        <div className="login-brand-content">
+          <div className="login-brand-icon">⬡</div>
+          <div className="login-brand-name">SNMP Monitor</div>
+          <div className="login-brand-tagline">Infrastructure visibility at scale.</div>
         </div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label>Password<br />
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={{ width: '100%' }} />
-          </label>
+      </div>
+
+      <div className="login-form-panel">
+        <div className="login-form-card">
+          <h2>Sign in</h2>
+          <p className="login-form-subtext">Enter your credentials to access the dashboard.</p>
+
+          {error && <div className="alert alert-danger">{error}</div>}
+
+          <form onSubmit={handleSubmit}>
+            <div className="login-field">
+              <label className="form-label">Email</label>
+              <input
+                className="input"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                placeholder="admin@localhost"
+                autoComplete="email"
+                autoFocus
+              />
+            </div>
+
+            <div className="login-field">
+              <label className="form-label">Password</label>
+              <input
+                className="input"
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                autoComplete="current-password"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary login-submit"
+              disabled={loading}
+            >
+              {loading ? 'Signing in...' : 'Sign in'}
+            </button>
+          </form>
         </div>
-        <button type="submit" style={{ width: '100%' }}>Sign In</button>
-      </form>
+      </div>
     </div>
   );
 }
