@@ -229,7 +229,7 @@ function MetricsViewer() {
                         if (activeMetrics.length === 0) return null;
 
                         return (
-                            <div key={group.title} className="glass-card">
+                            <div key={group.title} className="card">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                                     <h3>{group.title}</h3>
                                     <span className="text-muted" style={{ fontSize: '0.8rem' }}>{group.unit}</span>
@@ -281,7 +281,7 @@ function MetricsViewer() {
 
                     {/* Generic Fallback for other modules or miscellaneous if_mib metrics */}
                     {selectedMetricNames.filter(m => !groups.some(g => g.metrics.includes(m))).length > 0 && (
-                        <div className="glass-card">
+                        <div className="card">
                             <h3>Extended Metrics</h3>
                             <div style={{ height: '300px', marginTop: '1rem' }}>
                                 <ResponsiveContainer width="100%" height="100%">
@@ -308,14 +308,13 @@ function MetricsViewer() {
 
 
     return (
-        <div className="container">
+        <div className="fade-in">
             <div className="page-header">
-                <h1>Metrics Explorer</h1>
-                <p>Multi-module visualization and analysis</p>
+              <div className="page-title">Metrics Explorer</div>
             </div>
 
             {/* Selection Panel */}
-            <div className="glass-card" style={{ marginBottom: '2rem' }}>
+            <div className="card" style={{ marginBottom: '2rem' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
 
                     {/* 1. Device */}
