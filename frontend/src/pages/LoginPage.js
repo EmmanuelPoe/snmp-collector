@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -14,24 +16,28 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:8000';
     const body = new URLSearchParams({ username: email, password });
     try {
-      const resp = await fetch(`${apiBase}/auth/login`, {
+      const resp = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
       });
       if (!resp.ok) {
         setError('Invalid email or password.');
+        setLoading(false);
         return;
       }
       const data = await resp.json();
+      if (!data.access_token) {
+        setError('Login failed: unexpected server response.');
+        setLoading(false);
+        return;
+      }
       login(data.access_token);
       navigate('/');
     } catch {
       setError('Network error — is the backend running?');
-    } finally {
       setLoading(false);
     }
   }
