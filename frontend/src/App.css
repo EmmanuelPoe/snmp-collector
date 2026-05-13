@@ -436,3 +436,8 @@
   flex-shrink: 0;
 }
 .toast-dismiss:hover { color: var(--color-text-primary); }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}

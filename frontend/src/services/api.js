@@ -68,6 +68,10 @@ export const getInterfaceStats = async (deviceId, interfaceName, hours = 24) => 
     const response = await api.get(`/metrics/stats/${deviceId}/${interfaceName}`, { params: { hours } });
     return response.data;
 };
+export const getInterfaceRates = async (deviceId) => {
+    const response = await api.get(`/metrics/rates/${deviceId}`);
+    return response.data;
+};
 export const triggerCollection = async (deviceId) => {
     const response = await api.post(`/metrics/collect/${deviceId}`);
     return response.data;
