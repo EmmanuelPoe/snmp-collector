@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
-import duckdb
+import httpx
 
 from auth import get_current_user
 from database import get_db
@@ -13,8 +13,8 @@ from config import settings
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
-def _duckdb() -> duckdb.DuckDBPyConnection:
-    return duckdb.connect(settings.duckdb_path, read_only=True)
+def _manager_headers() -> dict:
+    return {"Authorization": f"Bearer {settings.manager_api_key}"}
 
 
 def _device_ip(device_id: int, db: Session) -> str:
@@ -24,21 +24,28 @@ def _device_ip(device_id: int, db: Session) -> str:
     return device.ip_address
 
 
-def _rows_to_metrics(rows: list[tuple], device_id: int) -> List[MetricResponse]:
+def _to_metrics(rows: list[dict], device_id: int) -> List[MetricResponse]:
     return [
         MetricResponse(
             id=i,
             device_id=device_id,
-            timestamp=row[6],
-            interface_name=row[2],
+            timestamp=row["collected_at"],
+            interface_name=row["interface_name"],
             interface_index=None,
-            oid=row[4],
-            oid_name=row[3],
-            value=float(row[5]) if row[5] is not None else None,
+            oid=row["oid"],
+            oid_name=row["oid_name"],
+            value=float(row["value"]) if row["value"] is not None else None,
             value_type="gauge",
         )
         for i, row in enumerate(rows)
     ]
+
+
+def _manager_get(path: str, params: dict) -> list | dict:
+    url = f"{settings.manager_url}/internal/metrics{path}"
+    resp = httpx.get(url, params=params, headers=_manager_headers(), timeout=10)
+    resp.raise_for_status()
+    return resp.json()
 
 
 @router.get("", response_model=List[MetricResponse])
@@ -55,75 +62,49 @@ def query_metrics(
     if not device_id:
         return []
     device_ip = _device_ip(device_id, db)
-
-    conditions = ["device_ip = ?"]
-    params: list = [device_ip]
+    params = {"device_ip": device_ip, "limit": limit}
     if interface_name:
-        conditions.append("interface_name = ?")
-        params.append(interface_name)
+        params["interface_name"] = interface_name
     if oid_name:
-        conditions.append("oid_name = ?")
-        params.append(oid_name)
+        params["oid_name"] = oid_name
     if start_time:
-        conditions.append("collected_at >= ?")
-        params.append(start_time)
+        params["start_time"] = start_time.isoformat()
     if end_time:
-        conditions.append("collected_at <= ?")
-        params.append(end_time)
-    params.append(limit)
-
-    conn = _duckdb()
-    try:
-        rows = conn.execute(
-            "SELECT agent_id, device_ip, interface_name, oid_name, oid, value, collected_at "
-            f"FROM snmp_polls WHERE {' AND '.join(conditions)} "
-            "ORDER BY collected_at DESC LIMIT ?",
-            params,
-        ).fetchall()
-    finally:
-        conn.close()
-    return _rows_to_metrics(rows, device_id)
+        params["end_time"] = end_time.isoformat()
+    rows = _manager_get("", params)
+    return _to_metrics(rows, device_id)
 
 
 @router.get("/latest/{device_id}", response_model=List[MetricResponse])
-def get_latest_metrics(device_id: int, limit: int = 100, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_latest_metrics(
+    device_id: int,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
     device_ip = _device_ip(device_id, db)
-    conn = _duckdb()
-    try:
-        rows = conn.execute(
-            "SELECT agent_id, device_ip, interface_name, oid_name, oid, value, collected_at "
-            "FROM snmp_polls WHERE device_ip = ? ORDER BY collected_at DESC LIMIT ?",
-            [device_ip, limit],
-        ).fetchall()
-    finally:
-        conn.close()
-    return _rows_to_metrics(rows, device_id)
+    rows = _manager_get("", {"device_ip": device_ip, "limit": limit})
+    return _to_metrics(rows, device_id)
 
 
 @router.get("/available/{device_id}")
-def get_available_metrics(device_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_available_metrics(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
     device_ip = _device_ip(device_id, db)
-    conn = _duckdb()
-    try:
-        ifaces = conn.execute(
-            "SELECT DISTINCT interface_name FROM snmp_polls "
-            "WHERE device_ip = ? AND interface_name IS NOT NULL",
-            [device_ip],
-        ).fetchall()
-        oids = conn.execute(
-            "SELECT DISTINCT oid_name FROM snmp_polls WHERE device_ip = ? AND oid_name IS NOT NULL",
-            [device_ip],
-        ).fetchall()
-    finally:
-        conn.close()
-    return {
-        "modules": {
-            "if_mib": {
-                "interfaces": sorted(r[0] for r in ifaces),
-                "metrics": sorted(r[0] for r in oids),
-            }
-        }
-    }
+    return _manager_get("/available", {"device_ip": device_ip})
+
+
+@router.get("/rates/{device_id}")
+def get_interface_rates(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    device_ip = _device_ip(device_id, db)
+    return _manager_get("/rates", {"device_ip": device_ip})
 
 
 @router.get("/stats/{device_id}/{interface_name}")
@@ -138,18 +119,13 @@ def get_interface_stats(
     device_ip = _device_ip(device_id, db)
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(hours=hours)
-
-    conn = _duckdb()
-    try:
-        rows = conn.execute(
-            "SELECT agent_id, device_ip, interface_name, oid_name, oid, value, collected_at "
-            "FROM snmp_polls WHERE device_ip = ? AND interface_name = ? "
-            "AND collected_at >= ? ORDER BY collected_at",
-            [device_ip, interface_name, start_time],
-        ).fetchall()
-    finally:
-        conn.close()
-
+    rows = _manager_get("", {
+        "device_ip": device_ip,
+        "interface_name": interface_name,
+        "start_time": start_time.isoformat(),
+        "end_time": end_time.isoformat(),
+        "limit": 10000,
+    })
     return {
         "device_id": device_id,
         "interface_name": interface_name,
@@ -157,11 +133,11 @@ def get_interface_stats(
         "metrics": [
             {
                 "device_id": device_id,
-                "timestamp": row[6],
-                "interface_name": row[2],
-                "oid_name": row[3],
-                "oid": row[4],
-                "value": float(row[5]) if row[5] is not None else None,
+                "timestamp": row["collected_at"],
+                "interface_name": row["interface_name"],
+                "oid_name": row["oid_name"],
+                "oid": row["oid"],
+                "value": float(row["value"]) if row["value"] is not None else None,
                 "id": i,
             }
             for i, row in enumerate(rows)
