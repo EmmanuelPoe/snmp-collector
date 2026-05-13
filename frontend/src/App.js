@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import DeviceManagement from './components/DeviceManagement';
-import MetricsViewer from './components/MetricsViewer';
+import DeviceMetrics from './components/DeviceMetrics';
 import ConfigurationManager from './components/ConfigurationManager';
 import AgentsPage from './components/AgentsPage';
 import LoginPage from './pages/LoginPage';
@@ -20,7 +20,7 @@ function AppShell() {
           <Routes>
             <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
             <Route path="/devices" element={<PrivateRoute><DeviceManagement /></PrivateRoute>} />
-            <Route path="/metrics" element={<PrivateRoute><MetricsViewer /></PrivateRoute>} />
+            <Route path="/metrics" element={<PrivateRoute><DeviceMetrics /></PrivateRoute>} />
             <Route path="/agents" element={<PrivateRoute><AgentsPage /></PrivateRoute>} />
             <Route path="/config" element={<PrivateRoute><ConfigurationManager /></PrivateRoute>} />
           </Routes>
