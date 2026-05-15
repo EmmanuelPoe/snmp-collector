@@ -63,35 +63,19 @@ Backend and frontend containers have no exposed ports — traffic reaches them o
    cd snmp-collector
    ```
 
-2. **Set up environment variables**
+2. **Run setup**
    ```bash
-   cp .env.example .env
-   # Edit .env — set JWT_SECRET and MANAGER_API_KEY to strong random values
+   make setup
    ```
 
-3. **Build and start the application**
-   ```bash
-   make build
-   make up
-   ```
+   This builds the containers, starts all services, waits for the backend, and runs database migrations. A `.env` file is created from `.env.example` if one doesn't exist.
 
-   Or without Make:
-   ```bash
-   docker-compose build
-   docker-compose up -d
-   ```
-
-4. **Run database migrations**
-   ```bash
-   make migrate
-   ```
-
-5. **Access the application**
+3. **Access the application**
    - Application: http://localhost (login with `admin@localhost` / `admin`)
    - API Documentation: http://localhost/api/docs
    - Manager API: http://localhost:8001
 
-   **Change the default admin password immediately after first login** — see [Authentication](#authentication).
+   **Before deploying to production**, set `JWT_SECRET` and `MANAGER_API_KEY` to strong random values in `.env` and change the default admin password — see [Authentication](#authentication).
 
 ## Authentication
 
@@ -128,29 +112,7 @@ curl -X POST http://localhost/api/auth/register \
   -d '{"email": "user@example.com", "password": "...", "role": "editor"}'
 ```
 
-## Observability
-
-The observability stack (Prometheus, Grafana, Loki, Promtail) runs as a separate Docker Compose overlay.
-
-### Start with observability
-
-```bash
-make up-full     # core stack + observability
-make down-full   # stop both
-```
-
-### Services
-
-| Service | Port | Purpose |
-|---------|------|---------|
-| Grafana | 3001 | Dashboards (pre-provisioned SNMP collection dashboard) |
-| Prometheus | 9090 (internal) | Scrapes backend and manager `/metrics` every 15s |
-| Loki | internal | Log aggregation backend |
-| Promtail | — | Ships container logs to Loki; parses JSON log fields |
-
-Grafana credentials are set via `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD` in `.env`.
-
-### Structured logging
+## Logging
 
 All services (backend, manager, agent) emit JSON-structured logs:
 
@@ -158,7 +120,7 @@ All services (backend, manager, agent) emit JSON-structured logs:
 { "time": "...", "level": "INFO", "service": "backend", "message": "...", "router": "devices" }
 ```
 
-Promtail parses these fields as Loki labels, making logs filterable by `service` and `level` in Grafana.
+Tail logs with `make logs`, `make logs-backend`, or `make logs-manager`.
 
 ## Simulation & Testing
 
@@ -195,19 +157,15 @@ JWT_EXPIRE_HOURS=8
 
 # Manager
 MANAGER_API_KEY=change-me-in-production    # shared secret between manager, backend, and agent
-
-# Observability (required when using docker-compose.observability.yml)
-GF_SECURITY_ADMIN_PASSWORD=replace-with-secure-grafana-password
 ```
 
 ## Makefile Commands
 
 ```bash
+make setup             # First-time setup: build + start + migrate
 make build             # Build all Docker containers
 make up                # Start core stack
 make down              # Stop core stack
-make up-full           # Start core stack + observability
-make down-full         # Stop core stack + observability
 make reset             # Full reset (clean + rebuild + start)
 make migrate           # Run database migrations
 make test              # Run manager test suite
@@ -219,9 +177,6 @@ make logs              # Tail all container logs
 make logs-backend      # Tail backend logs
 make logs-frontend     # Tail frontend logs
 make logs-manager      # Tail manager logs
-make logs-grafana      # Tail Grafana logs
-make logs-loki         # Tail Loki logs
-make logs-promtail     # Tail Promtail logs
 
 make shell-backend     # sh into backend container
 make shell-db          # psql into postgres (snmpuser / snmp_metrics)

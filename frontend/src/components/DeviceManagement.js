@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getDevices, createDevice, updateDevice, deleteDevice, getModules, getAgents } from '../services/api';
 import { useToast } from '../hooks/useToast';
 
 export default function DeviceManagement() {
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [devices, setDevices] = useState([]);
   const [agents, setAgents] = useState([]);
   const [availableModules, setAvailableModules] = useState([]);
@@ -26,7 +28,7 @@ export default function DeviceManagement() {
     try {
       const [devicesData, modulesData, agentsData] = await Promise.all([
         getDevices(),
-        getModules(),
+        getModules().catch(() => []),
         getAgents().catch(() => []),
       ]);
       setDevices(devicesData);
@@ -190,6 +192,7 @@ export default function DeviceManagement() {
                     <div style={{ display: 'flex', gap: '0.4rem' }}>
                       <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(device)}>Edit</button>
                       <button className="btn btn-danger btn-sm" onClick={() => handleDelete(device)}>Delete</button>
+                      <button className="btn btn-sm" onClick={() => navigate(`/metrics?device_id=${device.id}`)}>Charts</button>
                     </div>
                   </td>
                 </tr>

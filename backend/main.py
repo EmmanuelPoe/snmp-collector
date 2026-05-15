@@ -71,7 +71,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-Instrumentator().instrument(app).expose(app)
+Instrumentator().instrument(app).expose(app, endpoint="/internal/prometheus")
 
 app.include_router(auth_router)
 app.include_router(devices.router)

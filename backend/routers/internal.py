@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from auth import require_manager_key
@@ -15,7 +16,7 @@ def get_devices_for_agent(
     _: bool = Depends(require_manager_key),
 ):
     devices = db.query(Device).filter(
-        Device.assigned_agent_id == agent_id,
+        or_(Device.assigned_agent_id == agent_id, Device.assigned_agent_id == None),
         Device.enabled == True,
     ).all()
     return [_to_device_config(d) for d in devices]

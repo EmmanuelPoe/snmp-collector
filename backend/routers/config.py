@@ -12,6 +12,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/config", tags=["configuration"])
 
 
+SUPPORTED_MODULES = ["if_mib", "host_resources", "ucd_snmp", "cisco_memory", "cisco_cpu"]
+
+
+@router.get("/modules")
+def list_modules(_: User = Depends(get_current_user)):
+    return SUPPORTED_MODULES
+
+
 @router.get("/configs", response_model=List[CollectionConfigResponse])
 def list_configs(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return db.query(CollectionConfig).all()

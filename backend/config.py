@@ -9,7 +9,6 @@ class Settings(BaseSettings):
     postgres_host: str = "postgres"
     postgres_port: int = 5432
     database_url: Optional[str] = None
-    duckdb_path: str = "/data/db/metrics.db"
     manager_url: str = "http://manager:8000"
     api_title: str = "SNMP Metrics Collector API"
     api_version: str = "1.0.0"

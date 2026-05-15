@@ -31,20 +31,15 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_HOST: postgres
-      DUCKDB_PATH: /data/db/metrics.db
       MANAGER_URL: http://manager:8000
       MANAGER_API_KEY: ${MANAGER_API_KEY:-change-me-in-production}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS:-8}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
-    volumes:
-      - ./data/db:/data/db:ro
     networks:
       - snmp-network
     depends_on:
       postgres:
-        condition: service_healthy
-      manager:
         condition: service_healthy
 
   frontend:
@@ -93,9 +88,6 @@ services:
     restart: unless-stopped
     networks:
       - snmp-network
-    depends_on:
-      backend:
-        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -138,6 +130,7 @@ services:
 networks:
   snmp-network:
     driver: bridge
+    name: snmp-network
 
 volumes:
   postgres_data:

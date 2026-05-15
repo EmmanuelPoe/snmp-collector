@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from db import get_db, close_db
-from routers import registration, ingest
+from routers import registration, ingest, metrics
 
 
 class _JsonFormatter(logging.Formatter):
@@ -42,6 +42,7 @@ Instrumentator().instrument(app).expose(app)
 
 app.include_router(registration.router)
 app.include_router(ingest.router)
+app.include_router(metrics.router)
 
 
 @app.get("/health")

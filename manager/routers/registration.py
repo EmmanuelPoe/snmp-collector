@@ -67,6 +67,7 @@ async def _devices_for(agent_id: str) -> list[DeviceConfig]:
             resp = await client.get(
                 f"{config.settings.backend_url}/internal/devices",
                 params={"agent_id": agent_id},
+                headers={"Authorization": f"Bearer {config.settings.manager_api_key}"},
                 timeout=10.0,
             )
             resp.raise_for_status()

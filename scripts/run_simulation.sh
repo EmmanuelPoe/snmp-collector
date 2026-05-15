@@ -12,7 +12,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Configuration
-API_URL="http://localhost:8000"
+API_URL="http://localhost/api"
 DEVICE_NAME="Test-Simulator"
 DEVICE_IP="snmp-simulator"
 
@@ -38,6 +38,18 @@ echo "Waiting for SNMP simulator..."
 sleep 3
 echo -e "${GREEN}✓ SNMP simulator should be ready${NC}"
 
+# Authenticate
+echo "Logging in as admin..."
+TOKEN=$(curl -s -X POST "${API_URL}/auth/login" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin@localhost&password=admin" | jq -r '.access_token')
+if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+    echo -e "${RED}✗ Failed to authenticate${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✓ Authenticated${NC}"
+AUTH="-H \"Authorization: Bearer ${TOKEN}\""
+
 echo ""
 echo -e "${YELLOW}Step 2: Adding/Fetching test device via API...${NC}"
 
@@ -54,6 +66,7 @@ DEVICE_DATA='{
 
 # POST device and capture status code and body
 FULL_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${API_URL}/devices" \
+  -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d "${DEVICE_DATA}")
 
@@ -68,13 +81,13 @@ if [ "$HTTP_STATUS" -eq 201 ]; then
 elif [ "$HTTP_STATUS" -eq 409 ]; then
     echo -e "${YELLOW}Device already exists, fetching ID...${NC}"
     # Fetch device by name from the list
-    DEVICE_ID=$(curl -s "${API_URL}/devices" | jq -r '.[] | select(.name=="'"${DEVICE_NAME}"'") | .id' | head -n 1)
+    DEVICE_ID=$(curl -s "${API_URL}/devices" -H "Authorization: Bearer ${TOKEN}" | jq -r '.[] | select(.name=="'"${DEVICE_NAME}"'") | .id' | head -n 1)
     
     if [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ]; then
         echo -e "${GREEN}✓ Found existing device with ID: ${DEVICE_ID}${NC}"
     else
         echo -e "${RED}✗ Failed to find existing device named ${DEVICE_NAME}${NC}"
-        echo "Devices list: $(curl -s ${API_URL}/devices)"
+        echo "Devices list: $(curl -s ${API_URL}/devices -H "Authorization: Bearer ${TOKEN}")"
         exit 1
     fi
 else
@@ -84,20 +97,15 @@ else
 fi
 
 echo ""
-echo -e "${YELLOW}Step 3: Triggering SNMP collection...${NC}"
-
-COLLECT_RESPONSE=$(curl -s -X POST "${API_URL}/metrics/collect/${DEVICE_ID}")
-echo -e "${GREEN}✓ Collection triggered${NC}"
-
-echo ""
-echo -e "${YELLOW}Step 4: Waiting for metrics to be collected (10s)...${NC}"
-sleep 10
+echo -e "${YELLOW}Step 3: Waiting for agent to poll the device (90s)...${NC}"
+echo "The agent polls on a 60s interval — waiting for first collection cycle..."
+sleep 90
 
 echo ""
 echo -e "${YELLOW}Step 5: Verifying metrics in API...${NC}"
 
 # Query for if_mib metrics specifically
-METRICS_RESPONSE=$(curl -s "${API_URL}/metrics?device_id=${DEVICE_ID}&module=if_mib&limit=20")
+METRICS_RESPONSE=$(curl -s "${API_URL}/metrics?device_id=${DEVICE_ID}&module=if_mib&limit=20" -H "Authorization: Bearer ${TOKEN}")
 METRICS_COUNT=$(echo "$METRICS_RESPONSE" | jq '. | length')
 
 if [ "$METRICS_COUNT" -gt 0 ]; then
@@ -105,7 +113,7 @@ if [ "$METRICS_COUNT" -gt 0 ]; then
 else
     echo -e "${RED}✗ No metrics returned by API for module if_mib${NC}"
     # try generic if migration didn't work for some reason?
-    GENERIC_COUNT=$(curl -s "${API_URL}/metrics?device_id=${DEVICE_ID}&limit=1" | jq '. | length')
+    GENERIC_COUNT=$(curl -s "${API_URL}/metrics?device_id=${DEVICE_ID}&limit=1" -H "Authorization: Bearer ${TOKEN}" | jq '. | length')
     echo "Debug: Generic metrics count: $GENERIC_COUNT"
     exit 1
 fi
@@ -113,7 +121,7 @@ fi
 echo ""
 echo -e "${YELLOW}Step 6: Checking interface list via available metrics...${NC}"
 
-AVAILABLE_RESPONSE=$(curl -s "${API_URL}/metrics/available/${DEVICE_ID}")
+AVAILABLE_RESPONSE=$(curl -s "${API_URL}/metrics/available/${DEVICE_ID}" -H "Authorization: Bearer ${TOKEN}")
 INTERFACE_COUNT=$(echo "$AVAILABLE_RESPONSE" | jq '.modules.if_mib.interfaces | length')
 
 if [ "$INTERFACE_COUNT" -ge 2 ]; then
@@ -131,7 +139,7 @@ FIRST_INTERFACE=$(echo "$AVAILABLE_RESPONSE" | jq -r '.modules.if_mib.interfaces
 
 if [ -n "$FIRST_INTERFACE" ] && [ "$FIRST_INTERFACE" != "null" ]; then
     echo "Checking stats for: $FIRST_INTERFACE"
-    INTERFACE_STATS=$(curl -s "${API_URL}/metrics?device_id=${DEVICE_ID}&module=if_mib&interface_name=${FIRST_INTERFACE}&limit=5")
+    INTERFACE_STATS=$(curl -s "${API_URL}/metrics?device_id=${DEVICE_ID}&module=if_mib&interface_name=${FIRST_INTERFACE}&limit=5" -H "Authorization: Bearer ${TOKEN}")
     
     SAMPLE_VAL=$(echo "$INTERFACE_STATS" | jq -r '.[0].value')
     SAMPLE_NAME=$(echo "$INTERFACE_STATS" | jq -r '.[0].oid_name')
@@ -145,18 +153,17 @@ if [ -n "$FIRST_INTERFACE" ] && [ "$FIRST_INTERFACE" != "null" ]; then
 fi
 
 echo ""
-echo -e "${YELLOW}Step 8: Database table verification (Wide Table)...${NC}"
+echo -e "${YELLOW}Step 8: Total row count via metrics API...${NC}"
 
-DB_CHECK_WIDE=$(docker-compose exec -T postgres psql -U snmpuser -d snmp_metrics -t -c \
-    "SELECT COUNT(*) FROM if_mib_metrics WHERE device_id = ${DEVICE_ID};" 2>/dev/null || echo "0")
-DB_COUNT_WIDE=$(echo $DB_CHECK_WIDE | tr -d ' ')
+TOTAL_COUNT=$(curl -s "${API_URL}/metrics?device_id=${DEVICE_ID}&limit=10000" \
+  -H "Authorization: Bearer ${TOKEN}" | jq '. | length')
 
-echo "Wide (if_mib_metrics) records: $DB_COUNT_WIDE"
+echo "Total snmp_polls rows for device ${DEVICE_ID}: ${TOTAL_COUNT}"
 
-if [ "$DB_COUNT_WIDE" -gt 0 ]; then
-    echo -e "${GREEN}✓ Data successfully stored in optimized wide table${NC}"
+if [ "$TOTAL_COUNT" -gt 0 ]; then
+    echo -e "${GREEN}✓ Data confirmed in DuckDB via API (${TOTAL_COUNT} rows)${NC}"
 else
-    echo -e "${RED}✗ No data found in wide table!${NC}"
+    echo -e "${RED}✗ No rows returned via API for device ${DEVICE_ID}!${NC}"
     exit 1
 fi
 
@@ -171,5 +178,5 @@ echo "  - Backend Type: Wide Table (if_mib_metrics)"
 echo "  - API Status: Unpivoting working"
 echo ""
 echo "🌐 Access the UI:"
-echo "  Frontend: http://localhost:3000"
+echo "  Frontend: http://localhost"
 echo ""
