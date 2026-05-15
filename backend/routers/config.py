@@ -5,12 +5,11 @@ from typing import List
 from auth import get_current_user, require_role
 from database import get_db
 from models import CollectionConfig, User
-from schemas import CollectionConfigCreate, CollectionConfigResponse
+from schemas import CollectionConfigCreate, CollectionConfigResponse, CollectionConfigUpdate
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/config", tags=["configuration"])
-
 
 SUPPORTED_MODULES = ["if_mib", "host_resources", "ucd_snmp", "cisco_memory", "cisco_cpu"]
 
@@ -33,12 +32,39 @@ def create_config(
 ):
     existing = db.query(CollectionConfig).filter(CollectionConfig.oid == config.oid).first()
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Config for OID {config.oid} already exists"
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Config for OID {config.oid} already exists")
     db_config = CollectionConfig(**config.model_dump())
     db.add(db_config)
     db.commit()
     db.refresh(db_config)
     return db_config
+
+
+@router.put("/configs/{config_id}", response_model=CollectionConfigResponse)
+def update_config(
+    config_id: int,
+    updates: CollectionConfigUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("editor", "admin")),
+):
+    db_config = db.query(CollectionConfig).filter(CollectionConfig.id == config_id).first()
+    if not db_config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
+    for field, value in updates.model_dump(exclude_unset=True).items():
+        setattr(db_config, field, value)
+    db.commit()
+    db.refresh(db_config)
+    return db_config
+
+
+@router.delete("/configs/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_config(
+    config_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("editor", "admin")),
+):
+    db_config = db.query(CollectionConfig).filter(CollectionConfig.id == config_id).first()
+    if not db_config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
+    db.delete(db_config)
+    db.commit()
