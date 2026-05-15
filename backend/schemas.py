@@ -92,6 +92,12 @@ class CollectionConfigCreate(CollectionConfigBase):
     pass
 
 
+class CollectionConfigUpdate(BaseModel):
+    oid_name: Optional[str] = None
+    description: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
 class CollectionConfigResponse(CollectionConfigBase):
     id: int
     created_at: datetime
