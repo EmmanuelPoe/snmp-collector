@@ -59,7 +59,7 @@ function DeviceMetrics() {
     const interfaces = ratesData ? Object.entries(ratesData.interfaces) : [];
 
     return (
-        <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <div className="page-header" style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 }}>
                 <div className="page-title">Interface Monitor</div>
                 <select className="select" value={selectedDevice} onChange={e => setSelectedDevice(e.target.value)} style={{ maxWidth: 300 }}>
@@ -75,8 +75,8 @@ function DeviceMetrics() {
                     </span>
                 )}
             </div>
-            <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
+            <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+                <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflowY: 'auto', padding: '1.5rem' }}>
                     {!selectedDevice && <div className="text-muted" style={{ textAlign: 'center', marginTop: '3rem' }}>Select a device to begin monitoring.</div>}
                     {selectedDevice && loading && !ratesData && <div className="text-muted" style={{ textAlign: 'center', marginTop: '3rem' }}>Loading interfaces...</div>}
                     {ratesData && interfaces.length === 0 && (
@@ -93,7 +93,9 @@ function DeviceMetrics() {
                     )}
                 </div>
                 {selectedIface && ratesData && (
-                    <InterfacePanel deviceId={selectedDevice} iface={selectedIface} ifaceData={ratesData.interfaces[selectedIface]} onClose={() => setSelectedIface(null)} />
+                    <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 480, zIndex: 10, boxShadow: '-4px 0 24px rgba(0,0,0,0.4)' }}>
+                        <InterfacePanel deviceId={selectedDevice} iface={selectedIface} ifaceData={ratesData.interfaces[selectedIface]} onClose={() => setSelectedIface(null)} />
+                    </div>
                 )}
             </div>
         </div>
