@@ -82,33 +82,20 @@ export const getModules = async () => {
     const response = await api.get('/config/modules');
     return response.data;
 };
-export const getModuleConfig = async (moduleName) => {
-    const response = await api.get(`/config/modules/${moduleName}`);
+export const getConfigs = async () => {
+    const response = await api.get('/config/configs');
     return response.data;
 };
-export const updateModuleConfig = async (moduleName, yamlContent) => {
-    const response = await api.put(`/config/modules/${moduleName}`, { yaml_content: yamlContent });
+export const createConfig = async (configData) => {
+    const response = await api.post('/config/configs', configData);
     return response.data;
 };
-export const getSchedules = async () => {
-    const response = await api.get('/config/schedules');
+export const updateConfig = async (configId, updates) => {
+    const response = await api.put(`/config/configs/${configId}`, updates);
     return response.data;
 };
-export const getSchedule = async (deviceId) => {
-    const response = await api.get(`/config/schedule/${deviceId}`);
-    return response.data;
-};
-export const updateSchedule = async (deviceId, scheduleData) => {
-    const response = await api.put(`/config/schedule/${deviceId}`, scheduleData);
-    return response.data;
-};
-export const createSchedule = async (scheduleData) => {
-    const response = await api.post('/config/schedule', scheduleData);
-    return response.data;
-};
-export const reloadConfig = async () => {
-    const response = await api.post('/config/reload');
-    return response.data;
+export const deleteConfig = async (configId) => {
+    await api.delete(`/config/configs/${configId}`);
 };
 
 // ===== Health Check =====
