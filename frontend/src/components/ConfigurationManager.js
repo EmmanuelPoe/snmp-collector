@@ -12,11 +12,14 @@ export default function ConfigurationManager() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+
+  const closeModal = () => { setShowModal(false); setForm(EMPTY_FORM); };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [m, c] = await Promise.all([getModules(), getConfigs()]);
+      const [m, c] = await Promise.all([getModules().catch(() => []), getConfigs()]);
       setModules(m);
       setConfigs(c);
     } catch {
@@ -29,11 +32,14 @@ export default function ConfigurationManager() {
   useEffect(() => { load(); }, [load]);
 
   const handleToggle = async (cfg) => {
+    setTogglingId(cfg.id);
     try {
       const updated = await updateConfig(cfg.id, { enabled: !cfg.enabled });
       setConfigs(prev => prev.map(c => c.id === cfg.id ? updated : c));
     } catch {
       showToast('Failed to update config', 'error');
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -54,8 +60,7 @@ export default function ConfigurationManager() {
     try {
       const created = await createConfig(form);
       setConfigs(prev => [...prev, created]);
-      setShowModal(false);
-      setForm(EMPTY_FORM);
+      closeModal();
       showToast(`OID "${form.oid_name}" added`, 'success');
     } catch (err) {
       showToast('Error: ' + (err.response?.data?.detail || 'Failed to create config'), 'error');
@@ -106,9 +111,13 @@ export default function ConfigurationManager() {
                   <td className="font-mono text-sm text-muted">{cfg.oid}</td>
                   <td className="text-sm text-muted">{cfg.description || '—'}</td>
                   <td>
+                    <span className={`badge ${cfg.enabled ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 8 }}>
+                      {cfg.enabled ? 'Active' : 'Disabled'}
+                    </span>
                     <button
                       className={`btn btn-sm ${cfg.enabled ? 'btn-secondary' : 'btn-primary'}`}
                       onClick={() => handleToggle(cfg)}
+                      disabled={togglingId === cfg.id}
                     >
                       {cfg.enabled ? 'Disable' : 'Enable'}
                     </button>
@@ -140,11 +149,11 @@ export default function ConfigurationManager() {
 
       {/* Add OID Modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Add OID Collection Config</h3>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              <button className="modal-close" onClick={closeModal}>×</button>
             </div>
             <form onSubmit={handleCreate}>
               <div className="form-group">
@@ -173,7 +182,7 @@ export default function ConfigurationManager() {
                 </label>
               </div>
               <div className="action-buttons">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? 'Adding...' : 'Add OID'}
                 </button>
