@@ -93,7 +93,7 @@ class CollectionConfigCreate(CollectionConfigBase):
 
 
 class CollectionConfigUpdate(BaseModel):
-    oid_name: Optional[str] = None
+    oid_name: Optional[str] = Field(None, min_length=1)
     description: Optional[str] = None
     enabled: Optional[bool] = None
 
