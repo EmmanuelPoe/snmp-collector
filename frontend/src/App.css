@@ -220,7 +220,7 @@
 }
 .stat-value.green  { color: var(--color-success); }
 .stat-value.white  { color: var(--color-text-primary); }
-.stat-value.violet { color: #a78bfa; }
+.stat-value.violet { color: #7c3aed; }
 .stat-sub {
   font-size: 11px;
   color: var(--color-text-faint);
