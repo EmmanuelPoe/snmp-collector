@@ -1,149 +1,118 @@
 # SNMP Metrics Collector
 
-A distributed SNMP metrics collection system using Docker containers. Devices are managed centrally via a FastAPI backend (PostgreSQL), SNMP polling is coordinated by a dedicated manager service (DuckDB), and a React dashboard provides visualization and administration.
+A distributed SNMP monitoring platform for network devices. Devices are managed via a FastAPI backend (PostgreSQL), polling is handled by autonomous agents that upload Parquet batches to a manager service (DuckDB), and a React dashboard provides visualization and administration.
 
 ## Features
 
-- **Multi-Module Collection**: Support for multiple SNMP modules per device (if_mib, host_resources, etc.)
-- **Modular Storage Architecture**: Hybrid storage using dedicated optimized wide tables for high-volume modules (like `if_mib_metrics`) and generic EAV fallback for others.
-- **Dynamic Configuration**: Manage SNMP modules and collection schedules for all devices from a centralized dashboard.
-- **Device Management**: Add, edit, and manage network devices with support for custom OID modules.
-- **Time-Series Storage**: PostgreSQL with TimescaleDB for efficient metric storage
-- **Collection Scheduling**: Configurable collection intervals with a clear overview of polling status across all devices.
-- **JWT Authentication**: Role-based access control (admin / editor / viewer) with bcrypt password hashing.
-- **Modern UI**: Enterprise dark-mode interface with a collapsible sidebar, Recharts-powered dashboard (traffic trends, agent status cards, live events feed), toast notifications, and searchable/sortable tables on device and agent views.
-- **Observability**: Prometheus metrics, structured JSON logging, Grafana dashboards, and Loki log aggregation.
-- **End-to-End Simulation**: Built-in test workflow with a simulated SNMP agent
+- **Distributed collection**: Agents poll SNMP devices autonomously and upload batched Parquet files to the manager. The backend never touches devices directly.
+- **OID configuration**: Manage a whitelist of OIDs to collect via the Configuration Manager UI.
+- **Device management**: Full CRUD for network devices with SNMP v2c and v3 support. Credentials are stored separately and only accessible to editors and admins.
+- **JWT authentication**: Role-based access control (admin / editor / viewer) with bcrypt password hashing. First login forces a password change.
+- **Interface metrics**: Per-interface traffic rates, octets, and status visible in the Metrics view.
+- **Agent visibility**: Agent registration, heartbeat status, and last-seen tracking in the Agents tab.
+- **End-to-End Simulation**: Built-in SNMP simulator container for testing without real hardware.
 
 ## Architecture
 
-The system consists of 7 Docker containers:
+Seven Docker services:
 
-1. **Nginx**: Reverse proxy — routes all public traffic on port 80; terminates HTTP for backend and frontend.
-2. **PostgreSQL + TimescaleDB**: Device config, user accounts, and time-series metrics.
-3. **FastAPI Backend**: API server, auth, device/config management. Not publicly exposed — served via nginx at `/api/`.
-4. **Manager**: SNMP polling coordinator — stores metrics in DuckDB, manages agent registration and device config distribution.
-5. **React Frontend**: Production-built static UI served through nginx.
-6. **Agent**: Asyncio polling daemon — registers with manager, polls SNMP devices, uploads Parquet batches.
-7. **SNMP Simulator**: Built-in simulator for testing and validation.
+| Service | Port | Role |
+|---------|------|------|
+| nginx | 80 | Reverse proxy — all public traffic; `/api/internal/` blocked |
+| backend | (internal) | FastAPI — auth, device CRUD, metrics API, OID config |
+| postgres | (internal) | Device config, users, OID whitelist |
+| manager | 8001 | Agent registry, Parquet ingest, DuckDB writes |
+| frontend | (internal) | React SPA served via nginx |
+| agent | — | Asyncio daemon — polls SNMP, uploads Parquet |
+| snmp-simulator | 1161/udp | Simulated SNMP target for testing |
+
+Backend and frontend have no exposed ports — all traffic goes through nginx.
 
 ### Data flow
 
 ```
 Device registered in Backend (Postgres)
-  → Manager fetches device list from Backend /internal/devices-for-agent/{agent_id}
-  → Agent registers with Manager, receives device config
-  → Agent polls SNMP, buffers rows, uploads Parquet to Manager POST /ingest
-  → Manager writes Parquet rows into DuckDB snmp_polls table (data/db/metrics.db)
-  → Backend reads DuckDB read-only to serve metrics to Frontend
+  → Agent registers with Manager, receives device + OID config
+  → Agent polls SNMP, buffers rows, uploads Parquet → POST /ingest
+  → Manager writes rows into DuckDB (data/db/metrics.db)
+  → Backend mounts DuckDB read-only, serves metrics to Frontend
 ```
-
-### Public ports
-
-| Port | Service | Notes |
-|------|---------|-------|
-| `80` | Nginx | All app traffic — frontend + `/api/` proxy to backend |
-| `8001` | Manager | Agent communication only; firewall to agent IPs in production |
-| `5432` | Postgres | Internal only; firewall in production |
-
-Backend and frontend containers have no exposed ports — traffic reaches them only through nginx.
 
 ## Quick Start
 
-### Prerequisites
+**Prerequisites:** Docker 20+, Docker Compose 2+
 
-- Docker (version 20.x or higher)
-- Docker Compose (version 2.x or higher)
-- Make (optional, for convenient commands)
+```bash
+make setup
+```
 
-### Installation
+This builds all containers, starts them, waits for the backend to be ready, and runs database migrations. A `.env` file is created from `.env.example` automatically.
 
-1. **Clone the repository**
-   ```bash
-   cd snmp-collector
-   ```
+Access the app at **http://localhost**.
 
-2. **Run setup**
-   ```bash
-   make setup
-   ```
+On first startup, a bootstrap admin account is created with a randomly generated temporary password printed to the backend log:
 
-   This builds the containers, starts all services, waits for the backend, and runs database migrations. A `.env` file is created from `.env.example` if one doesn't exist.
+```bash
+make logs-backend | grep "Bootstrap admin"
+```
 
-3. **Access the application**
-   - Application: http://localhost (login with `admin@localhost` / `admin`)
-   - API Documentation: http://localhost/api/docs
-   - Manager API: http://localhost:8001
+You will be prompted to set a new password on first login.
 
-   **Before deploying to production**, set `JWT_SECRET` and `MANAGER_API_KEY` to strong random values in `.env` and change the default admin password — see [Authentication](#authentication).
+> **Before deploying to production:** set `JWT_SECRET` and `MANAGER_API_KEY` to strong random values in `.env`.
 
 ## Authentication
 
-The backend uses JWT authentication. All API routes require a valid bearer token except `POST /api/auth/login`.
-
-### Default admin account
-
-On first startup, if the users table is empty, a seed account is created:
-
-| Field | Value |
-|-------|-------|
-| Email | `admin@localhost` |
-| Password | `admin` |
-| Role | `admin` |
-
-A warning is logged at startup while default credentials are active. Change the password via the API or create a new admin and delete this account.
+All API routes require a JWT bearer token except `POST /auth/login`.
 
 ### Roles
 
-| Role | Devices | Config | Delete | Register users |
-|------|---------|--------|--------|----------------|
-| admin | read/write | read/write | yes | yes |
-| editor | read/write | read/write | no | no |
-| viewer | read only | read only | no | no |
+| Role | Devices | Credentials | Config | Delete devices | Register users |
+|------|---------|-------------|--------|----------------|----------------|
+| admin | read/write | yes | read/write | yes | yes |
+| editor | read/write | yes | read/write | no | no |
+| viewer | read only | no | read only | no | no |
+
+Viewers never see SNMP credentials. The device list omits community strings and v3 fields — credentials are only returned by `GET /devices/{id}/credentials` (editor+ required).
 
 ### Creating users
 
-Only admins can create users. Use the API directly:
+Only admins can create users:
 
 ```bash
 curl -X POST http://localhost/api/auth/register \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"email": "user@example.com", "password": "...", "role": "editor"}'
+  -d '{"email": "ops@example.com", "password": "...", "role": "editor"}'
 ```
 
 ## Logging
 
-All services (backend, manager, agent) emit JSON-structured logs:
+All services emit JSON-structured logs:
 
 ```json
-{ "time": "...", "level": "INFO", "service": "backend", "message": "...", "router": "devices" }
+{"time": "...", "level": "INFO", "service": "backend", "message": "..."}
 ```
 
 Tail logs with `make logs`, `make logs-backend`, or `make logs-manager`.
 
 ## Simulation & Testing
 
-The project includes an automated end-to-end simulation workflow to verify the system without needing real hardware.
-
 ```bash
-make simulation       # run end-to-end simulation test
+make simulation       # run end-to-end SNMP collection test
 make clean-simulation # remove test device and simulation data
 ```
 
-**What this does:**
-1. Starts all services, including a dedicated `snmp-simulator` container.
-2. Runs database migrations.
-3. Automatically adds a test device ("Test-Simulator") via the API.
-4. Triggers an immediate SNMP collection.
-5. Verifies that metrics (Interface Status, In/Out Octets, Packets) are physically stored in the database.
-6. Reports the number of interfaces found and metrics collected.
+This starts all services including the `snmp-simulator`, adds a test device, waits for the agent to collect, and verifies metrics are stored in DuckDB.
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 ```bash
+# Required — startup fails without these
+JWT_SECRET=replace-with-a-long-random-secret
+MANAGER_API_KEY=change-me-in-production
+
 # Database
 POSTGRES_DB=snmp_metrics
 POSTGRES_USER=snmpuser
@@ -151,115 +120,98 @@ POSTGRES_PASSWORD=snmppass
 POSTGRES_PORT=5432
 
 # Backend
-FRONTEND_URL=http://localhost          # used for CORS origin
-JWT_SECRET=replace-with-long-random-secret  # required — startup fails without this
+FRONTEND_URL=http://localhost   # CORS origin
 JWT_EXPIRE_HOURS=8
-
-# Manager
-MANAGER_API_KEY=change-me-in-production    # shared secret between manager, backend, and agent
 ```
 
-## Makefile Commands
+Generate strong secrets:
+```bash
+openssl rand -hex 32   # for JWT_SECRET
+openssl rand -hex 24   # for MANAGER_API_KEY
+```
+
+## Makefile commands
 
 ```bash
-make setup             # First-time setup: build + start + migrate
-make build             # Build all Docker containers
-make up                # Start core stack
-make down              # Stop core stack
-make reset             # Full reset (clean + rebuild + start)
-make migrate           # Run database migrations
-make test              # Run manager test suite
-make simulation        # Run end-to-end simulation test
-make clean-simulation  # Remove simulation data
+make setup             # First-time: build + start + migrate
+make up                # Start all services
+make down              # Stop all services
+make build             # Rebuild containers
+make reset             # clean + build + up
+make migrate           # Run Alembic migrations
+make test              # Run manager + backend test suites
+make simulation        # End-to-end SNMP collection test
+make clean-simulation  # Remove simulation test data
 make status            # Show container status
 
-make logs              # Tail all container logs
+make logs              # Tail all logs
 make logs-backend      # Tail backend logs
 make logs-frontend     # Tail frontend logs
 make logs-manager      # Tail manager logs
 
 make shell-backend     # sh into backend container
-make shell-db          # psql into postgres (snmpuser / snmp_metrics)
+make shell-db          # psql into postgres
 
 make dev-frontend      # Run frontend locally (npm start)
 make dev-backend       # Run backend locally (uvicorn --reload)
 ```
 
-## Project Structure
+## Project structure
 
 ```
 snmp-collector/
-├── backend/                 # FastAPI application (auth, device registry, metrics API)
-│   ├── alembic/            # Database migrations
-│   ├── routers/            # API endpoints (auth, devices, metrics, config, agents, internal)
-│   ├── auth.py             # JWT dependency and role enforcement
-│   └── main.py             # Application entry
-├── manager/                 # SNMP polling coordinator (DuckDB, agent registry)
-│   ├── routers/            # API endpoints (ingest, registration)
-│   └── main.py             # Application entry
-├── frontend/               # React application (production multi-stage build)
-│   └── src/               # Source code
-├── nginx/                  # Reverse proxy config
-│   ├── nginx.conf
-│   └── conf.d/default.conf
-├── observability/          # Observability stack configs
-│   ├── prometheus/         # Scrape config
-│   ├── grafana/            # Datasource + dashboard provisioning
-│   ├── loki/               # Loki config
-│   └── promtail/           # Promtail config
-├── snmp-simulator/         # Simulation container (net-snmp)
-├── data/                   # Runtime data (DuckDB, dead-letter queue, registry)
-├── docker-compose.yml               # Core stack
-├── docker-compose.observability.yml # Observability overlay
+├── backend/                 # FastAPI (auth, devices, metrics, OID config, internal)
+│   ├── alembic/             # Database migrations
+│   ├── routers/             # auth, devices, metrics, config, agents, internal
+│   ├── tests/               # pytest suite
+│   ├── auth.py              # JWT, bcrypt, role enforcement
+│   └── main.py              # Bootstrap admin seed, app setup
+├── manager/                 # Agent registry + Parquet ingest → DuckDB
+│   ├── routers/             # registration, ingest
+│   ├── tests/               # pytest suite
+│   └── main.py
+├── frontend/                # React SPA
+│   └── src/
+│       ├── components/      # DeviceManagement, ConfigurationManager, AgentsPage, ...
+│       ├── pages/           # LoginPage, ChangePasswordPage
+│       └── services/api.js  # Axios client with JWT interceptors
+├── nginx/
+│   └── conf.d/default.conf  # Proxy rules; /api/internal/ blocked from public
+├── snmp-simulator/          # Net-SNMP simulator for testing
+├── data/                    # Runtime: DuckDB, agent queue, agent registry
+├── docker-compose.yml
 ├── Makefile
-└── README.md
+└── .env.example
 ```
 
-## Database Schema
+## Database schema (PostgreSQL)
 
-The PostgreSQL database uses TimescaleDB and a modular schema:
+| Table | Purpose |
+|-------|---------|
+| `users` | Accounts with bcrypt passwords, roles, and `force_password_change` flag |
+| `devices` | Network devices — SNMP config, agent assignment (credentials excluded from list response) |
+| `collection_configs` | OID whitelist — name, description, enabled flag |
 
-- **users**: User accounts with bcrypt passwords and role assignments.
-- **devices**: Network device information with linked SNMP modules.
-- **if_mib_metrics**: Optimized wide table for interface statistics (high performance).
-- **snmp_metrics**: Generic time-series storage for other modules (fallback).
-- **collection_schedules**: Per-device collection timing and status.
-
-The manager service maintains a separate DuckDB database (`data/db/metrics.db`) for SNMP poll results.
+Metrics are stored in DuckDB (`data/db/metrics.db`) by the manager. The backend mounts this file read-only.
 
 ## Troubleshooting
 
-### Database connection failed: "FATAL: role 'snmpuser' does not exist"
-
-**Cause:** A local PostgreSQL instance is running on port 5432, conflicting with the Docker container.
-
-**Solution:**
-1. Stop local Postgres: `brew services stop postgresql` or `pkill -f postgres`
-2. OR change the Docker port in `.env`: `POSTGRES_PORT=5433` then `make down && make up`
-
-### Application won't start
-
+**Port 5432 conflict** — a local Postgres instance is running:
 ```bash
-make logs   # check logs for errors
-make clean  # clean up
-make build  # rebuild
-make up     # start again
+brew services stop postgresql   # or equivalent for your version
 ```
 
-### Backend fails to start with "JWT_SECRET not set"
-
-`JWT_SECRET` is required. Set it in `.env`:
+**Backend won't start — "JWT_SECRET not set":**
 ```bash
-JWT_SECRET=$(openssl rand -hex 32)
+echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
 ```
 
-### SNMP collection not working
-
-1. Verify device IP is reachable from the agent container
-2. Check SNMP community string or v3 credentials are correct
-3. Ensure UDP port 161 is not blocked by firewall
-4. View agent/manager logs: `make logs-manager`
+**No metrics showing up:**
+1. Check the agent registered: `make logs-manager`
+2. Verify the device IP is reachable from the agent container
+3. Check SNMP community string or v3 credentials are correct
+4. Ensure UDP 161 is not firewalled
 
 ---
 
-Built with Docker, FastAPI, React, PostgreSQL, TimescaleDB, DuckDB, Nginx, Prometheus, Grafana, and Loki.
+Built with Docker, FastAPI, React, PostgreSQL, DuckDB, and Nginx.
