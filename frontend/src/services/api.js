@@ -22,6 +22,9 @@ api.interceptors.response.use(
             localStorage.removeItem('snmp_access_token');
             window.location.href = '/login';
         }
+        if (error.response?.status === 403 && error.response?.data?.detail === 'password_change_required') {
+            window.location.href = '/change-password';
+        }
         return Promise.reject(error);
     }
 );
@@ -45,6 +48,10 @@ export const updateDevice = async (deviceId, deviceData) => {
 };
 export const deleteDevice = async (deviceId) => {
     await api.delete(`/devices/${deviceId}`);
+};
+export const getDeviceCredentials = async (deviceId) => {
+    const response = await api.get(`/devices/${deviceId}/credentials`);
+    return response.data;
 };
 
 // ===== Metrics =====
@@ -96,6 +103,14 @@ export const updateConfig = async (configId, updates) => {
 };
 export const deleteConfig = async (configId) => {
     await api.delete(`/config/configs/${configId}`);
+};
+
+// ===== Auth =====
+export const changePassword = async (currentPassword, newPassword) => {
+    await api.post('/auth/change-password', {
+        current_password: currentPassword,
+        new_password: newPassword,
+    });
 };
 
 // ===== Health Check =====

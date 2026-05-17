@@ -29,10 +29,7 @@ def create_access_token(data: dict) -> str:
     return jwt.encode({**data, "exp": expire}, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-) -> User:
+def _resolve_user(token: str, db: Session) -> User:
     exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -49,6 +46,27 @@ def get_current_user(
     if not user:
         raise exc
     return user
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    user = _resolve_user(token, db)
+    if user.force_password_change:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="password_change_required",
+        )
+    return user
+
+
+def get_current_user_unchecked(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """Like get_current_user but skips the force_password_change check — for change-password endpoint."""
+    return _resolve_user(token, db)
 
 
 def require_role(*roles: str):

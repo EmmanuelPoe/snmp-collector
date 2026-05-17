@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDevices, createDevice, updateDevice, deleteDevice, getModules, getAgents } from '../services/api';
+import { getDevices, createDevice, updateDevice, deleteDevice, getModules, getAgents, getDeviceCredentials } from '../services/api';
 import { useToast } from '../hooks/useToast';
 
 export default function DeviceManagement() {
@@ -65,19 +65,31 @@ export default function DeviceManagement() {
     }
   };
 
-  const handleEdit = (device) => {
+  const handleEdit = async (device) => {
     setEditingDevice(device);
     setFormData({
       name: device.name, ip_address: device.ip_address,
-      snmp_version: device.snmp_version, snmp_community: device.snmp_community,
+      snmp_version: device.snmp_version, snmp_community: 'public',
       snmp_port: device.snmp_port, snmp_modules: device.snmp_modules || ['if_mib'],
       device_type: device.device_type || 'switch', description: device.description || '',
-      enabled: device.enabled, username: device.username || '',
-      auth_protocol: device.auth_protocol || 'SHA', auth_password: '',
-      priv_protocol: device.priv_protocol || 'AES', priv_password: '',
+      enabled: device.enabled, username: '',
+      auth_protocol: 'SHA', auth_password: '',
+      priv_protocol: 'AES', priv_password: '',
       assigned_agent_id: device.assigned_agent_id || '',
     });
     setShowModal(true);
+    try {
+      const creds = await getDeviceCredentials(device.id);
+      setFormData(prev => ({
+        ...prev,
+        snmp_community: creds.snmp_community || 'public',
+        username: creds.username || '',
+        auth_protocol: creds.auth_protocol || 'SHA',
+        priv_protocol: creds.priv_protocol || 'AES',
+      }));
+    } catch {
+      // non-fatal: user can re-enter credentials manually
+    }
   };
 
   const handleDelete = async (device) => {

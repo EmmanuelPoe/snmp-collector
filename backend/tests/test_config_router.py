@@ -29,7 +29,7 @@ def client(tmp_path, monkeypatch):
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    admin = User(email="admin@test.com", hashed_password=hash_password("pw"), role=UserRole.admin, is_active=True)
+    admin = User(email="admin@test.com", hashed_password=hash_password("pw"), role=UserRole.admin, is_active=True, force_password_change=False)
     session.add(admin)
     session.commit()
 

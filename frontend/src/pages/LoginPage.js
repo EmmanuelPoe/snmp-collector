@@ -35,7 +35,7 @@ export default function LoginPage() {
         return;
       }
       login(data.access_token);
-      navigate('/');
+      navigate(data.force_password_change ? '/change-password' : '/');
     } catch {
       setError('Network error — is the backend running?');
       setLoading(false);

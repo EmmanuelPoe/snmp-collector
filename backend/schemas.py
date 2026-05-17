@@ -48,19 +48,24 @@ class DeviceResponse(BaseModel):
     name: str
     ip_address: str
     snmp_version: str
-    snmp_community: str
     snmp_port: int
     snmp_modules: Optional[List[str]] = None
     device_type: Optional[str] = None
     description: Optional[str] = None
     enabled: bool
-    username: Optional[str] = None
-    auth_protocol: Optional[str] = None
-    # auth_password and priv_password intentionally excluded from response
-    priv_protocol: Optional[str] = None
     assigned_agent_id: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class DeviceCredentialsResponse(BaseModel):
+    snmp_community: Optional[str] = None
+    username: Optional[str] = None
+    auth_protocol: Optional[str] = None
+    priv_protocol: Optional[str] = None
 
     class Config:
         from_attributes = True

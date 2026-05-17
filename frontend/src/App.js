@@ -6,6 +6,7 @@ import DeviceMetrics from './components/DeviceMetrics';
 import ConfigurationManager from './components/ConfigurationManager';
 import AgentsPage from './components/AgentsPage';
 import LoginPage from './pages/LoginPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 import PrivateRoute from './components/PrivateRoute';
 import Sidebar from './components/Sidebar';
 import { ToastProvider } from './hooks/useToast';
@@ -36,6 +37,7 @@ export default function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/change-password" element={<ChangePasswordPage />} />
           <Route path="/*" element={<AppShell />} />
         </Routes>
       </Router>

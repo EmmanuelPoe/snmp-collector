@@ -5,7 +5,7 @@ from typing import List
 from auth import get_current_user, require_role
 from database import get_db
 from models import Device, User
-from schemas import DeviceCreate, DeviceUpdate, DeviceResponse
+from schemas import DeviceCreate, DeviceUpdate, DeviceResponse, DeviceCredentialsResponse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,18 @@ def update_device(
         setattr(device, field, value)
     db.commit()
     db.refresh(device)
+    return device
+
+
+@router.get("/{device_id}/credentials", response_model=DeviceCredentialsResponse)
+def get_device_credentials(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("editor", "admin")),
+):
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Device {device_id} not found")
     return device
 
 

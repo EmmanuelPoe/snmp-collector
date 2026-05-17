@@ -107,7 +107,7 @@ def test_get_current_user_rejects_nonexistent_user(db):
 
 def test_get_current_user_returns_user(db):
     from models import User, UserRole
-    user = User(email="real@test.com", hashed_password=hash_password("pw"), role=UserRole.viewer, is_active=True)
+    user = User(email="real@test.com", hashed_password=hash_password("pw"), role=UserRole.viewer, is_active=True, force_password_change=False)
     db.add(user)
     db.commit()
     token = create_access_token({"sub": "real@test.com", "role": "viewer"})
@@ -144,6 +144,7 @@ def auth_client(tmp_path, monkeypatch):
         hashed_password=hash_password("admin"),
         role=UserRole.admin,
         is_active=True,
+        force_password_change=False,
     )
     session.add(admin)
     session.commit()

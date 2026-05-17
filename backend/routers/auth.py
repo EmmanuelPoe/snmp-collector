@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from auth import hash_password, verify_password, create_access_token, get_current_user, require_role
+from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_user_unchecked, require_role
 from database import get_db
 from models import User, UserRole
 
@@ -19,6 +19,12 @@ class RegisterRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    force_password_change: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
 
 
 class UserResponse(BaseModel):
@@ -37,7 +43,20 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
     token = create_access_token({"sub": user.email, "role": user.role})
-    return {"access_token": token, "token_type": "bearer"}
+    return {"access_token": token, "token_type": "bearer", "force_password_change": user.force_password_change}
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    req: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_unchecked),
+):
+    if not verify_password(req.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    current_user.hashed_password = hash_password(req.new_password)
+    current_user.force_password_change = False
+    db.commit()
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

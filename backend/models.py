@@ -52,4 +52,5 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.viewer)
     is_active = Column(Boolean, default=True)
+    force_password_change = Column(Boolean, nullable=False, server_default="true", default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
