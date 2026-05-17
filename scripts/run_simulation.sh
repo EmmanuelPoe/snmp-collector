@@ -40,14 +40,26 @@ echo -e "${GREEN}✓ SNMP simulator should be ready${NC}"
 
 # Authenticate
 echo "Logging in as admin..."
-TOKEN=$(curl -s -X POST "${API_URL}/auth/login" \
+LOGIN_RESPONSE=$(curl -s -X POST "${API_URL}/auth/login" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=admin@localhost&password=admin" | jq -r '.access_token')
+  -d "username=admin@localhost&password=changeme")
+TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.access_token')
 if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
     echo -e "${RED}✗ Failed to authenticate${NC}"
     exit 1
 fi
 echo -e "${GREEN}✓ Authenticated${NC}"
+
+# Clear force_password_change if set (first boot)
+FORCE_CHANGE=$(echo "$LOGIN_RESPONSE" | jq -r '.force_password_change')
+if [ "$FORCE_CHANGE" = "true" ]; then
+    echo "Clearing forced password change..."
+    curl -s -X POST "${API_URL}/auth/change-password" \
+      -H "Authorization: Bearer ${TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"current_password":"changeme","new_password":"changeme"}' > /dev/null
+    echo -e "${GREEN}✓ Password change cleared${NC}"
+fi
 AUTH="-H \"Authorization: Bearer ${TOKEN}\""
 
 echo ""
