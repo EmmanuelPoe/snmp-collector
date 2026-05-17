@@ -211,3 +211,6 @@ worktrees/
 
 # Docker data volumes
 data/
+
+# Claude working files
+.superpowers/
