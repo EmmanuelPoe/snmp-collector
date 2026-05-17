@@ -1,14 +1,14 @@
 :root {
-  --color-bg-base:        #fafafa;
-  --color-bg-surface:     #f4f4f5;
-  --color-bg-elevated:    #e4e4e7;
+  --color-bg-base:        #f4f5f7;
+  --color-bg-surface:     #ffffff;
+  --color-bg-elevated:    #f0f1f3;
   --color-bg-hover:       rgba(0,0,0,0.04);
-  --color-border:         #d4d4d8;
-  --color-border-subtle:  #e4e4e7;
+  --color-border:         #e2e4e9;
+  --color-border-subtle:  #eef0f3;
 
-  --color-accent:         #d97706;
-  --color-accent-dim:     rgba(217,119,6,0.08);
-  --color-accent-border:  rgba(217,119,6,0.2);
+  --color-accent:         #2563eb;
+  --color-accent-dim:     rgba(37,99,235,0.07);
+  --color-accent-border:  rgba(37,99,235,0.2);
 
   --color-success:        #16a34a;
   --color-success-dim:    rgba(22,163,74,0.08);
@@ -23,10 +23,10 @@
   --color-info-dim:       rgba(37,99,235,0.08);
   --color-info-border:    rgba(37,99,235,0.2);
 
-  --color-text-primary:   #18181b;
-  --color-text-secondary: #52525b;
-  --color-text-muted:     #71717a;
-  --color-text-faint:     #a1a1aa;
+  --color-text-primary:   #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-muted:     #6b7280;
+  --color-text-faint:     #9ca3af;
 
   --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', 'Fira Code', monospace;
