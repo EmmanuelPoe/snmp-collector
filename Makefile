@@ -53,6 +53,10 @@ up:
 	@echo "  App:         http://localhost"
 	@echo "  Manager API: http://localhost:8001"
 	@echo ""
+	@echo "Default credentials (first login only):"
+	@echo "  Email:    admin@localhost"
+	@echo "  Password: changeme  ← you will be prompted to change this"
+	@echo ""
 	@echo "View logs: make logs"
 	@echo "Stop application: make down"
 
