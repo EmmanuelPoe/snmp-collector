@@ -318,9 +318,9 @@ export default function DeviceManagement() {
                 <select className="select" value={formData.assigned_agent_id}
                   onChange={e => setFormData({ ...formData, assigned_agent_id: e.target.value })}>
                   <option value="">— Unassigned —</option>
-                  {agents.map(agent => (
+                  {[...agents].sort((a, b) => (a.status === 'online' ? -1 : 1) - (b.status === 'online' ? -1 : 1)).map(agent => (
                     <option key={agent.agent_id} value={agent.agent_id}>
-                      {agent.hostname} ({agent.agent_id})
+                      {agent.status === 'online' ? '● ' : '○ '}{agent.hostname} ({agent.agent_id})
                     </option>
                   ))}
                 </select>
