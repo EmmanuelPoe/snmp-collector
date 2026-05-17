@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getDevices, getAgents, getMetrics } from '../services/api';
 import {
-  AreaChart, Area, BarChart, Bar,
+  LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
 } from 'recharts';
+
+const DEVICE_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
+const TIME_RANGES = [{ label: '1h', hours: 1 }, { label: '6h', hours: 6 }, { label: '24h', hours: 24 }];
 
 const STATUS_BADGE = {
   online:   'badge-success',
@@ -40,24 +43,31 @@ export default function Dashboard() {
   const [events, setEvents] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [trafficHours, setTrafficHours] = useState(1);
+  const [deviceNames, setDeviceNames] = useState([]);
 
   const loadData = useCallback(async () => {
     try {
-      const [devicesRes, agentsRes, metricsRes] = await Promise.all([
+      const [devicesRes, agentsRes] = await Promise.all([
         getDevices(),
         getAgents().catch(() => []),
-        getMetrics({ limit: 100 }).catch(() => []),
       ]);
       setDevices(devicesRes);
       setAgents(agentsRes);
-      setTrafficData(buildTrafficSeries(metricsRes));
+      const ratesResults = await Promise.all(
+        devicesRes.map(d => getInterfaceRates(d.id, trafficHours).catch(() => null))
+      );
+      const ratesMap = {};
+      devicesRes.forEach((d, i) => { if (ratesResults[i]) ratesMap[d.name] = ratesResults[i]; });
+      setDeviceNames(devicesRes.map(d => d.name));
+      setTrafficData(buildPerDeviceSeries(ratesMap));
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [trafficHours]);
 
   useEffect(() => {
     loadData();
@@ -139,29 +149,25 @@ export default function Dashboard() {
 
       <div className="charts-row">
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div className="chart-title">Network Traffic · Recent</div>
-            <div className="chart-legend">
-              <span><span className="legend-line" style={{ background: '#fbbf24' }} />In</span>
-              <span><span className="legend-line" style={{ background: '#52525b' }} />Out</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div className="chart-title">Network Traffic · Per Device</div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {TIME_RANGES.map(({ label, hours }) => (
+                <button key={label} onClick={() => setTrafficHours(hours)} style={{ background: trafficHours === hours ? 'var(--color-accent)' : 'var(--color-bg)', color: trafficHours === hours ? '#fff' : 'var(--color-text-muted)', border: `1px solid ${trafficHours === hours ? 'var(--color-accent)' : 'var(--color-border)'}`, padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>{label}</button>
+              ))}
             </div>
           </div>
-          {trafficData.length > 0 ? (
+          {trafficData.length > 0 && deviceNames.length > 0 ? (
             <ResponsiveContainer width="100%" height={90}>
-              <AreaChart data={trafficData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="inGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f1f24" vertical={false} />
-                <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#3f3f46', fontFamily: 'IBM Plex Mono' }} tickLine={false} axisLine={false} />
+              <LineChart data={trafficData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'var(--color-text-faint)', fontFamily: 'IBM Plex Mono' }} tickLine={false} axisLine={false} />
                 <YAxis hide />
-                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={v => formatBytes(v)} />
-                <Area type="monotone" dataKey="inOctets" stroke="#fbbf24" strokeWidth={1.5} fill="url(#inGrad)" dot={false} name="In" />
-                <Area type="monotone" dataKey="outOctets" stroke="#52525b" strokeWidth={1.5} fill="none" dot={false} name="Out" strokeDasharray="4 2" />
-              </AreaChart>
+                <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 11 }} formatter={v => formatBytes(v)} />
+                {deviceNames.map((name, i) => (
+                  <Line key={name} type="monotone" dataKey={name} stroke={DEVICE_COLORS[i % DEVICE_COLORS.length]} strokeWidth={1.5} dot={false} connectNulls />
+                ))}
+              </LineChart>
             </ResponsiveContainer>
           ) : (
             <div style={{ height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -225,19 +231,18 @@ export default function Dashboard() {
   );
 }
 
-function buildTrafficSeries(metrics) {
-  const inKey = 'ifInOctets';
-  const outKey = 'ifOutOctets';
-
+function buildPerDeviceSeries(ratesMap) {
   const buckets = {};
-  metrics.forEach(m => {
-    if (!m.timestamp) return;
-    const ts = new Date(m.timestamp);
-    const bucket = `${ts.getHours()}:${String(ts.getMinutes()).padStart(2, '0')}`;
-    if (!buckets[bucket]) buckets[bucket] = { time: bucket, inOctets: 0, outOctets: 0 };
-    if (m.oid_name === inKey)  buckets[bucket].inOctets  += (m.value || 0);
-    if (m.oid_name === outKey) buckets[bucket].outOctets += (m.value || 0);
-  });
-
-  return Object.values(buckets).slice(-20);
+  for (const [deviceName, ratesData] of Object.entries(ratesMap)) {
+    if (!ratesData?.interfaces) continue;
+    for (const ifaceData of Object.values(ratesData.interfaces)) {
+      for (const pt of (ifaceData.sparkline || [])) {
+        const d = new Date(pt.timestamp);
+        const bucket = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+        if (!buckets[bucket]) buckets[bucket] = { time: bucket };
+        buckets[bucket][deviceName] = (buckets[bucket][deviceName] || 0) + pt.in_bps + pt.out_bps;
+      }
+    }
+  }
+  return Object.values(buckets).sort((a, b) => a.time.localeCompare(b.time));
 }

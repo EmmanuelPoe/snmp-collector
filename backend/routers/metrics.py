@@ -100,11 +100,12 @@ def get_available_metrics(
 @router.get("/rates/{device_id}")
 def get_interface_rates(
     device_id: int,
+    hours: float = 1.0,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     device_ip = _device_ip(device_id, db)
-    return _manager_get("/rates", {"device_ip": device_ip})
+    return _manager_get("/rates", {"device_ip": device_ip, "hours": hours})
 
 
 @router.get("/stats/{device_id}/{interface_name}")
