@@ -112,6 +112,14 @@ export const changePassword = async (currentPassword, newPassword) => {
         new_password: newPassword,
     });
 };
+export const getUsers = async () => {
+    const response = await api.get('/auth/users');
+    return response.data;
+};
+export const registerUser = async (email, password, role) => {
+    const response = await api.post('/auth/register', { email, password, role });
+    return response.data;
+};
 
 // ===== Health Check =====
 export const healthCheck = async () => {

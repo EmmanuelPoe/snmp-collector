@@ -32,6 +32,7 @@ class UserResponse(BaseModel):
     email: str
     role: str
     is_active: bool
+    force_password_change: bool
 
     class Config:
         from_attributes = True
@@ -74,6 +75,14 @@ def register(
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.get("/users", response_model=list[UserResponse])
+def list_users(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    return db.query(User).order_by(User.id).all()
 
 
 @router.get("/me", response_model=UserResponse)

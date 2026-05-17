@@ -7,6 +7,7 @@ import ConfigurationManager from './components/ConfigurationManager';
 import AgentsPage from './components/AgentsPage';
 import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import UserManagementPage from './pages/UserManagementPage';
 import PrivateRoute from './components/PrivateRoute';
 import Sidebar from './components/Sidebar';
 import { ToastProvider } from './hooks/useToast';
@@ -24,6 +25,7 @@ function AppShell() {
             <Route path="/metrics" element={<PrivateRoute><DeviceMetrics /></PrivateRoute>} />
             <Route path="/agents" element={<PrivateRoute><AgentsPage /></PrivateRoute>} />
             <Route path="/config" element={<PrivateRoute><ConfigurationManager /></PrivateRoute>} />
+            <Route path="/users" element={<PrivateRoute><UserManagementPage /></PrivateRoute>} />
           </Routes>
         </div>
       </div>

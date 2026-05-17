@@ -2,22 +2,19 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-const NAV_SECTIONS = [
-  {
-    label: 'Monitor',
-    items: [
-      { to: '/',        icon: '◈', label: 'Dashboard' },
-      { to: '/devices', icon: '◻', label: 'Devices' },
-      { to: '/metrics', icon: '▦', label: 'Metrics' },
-      { to: '/agents',  icon: '◎', label: 'Agents' },
-    ],
-  },
-  {
-    label: 'Manage',
-    items: [
-      { to: '/config', icon: '⊞', label: 'Configuration' },
-    ],
-  },
+const MONITOR_ITEMS = [
+  { to: '/',        icon: '◈', label: 'Dashboard' },
+  { to: '/devices', icon: '◻', label: 'Devices' },
+  { to: '/metrics', icon: '▦', label: 'Metrics' },
+  { to: '/agents',  icon: '◎', label: 'Agents' },
+];
+
+const MANAGE_ITEMS = [
+  { to: '/config', icon: '⊞', label: 'Configuration' },
+];
+
+const ADMIN_ITEMS = [
+  { to: '/users', icon: '◉', label: 'Users' },
 ];
 
 export default function Sidebar() {
@@ -29,6 +26,11 @@ export default function Sidebar() {
     navigate('/login');
   }
 
+  const sections = [
+    { label: 'Monitor', items: MONITOR_ITEMS },
+    { label: 'Manage', items: user?.role === 'admin' ? [...MANAGE_ITEMS, ...ADMIN_ITEMS] : MANAGE_ITEMS },
+  ];
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -37,7 +39,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        {NAV_SECTIONS.map(section => (
+        {sections.map(section => (
           <div key={section.label}>
             <div className="sidebar-section-label">{section.label}</div>
             {section.items.map(item => (
@@ -65,6 +67,9 @@ export default function Sidebar() {
             </div>
           </div>
         )}
+        <NavLink to="/change-password" className="sidebar-logout">
+          Change Password
+        </NavLink>
         <button className="sidebar-logout" onClick={handleLogout}>
           Sign out
         </button>

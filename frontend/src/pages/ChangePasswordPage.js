@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { changePassword } from '../services/api';
 
 export default function ChangePasswordPage() {
@@ -9,6 +9,8 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const forced = location.state?.forced ?? true;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -44,7 +46,7 @@ export default function ChangePasswordPage() {
       <div className="login-form-panel">
         <div className="login-form-card">
           <h2>Change Password</h2>
-          <p className="login-form-subtext">You must set a new password before continuing.</p>
+          {forced && <p className="login-form-subtext">You must set a new password before continuing.</p>}
 
           {error && <div className="alert alert-danger">{error}</div>}
 
