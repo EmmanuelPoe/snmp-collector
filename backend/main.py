@@ -1,6 +1,5 @@
 import json
 import logging
-import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -42,16 +41,15 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         if db.query(User).count() == 0:
-            temp_password = secrets.token_urlsafe(16)
             admin = User(
                 email="admin@localhost",
-                hashed_password=hash_password(temp_password),
+                hashed_password=hash_password("changeme"),
                 role=UserRole.admin,
                 force_password_change=True,
             )
             db.add(admin)
             db.commit()
-            logger.warning(f"Bootstrap admin created — temporary password: {temp_password} — change on first login")
+            logger.warning("Bootstrap admin created — login with admin@localhost / changeme and change your password")
     except OperationalError:
         pass  # table not yet created (e.g. test environment before migrations)
     finally:

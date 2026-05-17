@@ -34,7 +34,7 @@ setup:
 	@until docker-compose exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" >/dev/null 2>&1; do sleep 2; done
 	docker-compose exec -T backend alembic upgrade head
 	@echo ""
-	@echo "Ready at http://localhost  (admin@localhost / admin)"
+	@echo "Ready at http://localhost  (admin@localhost / changeme — you will be prompted to change your password)"
 
 # Build all containers
 build:

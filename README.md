@@ -50,11 +50,10 @@ This builds all containers, starts them, waits for the backend to be ready, and 
 
 Access the app at **http://localhost**.
 
-On first startup, a bootstrap admin account is created with a randomly generated temporary password printed to the backend log:
+On first startup, a bootstrap admin account is created:
 
-```bash
-make logs-backend | grep "Bootstrap admin"
-```
+- **Email:** `admin@localhost`
+- **Password:** `changeme`
 
 You will be prompted to set a new password on first login.
 
