@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getDevices, getAgents, getMetrics, getInterfaceRates } from '../services/api';
+import { getDevices, getAgents, getMetrics, getInterfaceRates, getAlerts } from '../services/api';
+import { useToast } from '../hooks/useToast';
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -37,6 +38,7 @@ const CHART_TOOLTIP_STYLE = {
 };
 
 export default function Dashboard() {
+  const { showToast } = useToast();
   const [devices, setDevices] = useState([]);
   const [agents, setAgents] = useState([]);
   const [trafficData, setTrafficData] = useState([]);
@@ -45,6 +47,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [trafficHours, setTrafficHours] = useState(1);
   const [deviceNames, setDeviceNames] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [prevAlertIds, setPrevAlertIds] = useState(new Set());
 
   const loadData = useCallback(async () => {
     try {
@@ -74,6 +78,27 @@ export default function Dashboard() {
     const iv = setInterval(loadData, 30000);
     return () => clearInterval(iv);
   }, [loadData]);
+
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const data = await getAlerts();
+        setAlerts(data);
+        const newIds = new Set(data.map(a => a.id));
+        setPrevAlertIds(prev => {
+          data.forEach(a => {
+            if (!prev.has(a.id)) showToast(a.message, 'error');
+          });
+          return newIds;
+        });
+      } catch {
+        // non-fatal
+      }
+    };
+    poll();
+    const iv = setInterval(poll, 30000);
+    return () => clearInterval(iv);
+  }, [showToast]);
 
   useEffect(() => {
     if (agents.length === 0) return;
@@ -191,6 +216,30 @@ export default function Dashboard() {
       </div>
 
       <div className="detail-row">
+        <div className="card">
+          <div className="chart-title">Active Alerts</div>
+          {alerts.length === 0 ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 8 }}>
+              <span style={{ color: 'var(--color-success)', fontSize: 14 }}>✓</span>
+              <span className="text-faint text-xs">All clear</span>
+            </div>
+          ) : (
+            alerts.map(alert => (
+              <div key={alert.id} className="agent-row">
+                <div>
+                  <div className="agent-name" style={{ color: 'var(--color-error)', fontSize: 12 }}>
+                    {alert.alert_type.replace(/_/g, ' ')}
+                  </div>
+                  <div className="agent-meta">{alert.message}</div>
+                </div>
+                <span className="text-faint text-xs">
+                  {Math.round((Date.now() - new Date(alert.triggered_at)) / 60000)}m ago
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+
         <div className="card">
           <div className="chart-title">Agent Status</div>
           {agents.length === 0 ? (
