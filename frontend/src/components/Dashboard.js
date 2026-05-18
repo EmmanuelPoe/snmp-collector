@@ -48,7 +48,7 @@ export default function Dashboard() {
   const [trafficHours, setTrafficHours] = useState(1);
   const [deviceNames, setDeviceNames] = useState([]);
   const [alerts, setAlerts] = useState([]);
-  const [prevAlertIds, setPrevAlertIds] = useState(new Set());
+  const prevAlertIds = React.useRef(new Set());
 
   const loadData = useCallback(async () => {
     try {
@@ -85,12 +85,10 @@ export default function Dashboard() {
         const data = await getAlerts();
         setAlerts(data);
         const newIds = new Set(data.map(a => a.id));
-        setPrevAlertIds(prev => {
-          data.forEach(a => {
-            if (!prev.has(a.id)) showToast(a.message, 'error');
-          });
-          return newIds;
+        data.forEach(a => {
+          if (!prevAlertIds.current.has(a.id)) showToast(a.message, 'error');
         });
+        prevAlertIds.current = newIds;
       } catch {
         // non-fatal
       }
