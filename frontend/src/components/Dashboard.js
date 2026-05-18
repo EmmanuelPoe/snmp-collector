@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getDevices, getAgents, getMetrics } from '../services/api';
+import { getDevices, getAgents, getMetrics, getInterfaceRates } from '../services/api';
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
