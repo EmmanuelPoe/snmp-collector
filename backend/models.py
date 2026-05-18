@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, Enum, Float
 from sqlalchemy.sql import func
 from database import Base
 
@@ -54,3 +54,39 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     force_password_change = Column(Boolean, nullable=False, server_default="true", default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AlertType(str, enum.Enum):
+    device_unreachable = "device_unreachable"
+    interface_down = "interface_down"
+    bandwidth_threshold = "bandwidth_threshold"
+    agent_offline = "agent_offline"
+
+
+class AlertStatus(str, enum.Enum):
+    open = "open"
+    resolved = "resolved"
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(Integer, nullable=True)
+    agent_id = Column(String(255), nullable=True)
+    alert_type = Column(Enum(AlertType), nullable=False)
+    message = Column(Text, nullable=False)
+    triggered_at = Column(DateTime(timezone=True), server_default=func.now())
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(Enum(AlertStatus), nullable=False, default=AlertStatus.open)
+
+
+class AlertRule(Base):
+    __tablename__ = "alert_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(Integer, nullable=False, unique=True)
+    bandwidth_in_pct = Column(Float, nullable=True)
+    bandwidth_out_pct = Column(Float, nullable=True)
+    error_rate = Column(Float, nullable=True)
+    enabled = Column(Boolean, default=True, nullable=False)

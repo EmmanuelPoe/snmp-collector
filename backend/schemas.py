@@ -109,3 +109,36 @@ class CollectionConfigResponse(CollectionConfigBase):
 
     class Config:
         from_attributes = True
+
+
+class AlertResponse(BaseModel):
+    id: int
+    device_id: Optional[int] = None
+    agent_id: Optional[str] = None
+    alert_type: str
+    message: str
+    triggered_at: datetime
+    resolved_at: Optional[datetime] = None
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
+class AlertCountResponse(BaseModel):
+    open: int
+
+
+class AlertRuleCreate(BaseModel):
+    bandwidth_in_pct: Optional[float] = Field(None, ge=0, le=100)
+    bandwidth_out_pct: Optional[float] = Field(None, ge=0, le=100)
+    error_rate: Optional[float] = Field(None, ge=0)
+    enabled: bool = True
+
+
+class AlertRuleResponse(AlertRuleCreate):
+    id: int
+    device_id: int
+
+    class Config:
+        from_attributes = True
