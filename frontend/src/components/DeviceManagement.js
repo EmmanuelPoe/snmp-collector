@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDevices, createDevice, updateDevice, deleteDevice, getModules, getAgents, getDeviceCredentials } from '../services/api';
+import { getDevices, createDevice, updateDevice, deleteDevice, getModules, getAgents, getDeviceCredentials, getAlertRules, saveAlertRules } from '../services/api';
 import { useToast } from '../hooks/useToast';
 
 export default function DeviceManagement() {
@@ -21,6 +21,8 @@ export default function DeviceManagement() {
     username: '', auth_protocol: 'SHA', auth_password: '',
     priv_protocol: 'AES', priv_password: '', assigned_agent_id: '',
   });
+
+  const [thresholds, setThresholds] = useState({ bandwidth_in_pct: '', bandwidth_out_pct: '', error_rate: '', enabled: true });
 
   useEffect(() => { loadData(); }, []);
 
@@ -50,12 +52,24 @@ export default function DeviceManagement() {
         payload.auth_password = null; payload.priv_protocol = null; payload.priv_password = null;
       }
       if (!payload.assigned_agent_id) payload.assigned_agent_id = null;
+      let savedDevice;
       if (editingDevice) {
-        await updateDevice(editingDevice.id, payload);
+        savedDevice = await updateDevice(editingDevice.id, payload);
         showToast(`Device "${payload.name}" updated`, 'success');
       } else {
-        await createDevice(payload);
+        savedDevice = await createDevice(payload);
         showToast(`Device "${payload.name}" created`, 'success');
+      }
+      const hasThreshold = thresholds.bandwidth_in_pct !== '' ||
+        thresholds.bandwidth_out_pct !== '' ||
+        thresholds.error_rate !== '';
+      if (hasThreshold) {
+        await saveAlertRules(savedDevice.id, {
+          bandwidth_in_pct: thresholds.bandwidth_in_pct !== '' ? Number(thresholds.bandwidth_in_pct) : null,
+          bandwidth_out_pct: thresholds.bandwidth_out_pct !== '' ? Number(thresholds.bandwidth_out_pct) : null,
+          error_rate: thresholds.error_rate !== '' ? Number(thresholds.error_rate) : null,
+          enabled: thresholds.enabled,
+        });
       }
       setShowModal(false);
       resetForm();
@@ -77,6 +91,7 @@ export default function DeviceManagement() {
       priv_protocol: 'AES', priv_password: '',
       assigned_agent_id: device.assigned_agent_id || '',
     });
+    setThresholds({ bandwidth_in_pct: '', bandwidth_out_pct: '', error_rate: '', enabled: true });
     setShowModal(true);
     try {
       const creds = await getDeviceCredentials(device.id);
@@ -88,7 +103,18 @@ export default function DeviceManagement() {
         priv_protocol: creds.priv_protocol || 'AES',
       }));
     } catch {
-      // non-fatal: user can re-enter credentials manually
+      // non-fatal
+    }
+    try {
+      const rules = await getAlertRules(device.id);
+      setThresholds({
+        bandwidth_in_pct: rules.bandwidth_in_pct ?? '',
+        bandwidth_out_pct: rules.bandwidth_out_pct ?? '',
+        error_rate: rules.error_rate ?? '',
+        enabled: rules.enabled ?? true,
+      });
+    } catch {
+      // 404 means no rules yet — leave defaults
     }
   };
 
@@ -116,6 +142,7 @@ export default function DeviceManagement() {
       username: '', auth_protocol: 'SHA', auth_password: '',
       priv_protocol: 'AES', priv_password: '', assigned_agent_id: '',
     });
+    setThresholds({ bandwidth_in_pct: '', bandwidth_out_pct: '', error_rate: '', enabled: true });
   };
 
   const filtered = devices
@@ -347,6 +374,50 @@ export default function DeviceManagement() {
                     onChange={e => setFormData({ ...formData, enabled: e.target.checked })} />
                   <span className="form-label" style={{ margin: 0 }}>Enabled</span>
                 </label>
+              </div>
+              <div style={{ marginTop: 20, borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
+                <div className="form-section-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                  Alert Thresholds (optional)
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Bandwidth In (%)</label>
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="e.g. 80"
+                      value={thresholds.bandwidth_in_pct}
+                      onChange={e => setThresholds(prev => ({ ...prev, bandwidth_in_pct: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Bandwidth Out (%)</label>
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="e.g. 80"
+                      value={thresholds.bandwidth_out_pct}
+                      onChange={e => setThresholds(prev => ({ ...prev, bandwidth_out_pct: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Error Rate (errors/min)</label>
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 10"
+                      value={thresholds.error_rate}
+                      onChange={e => setThresholds(prev => ({ ...prev, error_rate: e.target.value }))}
+                    />
+                  </div>
+                </div>
               </div>
               <div className="action-buttons">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
