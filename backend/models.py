@@ -78,7 +78,7 @@ class Alert(Base):
     message = Column(Text, nullable=False)
     triggered_at = Column(DateTime(timezone=True), server_default=func.now())
     resolved_at = Column(DateTime(timezone=True), nullable=True)
-    status = Column(Enum(AlertStatus), nullable=False, default=AlertStatus.open)
+    status = Column(Enum(AlertStatus), nullable=False, default=AlertStatus.open, server_default="open")
 
 
 class AlertRule(Base):
