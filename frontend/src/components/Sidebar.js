@@ -1,30 +1,46 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-
-const MONITOR_ITEMS = [
-  { to: '/',        icon: '◈', label: 'Dashboard' },
-  { to: '/devices', icon: '◻', label: 'Devices' },
-  { to: '/metrics', icon: '▦', label: 'Metrics' },
-  { to: '/agents',  icon: '◎', label: 'Agents' },
-];
-
-const MANAGE_ITEMS = [
-  { to: '/config', icon: '⊞', label: 'Configuration' },
-];
-
-const ADMIN_ITEMS = [
-  { to: '/users', icon: '◉', label: 'Users' },
-];
+import { getAlertCount } from '../services/api';
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const data = await getAlertCount();
+        setAlertCount(data.open);
+      } catch {
+        // non-fatal
+      }
+    };
+    poll();
+    const iv = setInterval(poll, 30000);
+    return () => clearInterval(iv);
+  }, []);
 
   function handleLogout() {
     logout();
     navigate('/login');
   }
+
+  const MONITOR_ITEMS = [
+    { to: '/',        icon: '◈', label: 'Dashboard' },
+    { to: '/devices', icon: '◻', label: 'Devices' },
+    { to: '/metrics', icon: '▦', label: 'Metrics' },
+    { to: '/agents',  icon: '◎', label: 'Agents' },
+  ];
+
+  const MANAGE_ITEMS = [
+    { to: '/config', icon: '⊞', label: 'Configuration' },
+  ];
+
+  const ADMIN_ITEMS = [
+    { to: '/users', icon: '◉', label: 'Users' },
+  ];
 
   const sections = [
     { label: 'Monitor', items: MONITOR_ITEMS },
@@ -51,6 +67,20 @@ export default function Sidebar() {
               >
                 <span className="nav-icon">{item.icon}</span>
                 {item.label}
+                {item.to === '/' && alertCount > 0 && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    background: 'var(--color-error)',
+                    color: '#fff',
+                    borderRadius: 10,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    lineHeight: '16px',
+                  }}>
+                    {alertCount}
+                  </span>
+                )}
               </NavLink>
             ))}
           </div>
