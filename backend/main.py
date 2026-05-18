@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -7,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy.exc import OperationalError
 
+from alert_evaluator import evaluation_loop
 from auth import hash_password
 from config import settings
 from database import SessionLocal
@@ -52,10 +54,16 @@ async def lifespan(app: FastAPI):
             db.commit()
             logger.warning("Bootstrap admin created — login with admin@localhost / changeme and change your password")
     except OperationalError:
-        pass  # table not yet created (e.g. test environment before migrations)
+        pass
     finally:
         db.close()
+    task = asyncio.create_task(evaluation_loop())
     yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
