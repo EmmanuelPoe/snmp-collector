@@ -133,4 +133,27 @@ export const getAgents = async () => {
     return response.data;
 };
 
+// ===== Alerts =====
+export const getAlerts = async (includeResolved = false) => {
+    const response = await api.get('/alerts', { params: { include_resolved: includeResolved } });
+    return response.data;
+};
+export const getAlertCount = async () => {
+    const response = await api.get('/alerts/count');
+    return response.data;
+};
+export const resolveAlert = async (alertId) => {
+    const response = await api.put(`/alerts/${alertId}/resolve`);
+    return response.data;
+};
+export const getAlertRules = async (deviceId) => {
+    const response = await api.get(`/alert-rules/${deviceId}`);
+    return response.data;
+};
+export const saveAlertRules = async (deviceId, rules) => {
+    const response = await api.post(`/alert-rules/${deviceId}`, rules);
+    return response.data;
+};
+
 export default api;
+
