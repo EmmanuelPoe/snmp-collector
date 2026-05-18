@@ -32,12 +32,16 @@ export default function AgentsPage() {
     }
   };
 
+  const STATUS_ORDER = { online: 0, degraded: 1, offline: 2 };
+
   const filtered = agents
     .filter(a =>
       (a.hostname || '').toLowerCase().includes(search.toLowerCase()) ||
       (a.ip || '').includes(search)
     )
     .sort((a, b) => {
+      const statusDiff = (STATUS_ORDER[a.status] ?? 3) - (STATUS_ORDER[b.status] ?? 3);
+      if (statusDiff !== 0) return statusDiff;
       const valA = (a[sort.col] || '').toString().toLowerCase();
       const valB = (b[sort.col] || '').toString().toLowerCase();
       return sort.dir === 'asc'

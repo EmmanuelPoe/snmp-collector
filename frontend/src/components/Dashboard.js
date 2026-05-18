@@ -196,7 +196,10 @@ export default function Dashboard() {
           {agents.length === 0 ? (
             <p className="text-faint text-xs" style={{ paddingTop: 8 }}>No agents registered.</p>
           ) : (
-            agents.map(agent => (
+            [...agents].sort((a, b) => {
+              const order = { online: 0, degraded: 1, offline: 2 };
+              return (order[a.status] ?? 3) - (order[b.status] ?? 3);
+            }).map(agent => (
               <div className="agent-row" key={agent.agent_id}>
                 <div>
                   <div className="agent-name">{agent.hostname || agent.agent_id}</div>
