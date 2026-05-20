@@ -71,3 +71,17 @@ def test_delete_slot_proxies_to_manager(client, admin_headers, respx_mock):
     )
     resp = client.delete("/agents/slots/abc-123", headers=admin_headers)
     assert resp.status_code == 204
+
+
+def test_create_slot_manager_down_returns_503(client, admin_headers, respx_mock):
+    import httpx
+    respx_mock.post("http://manager:8000/slots").mock(side_effect=httpx.RequestError("down"))
+    resp = client.post("/agents/slots", json={"label": "test"}, headers=admin_headers)
+    assert resp.status_code == 503
+
+
+def test_delete_slot_manager_down_returns_503(client, admin_headers, respx_mock):
+    import httpx
+    respx_mock.delete("http://manager:8000/slots/abc").mock(side_effect=httpx.RequestError("down"))
+    resp = client.delete("/agents/slots/abc", headers=admin_headers)
+    assert resp.status_code == 503

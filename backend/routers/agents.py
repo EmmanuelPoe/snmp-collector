@@ -43,10 +43,11 @@ async def delete_slot(slot_id: str, current_user: User = Depends(get_current_use
         raise HTTPException(status_code=403, detail="Admin only")
     async with httpx.AsyncClient() as client:
         try:
-            await client.delete(
+            resp = await client.delete(
                 f"{settings.manager_url}/slots/{slot_id}",
                 headers={"Authorization": f"Bearer {settings.manager_api_key}"},
                 timeout=5.0,
             )
+            resp.raise_for_status()
         except httpx.RequestError:
             raise HTTPException(status_code=503, detail="Manager unavailable")
