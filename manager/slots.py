@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import secrets
 import uuid
@@ -6,6 +7,8 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import config
+
+log = logging.getLogger(__name__)
 
 
 class Slot:
@@ -32,14 +35,20 @@ class Slot:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Slot":
+        def _parse_dt(s: str) -> datetime:
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+
         slot = cls(
             slot_id=d["slot_id"],
             label=d["label"],
             token=d["token"],
-            expires_at=datetime.fromisoformat(d["expires_at"]),
+            expires_at=_parse_dt(d["expires_at"]),
         )
         slot.status = d["status"]
-        slot.created_at = datetime.fromisoformat(d["created_at"])
+        slot.created_at = _parse_dt(d["created_at"])
         return slot
 
 
@@ -93,8 +102,12 @@ class SlotStore:
         path = Path(config.settings.slots_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps([s.to_dict() for s in self._slots.values()], indent=2))
-        os.replace(tmp, path)
+        try:
+            tmp.write_text(json.dumps([s.to_dict() for s in self._slots.values()], indent=2))
+            os.replace(tmp, path)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
 
     def _load(self) -> None:
         path = Path(config.settings.slots_path)
@@ -105,8 +118,8 @@ class SlotStore:
                 slot = Slot.from_dict(d)
                 if not slot.is_expired():
                     self._slots[slot.slot_id] = slot
-        except (json.JSONDecodeError, KeyError, ValueError):
-            pass
+        except (json.JSONDecodeError, KeyError, ValueError) as exc:
+            log.warning("Failed to load slots from %s: %s", path, exc)
 
 
 slot_store = SlotStore()
