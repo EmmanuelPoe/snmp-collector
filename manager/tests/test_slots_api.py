@@ -80,3 +80,37 @@ def test_pending_slots_appear_in_agent_list(client, auth_headers):
     pending = [a for a in agents if a["status"] == "pending"]
     assert len(pending) == 1
     assert pending[0]["hostname"] == "pending agent"
+
+
+def test_claim_no_auth_succeeds_with_valid_token(client, auth_headers, mock_backend_empty):
+    """claim endpoint should not require API key — the claim token is the credential."""
+    create = client.post("/slots", json={"label": "test"}, headers=auth_headers)
+    token = create.json()["token"]
+    resp = client.post(
+        "/claim",
+        json={"token": token, "hostname": "host", "ip": "1.2.3.4"},
+        # no auth headers
+    )
+    assert resp.status_code == 200
+
+
+def test_claim_expired_token_returns_404(client, auth_headers):
+    """Expired claim tokens should be rejected."""
+    from datetime import datetime, timezone, timedelta
+    create = client.post("/slots", json={"label": "expiring"}  , headers=auth_headers)
+    slot_id = create.json()["slot_id"]
+    token = create.json()["token"]
+    import slots as slots_mod
+    slots_mod.slot_store._slots[slot_id].expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    resp = client.post(
+        "/claim",
+        json={"token": token, "hostname": "host", "ip": "1.2.3.4"},
+    )
+    assert resp.status_code == 404
+
+
+def test_install_command_does_not_contain_api_key(client, auth_headers):
+    """The install command must never expose the actual MANAGER_API_KEY."""
+    resp = client.post("/slots", json={"label": "test"}, headers=auth_headers)
+    cmd = resp.json()["install_command"]
+    assert "test-key" not in cmd  # test-key is the MANAGER_API_KEY in tests

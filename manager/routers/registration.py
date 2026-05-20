@@ -17,7 +17,7 @@ async def register(req: RegisterRequest, _: str = Depends(require_api_key)):
 
 
 @router.post("/claim", response_model=ClaimResponse)
-async def claim(req: ClaimRequest, _: str = Depends(require_api_key)):
+async def claim(req: ClaimRequest):
     try:
         agent_id = slot_store.claim(req.token, req.hostname, req.ip)
     except KeyError:

@@ -14,7 +14,7 @@ def create_slot(req: SlotCreateRequest, _: str = Depends(require_api_key)):
         f"docker run -d --name snmp-agent \\\n"
         f"  -v snmp-agent-data:/data \\\n"
         f"  -e MANAGER_URL={config.settings.manager_public_url} \\\n"
-        f"  -e MANAGER_API_KEY={config.settings.manager_api_key} \\\n"
+        f"  -e MANAGER_API_KEY=<your-manager-api-key> \\\n"
         f"  -e CLAIM_TOKEN={slot.token} \\\n"
         f"  snmp-collector-agent:latest"
     )
