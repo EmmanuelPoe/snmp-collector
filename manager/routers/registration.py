@@ -56,6 +56,13 @@ def internal_list_agents():
     return _agent_list()
 
 
+@router.delete("/agents", status_code=204)
+def deregister_offline(_: str = Depends(require_api_key)):
+    offline_ids = [a.agent_id for a in registry.all() if a.status == "offline"]
+    for agent_id in offline_ids:
+        registry.deregister(agent_id)
+
+
 @router.delete("/agents/{agent_id}", status_code=204)
 def deregister_agent(agent_id: str, _: str = Depends(require_api_key)):
     if not registry.get(agent_id):

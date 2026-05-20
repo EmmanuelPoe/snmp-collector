@@ -37,6 +37,22 @@ async def create_slot(body: dict, current_user: User = Depends(get_current_user)
             raise HTTPException(status_code=503, detail="Manager unavailable")
 
 
+@router.delete("", status_code=204)
+async def deregister_offline_agents(current_user: User = Depends(get_current_user)):
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.delete(
+                f"{settings.manager_url}/agents",
+                headers={"Authorization": f"Bearer {settings.manager_api_key}"},
+                timeout=5.0,
+            )
+            resp.raise_for_status()
+        except httpx.RequestError:
+            raise HTTPException(status_code=503, detail="Manager unavailable")
+
+
 @router.delete("/slots/{slot_id}", status_code=204)
 async def delete_slot(slot_id: str, current_user: User = Depends(get_current_user)):
     if current_user.role != UserRole.admin:
