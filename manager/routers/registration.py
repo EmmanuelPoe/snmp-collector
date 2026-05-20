@@ -1,7 +1,9 @@
 import httpx
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from models import RegisterRequest, RegisterResponse, HeartbeatRequest, DeviceConfig
-from registry import registry
+from models import RegisterRequest, RegisterResponse, HeartbeatRequest, DeviceConfig, ClaimRequest, ClaimResponse
+from registry import registry, AgentInfo
+from slots import slot_store
 from auth import require_api_key
 import config
 
@@ -12,6 +14,20 @@ router = APIRouter(tags=["registration"])
 async def register(req: RegisterRequest, _: str = Depends(require_api_key)):
     agent_id = registry.register(req.hostname, req.ip)
     return RegisterResponse(agent_id=agent_id, devices=await _devices_for(agent_id))
+
+
+@router.post("/claim", response_model=ClaimResponse)
+async def claim(req: ClaimRequest, _: str = Depends(require_api_key)):
+    try:
+        agent_id = slot_store.claim(req.token, req.hostname, req.ip)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Token not found or expired")
+    info = AgentInfo(agent_id, req.hostname, req.ip)
+    info.last_seen = datetime.now(timezone.utc)
+    registry._agents[agent_id] = info
+    registry._persist()
+    devices = await _devices_for(agent_id)
+    return ClaimResponse(agent_id=agent_id, devices=devices)
 
 
 @router.post("/heartbeat")
@@ -48,7 +64,7 @@ def deregister_agent(agent_id: str, _: str = Depends(require_api_key)):
 
 
 def _agent_list() -> list[dict]:
-    return [
+    agents = [
         {
             "agent_id": a.agent_id,
             "hostname": a.hostname,
@@ -59,6 +75,19 @@ def _agent_list() -> list[dict]:
         }
         for a in registry.all()
     ]
+    pending = [
+        {
+            "agent_id": s.slot_id,
+            "hostname": s.label,
+            "ip": "",
+            "status": "pending",
+            "last_seen": None,
+            "pending_uploads": 0,
+            "slot_id": s.slot_id,
+        }
+        for s in slot_store.all()
+    ]
+    return agents + pending
 
 
 async def _devices_for(agent_id: str) -> list[DeviceConfig]:

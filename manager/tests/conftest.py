@@ -13,6 +13,7 @@ def patch_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("MANAGER_API_KEY", "test-key")
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("REGISTRY_PATH", str(tmp_path / "registry.json"))
+    monkeypatch.setenv("SLOTS_PATH", str(tmp_path / "slots.json"))
     monkeypatch.setenv("DEAD_LETTER_PATH", str(tmp_path / "dead-letter"))
     monkeypatch.setenv("BACKEND_URL", "http://backend-mock:8000")
     import config
@@ -35,7 +36,14 @@ def reset_registry():
     reg_mod.registry._agents.clear()
 
 @pytest.fixture
-def client(patch_settings, reset_db, reset_registry):
+def reset_slots():
+    import slots as slots_mod
+    slots_mod.slot_store._slots.clear()
+    yield
+    slots_mod.slot_store._slots.clear()
+
+@pytest.fixture
+def client(patch_settings, reset_db, reset_registry, reset_slots):
     from main import app
     with TestClient(app) as c:
         yield c
