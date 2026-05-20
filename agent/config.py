@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     manager_api_key: str
     agent_hostname: str = socket.gethostname()
     agent_ip: str = ""
+    claim_token: str = ""
     poll_interval_seconds: int = 60
     upload_max_rows: int = 500
     upload_max_age_seconds: int = 60

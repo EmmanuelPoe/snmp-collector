@@ -33,20 +33,34 @@ _buffer: UploadBuffer | None = None
 
 async def _register() -> str:
     id_file = Path(config.settings.agent_id_path)
+
     if id_file.exists():
         stored = id_file.read_text().strip()
-        async with httpx.AsyncClient() as client:
+        log.info("Reusing stored agent_id: %s", stored)
+        return stored
+
+    if config.settings.claim_token:
+        while True:
             try:
-                resp = await client.get(
-                    f"{config.settings.manager_url}/config/{stored}",
-                    headers={"Authorization": f"Bearer {config.settings.manager_api_key}"},
-                    timeout=10.0,
-                )
-                if resp.status_code == 200:
-                    log.info("Reusing agent_id: %s", stored)
-                    return stored
-            except httpx.RequestError:
-                pass
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(
+                        f"{config.settings.manager_url}/claim",
+                        json={
+                            "token": config.settings.claim_token,
+                            "hostname": config.settings.agent_hostname,
+                            "ip": config.settings.agent_ip,
+                        },
+                        timeout=10.0,
+                    )
+                    resp.raise_for_status()
+                    agent_id = resp.json()["agent_id"]
+                    id_file.parent.mkdir(parents=True, exist_ok=True)
+                    id_file.write_text(agent_id)
+                    log.info("Claimed slot, registered as agent_id: %s", agent_id)
+                    return agent_id
+            except Exception as exc:
+                log.warning("Claim failed: %s — retrying in 10s", exc)
+                await asyncio.sleep(10)
 
     while True:
         try:
