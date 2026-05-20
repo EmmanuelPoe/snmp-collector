@@ -55,3 +55,26 @@ class DeviceResponse(BaseModel):
     assigned_agent_id: Optional[str]
     created_at: datetime
     last_polled_at: Optional[datetime]
+
+
+class SlotCreateRequest(BaseModel):
+    label: str
+
+
+class SlotResponse(BaseModel):
+    slot_id: str
+    label: str
+    token: str
+    expires_at: datetime
+    install_command: str
+
+
+class ClaimRequest(BaseModel):
+    token: str
+    hostname: str
+    ip: str
+
+
+class ClaimResponse(BaseModel):
+    agent_id: str
+    devices: list[DeviceConfig]
