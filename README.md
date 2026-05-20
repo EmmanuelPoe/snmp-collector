@@ -10,6 +10,8 @@ A distributed SNMP monitoring platform for network devices. Devices are managed 
 - **JWT authentication**: Role-based access control (admin / editor / viewer) with bcrypt password hashing. First login forces a password change.
 - **Interface metrics**: Per-interface traffic rates, octets, and status visible in the Metrics view.
 - **Agent visibility**: Agent registration, heartbeat status, and last-seen tracking in the Agents tab.
+- **Alerting**: Automatic alert detection every 30s — device unreachable, interface down, bandwidth threshold exceeded, agent offline. Active alerts appear on the dashboard with a sidebar badge and toast notifications for new alerts.
+- **Alert rules**: Per-device configurable thresholds for inbound/outbound bandwidth (%) and error rate. Set in the Device edit modal.
 - **End-to-End Simulation**: Built-in SNMP simulator container for testing without real hardware.
 
 ## Architecture
@@ -161,7 +163,8 @@ make dev-backend       # Run backend locally (uvicorn --reload)
 snmp-collector/
 ├── backend/                 # FastAPI (auth, devices, metrics, OID config, internal)
 │   ├── alembic/             # Database migrations
-│   ├── routers/             # auth, devices, metrics, config, agents, internal
+│   ├── routers/             # auth, devices, metrics, config, agents, alerts, alert-rules, internal
+│   ├── alert_evaluator.py   # Background task: checks conditions, writes/resolves alerts every 30s
 │   ├── tests/               # pytest suite
 │   ├── auth.py              # JWT, bcrypt, role enforcement
 │   └── main.py              # Bootstrap admin seed, app setup
@@ -190,6 +193,8 @@ snmp-collector/
 | `users` | Accounts with bcrypt passwords, roles, and `force_password_change` flag |
 | `devices` | Network devices — SNMP config, agent assignment (credentials excluded from list response) |
 | `collection_configs` | OID whitelist — name, description, enabled flag |
+| `alerts` | Active and resolved alerts — type, message, triggered/resolved timestamps, status |
+| `alert_rules` | Per-device bandwidth and error rate thresholds used by the alert evaluator |
 
 Metrics are stored in DuckDB (`data/db/metrics.db`) by the manager. The backend mounts this file read-only.
 
