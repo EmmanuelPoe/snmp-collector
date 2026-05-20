@@ -132,6 +132,16 @@ export const getAgents = async () => {
     const response = await api.get('/agents');
     return response.data;
 };
+export const createAgentSlot = async (label) => {
+    const response = await api.post('/agents/slots', { label });
+    return response.data;
+};
+export const deleteAgentSlot = async (slotId) => {
+    await api.delete(`/agents/slots/${slotId}`);
+};
+export const clearOfflineAgents = async () => {
+    await api.delete('/agents');
+};
 
 // ===== Alerts =====
 export const getAlerts = async (includeResolved = false) => {
