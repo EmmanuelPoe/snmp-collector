@@ -32,6 +32,7 @@ export default function Sidebar() {
     { to: '/devices', icon: '◻', label: 'Devices' },
     { to: '/metrics', icon: '▦', label: 'Metrics' },
     { to: '/agents',  icon: '◎', label: 'Agents' },
+    { to: '/traps',   icon: '⊿', label: 'Traps' },
   ];
 
   const MANAGE_ITEMS = [

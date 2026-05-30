@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     retry_max_age_seconds: int = 3600
     queue_path: str = "/data/queue"
     agent_id_path: str = "/data/agent_id"
+    trap_enabled: bool = False
+    trap_listen_port: int = 162
+    trap_community: str = "public"
 
     model_config = {"env_file": ".env"}
 

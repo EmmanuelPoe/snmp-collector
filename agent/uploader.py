@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
@@ -10,6 +11,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 import config
+
+log = logging.getLogger(__name__)
 
 
 class UploadBuffer:
@@ -86,6 +89,51 @@ class UploadBuffer:
             await self._upload_file(parquet_file, file_id)
 
 
+class TrapBuffer:
+    def __init__(self, agent_id: str):
+        self._agent_id = agent_id
+        self._rows: list[dict] = []
+        self._queue = Path(config.settings.queue_path) / "traps"
+        self._queue.mkdir(parents=True, exist_ok=True)
+
+    async def add(self, row: dict) -> None:
+        self._rows.append(row)
+        if len(self._rows) >= 50:
+            await self._flush()
+
+    async def flush(self) -> None:
+        await self._flush()
+
+    async def _flush(self) -> None:
+        if not self._rows:
+            return
+        rows, self._rows = self._rows, []
+        file_id = f"{uuid.uuid4().hex}_traps"
+        path = self._queue / f"{file_id}.parquet"
+        _write_traps_parquet(rows, path)
+        await self._upload_file(path, file_id)
+
+    async def _upload_file(self, path: Path, file_id: str) -> None:
+        sha256 = _sha256(path)
+        try:
+            async with httpx.AsyncClient() as client:
+                with open(path, "rb") as f:
+                    resp = await client.post(
+                        f"{config.settings.manager_url}/ingest",
+                        files={"file": (path.name, f, "application/octet-stream")},
+                        headers={
+                            "Authorization": f"Bearer {config.settings.manager_api_key}",
+                            "X-File-ID": file_id,
+                            "X-SHA256": sha256,
+                        },
+                        timeout=30.0,
+                    )
+                    resp.raise_for_status()
+            path.unlink(missing_ok=True)
+        except Exception as exc:
+            log.warning("Trap upload failed: %s", exc)
+
+
 def _write_parquet(rows: list[dict], path: Path) -> None:
     table = pa.table({
         "agent_id":       pa.array([r["agent_id"] for r in rows]),
@@ -96,6 +144,20 @@ def _write_parquet(rows: list[dict], path: Path) -> None:
         "value":          pa.array([r["value"] for r in rows]),
         "collected_at":   pa.array(
             [datetime.fromisoformat(r["collected_at"]) for r in rows],
+            type=pa.timestamp("us", tz="UTC"),
+        ),
+    })
+    pq.write_table(table, path)
+
+
+def _write_traps_parquet(rows: list[dict], path: Path) -> None:
+    table = pa.table({
+        "agent_id":    pa.array([r["agent_id"] for r in rows]),
+        "device_ip":   pa.array([r["device_ip"] for r in rows]),
+        "trap_oid":    pa.array([r["trap_oid"] for r in rows]),
+        "varbinds":    pa.array([r["varbinds"] for r in rows]),
+        "received_at": pa.array(
+            [datetime.fromisoformat(r["received_at"]) for r in rows],
             type=pa.timestamp("us", tz="UTC"),
         ),
     })

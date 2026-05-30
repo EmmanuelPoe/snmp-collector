@@ -9,7 +9,8 @@ import httpx
 import config
 from models import DeviceConfig
 from snmp import walk_device
-from uploader import UploadBuffer
+from trap_receiver import run_trap_listener
+from uploader import TrapBuffer, UploadBuffer
 
 
 class _JsonFormatter(logging.Formatter):
@@ -29,6 +30,7 @@ log = logging.getLogger(__name__)
 
 _agent_id: str | None = None
 _buffer: UploadBuffer | None = None
+_trap_buffer: TrapBuffer | None = None
 
 
 async def _register() -> str:
@@ -143,18 +145,31 @@ async def _retry_loop() -> None:
         await asyncio.sleep(60)
         await _buffer.flush_retry_queue()
         await _buffer.tick()
+        if _trap_buffer:
+            await _trap_buffer.flush()
+
+
+async def _trap_loop() -> None:
+    await run_trap_listener(_agent_id, _trap_buffer)
 
 
 async def main() -> None:
-    global _agent_id, _buffer
+    global _agent_id, _buffer, _trap_buffer
     _agent_id = await _register()
     _buffer = UploadBuffer(agent_id=_agent_id)
 
-    await asyncio.gather(
+    loops = [
         _heartbeat_loop(),
         _poll_loop(),
         _retry_loop(),
-    )
+    ]
+
+    if config.settings.trap_enabled:
+        _trap_buffer = TrapBuffer(agent_id=_agent_id)
+        loops.append(_trap_loop())
+        log.info("Trap ingestion enabled on port %d", config.settings.trap_listen_port)
+
+    await asyncio.gather(*loops)
 
 
 if __name__ == "__main__":

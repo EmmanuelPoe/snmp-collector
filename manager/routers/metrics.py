@@ -236,3 +236,40 @@ async def interface_history(
         for i in range(buckets)
     ]
     return {"series": series}
+
+
+@router.get("/traps")
+async def query_traps(
+    device_ip: Optional[str] = None,
+    trap_oid: Optional[str] = None,
+    hours: float = Query(default=24.0, gt=0, le=720),
+    limit: int = Query(default=200, le=1000),
+    _: str = Depends(require_api_key),
+):
+    cutoff = _dt.now(timezone.utc) - timedelta(hours=hours)
+    conditions = ["received_at >= ?"]
+    params: list = [cutoff]
+    if device_ip:
+        conditions.append("device_ip = ?")
+        params.append(device_ip)
+    if trap_oid:
+        conditions.append("trap_oid LIKE ?")
+        params.append(f"%{trap_oid}%")
+    params.append(limit)
+
+    rows = await query(
+        f"SELECT agent_id, device_ip, trap_oid, varbinds, received_at "
+        f"FROM snmp_traps WHERE {' AND '.join(conditions)} "
+        f"ORDER BY received_at DESC LIMIT ?",
+        params,
+    )
+    return [
+        {
+            "agent_id": r[0],
+            "device_ip": r[1],
+            "trap_oid": r[2],
+            "varbinds": r[3],
+            "received_at": r[4],
+        }
+        for r in rows
+    ]

@@ -5,6 +5,7 @@ import DeviceManagement from './components/DeviceManagement';
 import DeviceMetrics from './components/DeviceMetrics';
 import ConfigurationManager from './components/ConfigurationManager';
 import AgentsPage from './components/AgentsPage';
+import TrapsPage from './components/TrapsPage';
 import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import UserManagementPage from './pages/UserManagementPage';
@@ -24,6 +25,7 @@ function AppShell() {
             <Route path="/devices" element={<PrivateRoute><DeviceManagement /></PrivateRoute>} />
             <Route path="/metrics" element={<PrivateRoute><DeviceMetrics /></PrivateRoute>} />
             <Route path="/agents" element={<PrivateRoute><AgentsPage /></PrivateRoute>} />
+            <Route path="/traps" element={<PrivateRoute><TrapsPage /></PrivateRoute>} />
             <Route path="/config" element={<PrivateRoute><ConfigurationManager /></PrivateRoute>} />
             <Route path="/users" element={<PrivateRoute><UserManagementPage /></PrivateRoute>} />
           </Routes>
