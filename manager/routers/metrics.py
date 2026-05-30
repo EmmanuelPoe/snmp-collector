@@ -163,3 +163,76 @@ async def interface_rates(
         }
 
     return {"interfaces": interfaces}
+
+
+@router.get("/history")
+async def interface_history(
+    device_ip: str,
+    interface_name: str,
+    hours: float = Query(default=1.0, gt=0, le=168),
+    buckets: int = Query(default=60, ge=10, le=200),
+    _: str = Depends(require_api_key),
+):
+    cutoff = _dt.now(timezone.utc) - timedelta(hours=hours)
+    rows = await query(
+        "SELECT oid_name, TRY_CAST(value AS DOUBLE), collected_at "
+        "FROM snmp_polls "
+        "WHERE device_ip = ? AND interface_name = ? AND collected_at >= ? "
+        "  AND oid_name IN ('ifInOctets','ifOutOctets','ifHCInOctets','ifHCOutOctets','ifInErrors','ifOutErrors') "
+        "ORDER BY oid_name, collected_at ASC",
+        [device_ip, interface_name, cutoff],
+    )
+
+    oid_series: dict[str, list] = {}
+    for oid_name, value, ts in rows:
+        oid_series.setdefault(oid_name, []).append((value, ts))
+
+    def _rates(pts: list) -> list[tuple]:
+        result = []
+        for i in range(1, len(pts)):
+            v1, t1 = pts[i - 1]
+            v2, t2 = pts[i]
+            if v1 is None or v2 is None:
+                continue
+            dt_sec = (t2 - t1).total_seconds()
+            if dt_sec <= 0:
+                continue
+            delta = max(0.0, v2 - v1)
+            result.append((delta / dt_sec * 8, t2))  # bytes/s → bps
+        return result
+
+    in_pts = oid_series.get("ifHCInOctets") or oid_series.get("ifInOctets", [])
+    out_pts = oid_series.get("ifHCOutOctets") or oid_series.get("ifOutOctets", [])
+    in_rates = _rates(in_pts)
+    out_rates = _rates(out_pts)
+    in_err_rates = _rates(oid_series.get("ifInErrors", []))
+    out_err_rates = _rates(oid_series.get("ifOutErrors", []))
+
+    bucket_sec = (hours * 3600) / buckets
+    now = _dt.now(timezone.utc)
+
+    def _bucket(rate_pts: list, start: _dt, bsec: float, n: int) -> list:
+        result = []
+        for i in range(n):
+            b_start = start + timedelta(seconds=i * bsec)
+            b_end = b_start + timedelta(seconds=bsec)
+            vals = [v for v, t in rate_pts if b_start <= t < b_end]
+            result.append(sum(vals) / len(vals) if vals else None)
+        return result
+
+    in_b = _bucket(in_rates, cutoff, bucket_sec, buckets)
+    out_b = _bucket(out_rates, cutoff, bucket_sec, buckets)
+    in_err_b = _bucket(in_err_rates, cutoff, bucket_sec, buckets)
+    out_err_b = _bucket(out_err_rates, cutoff, bucket_sec, buckets)
+
+    series = [
+        {
+            "timestamp": (cutoff + timedelta(seconds=(i + 1) * bucket_sec)).isoformat(),
+            "in_bps": in_b[i],
+            "out_bps": out_b[i],
+            "in_errors": in_err_b[i],
+            "out_errors": out_err_b[i],
+        }
+        for i in range(buckets)
+    ]
+    return {"series": series}

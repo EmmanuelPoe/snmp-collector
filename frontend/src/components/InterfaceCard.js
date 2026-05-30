@@ -1,4 +1,5 @@
 import React from 'react';
+import InterfaceChart from './InterfaceChart';
 
 function formatBps(bps) {
     if (bps === null || bps === undefined) return '—';
@@ -8,38 +9,7 @@ function formatBps(bps) {
     return bps.toFixed(0) + ' bps';
 }
 
-function Sparkline({ sparkline, hasErrors }) {
-    if (!sparkline || sparkline.length === 0) {
-        return <div style={{ height: 48, background: 'rgba(0,0,0,0.15)', borderRadius: 4 }} />;
-    }
-    const maxVal = Math.max(...sparkline.map(p => Math.max(p.in_bps, p.out_bps)), 1);
-    return (
-        <>
-            <div style={{
-                height: 44, display: 'flex', alignItems: 'flex-end', gap: 1,
-                background: 'rgba(0,0,0,0.15)', borderRadius: 4, padding: '0 2px',
-                overflow: 'hidden', borderTop: hasErrors ? '2px solid #ef4444' : '2px solid transparent',
-            }}>
-                {sparkline.map((pt, i) => (
-                    <div key={i} style={{ flex: 1, display: 'flex', alignItems: 'flex-end', height: '100%', gap: '1px' }}>
-                        <div style={{ flex: 1, background: 'rgba(59,130,246,0.8)', height: `${Math.max((pt.in_bps / maxVal) * 100, 2)}%`, borderRadius: '1px 1px 0 0' }} />
-                        <div style={{ flex: 1, background: 'rgba(16,185,129,0.8)', height: `${Math.max((pt.out_bps / maxVal) * 100, 2)}%`, borderRadius: '1px 1px 0 0' }} />
-                    </div>
-                ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
-                <span style={{ fontSize: 9, color: '#93c5fd', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    <span style={{ display: 'inline-block', width: 7, height: 7, background: 'rgba(59,130,246,0.8)', borderRadius: 1 }} />In
-                </span>
-                <span style={{ fontSize: 9, color: '#6ee7b7', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    <span style={{ display: 'inline-block', width: 7, height: 7, background: 'rgba(16,185,129,0.8)', borderRadius: 1 }} />Out
-                </span>
-            </div>
-        </>
-    );
-}
-
-function InterfaceCard({ iface, data, isActive, onClick }) {
+function InterfaceCard({ deviceId, iface, data, isActive, onClick }) {
     const isDown = data.status === 'down';
     const highUtil = data.utilization_pct != null && data.utilization_pct >= 80;
     return (
@@ -54,7 +24,9 @@ function InterfaceCard({ iface, data, isActive, onClick }) {
                     {data.speed_bps && !isDown ? ` · ${formatBps(data.speed_bps)}` : ''}
                 </span>
             </div>
-            <div style={{ marginBottom: 6 }}><Sparkline sparkline={data.sparkline} hasErrors={(data.error_count ?? 0) > 0} /></div>
+            <div style={{ marginBottom: 10 }} onClick={e => e.stopPropagation()}>
+                <InterfaceChart deviceId={deviceId} interfaceName={iface} />
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, textAlign: 'center' }}>
                 {[
                     { val: formatBps(data.current_in_bps), lbl: 'In', color: '#3b82f6' },

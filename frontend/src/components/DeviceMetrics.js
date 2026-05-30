@@ -87,7 +87,7 @@ function DeviceMetrics() {
                     {interfaces.length > 0 && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
                             {interfaces.map(([iface, data]) => (
-                                <InterfaceCard key={iface} iface={iface} data={data} isActive={selectedIface === iface} onClick={() => setSelectedIface(prev => prev === iface ? null : iface)} />
+                                <InterfaceCard key={iface} deviceId={selectedDevice} iface={iface} data={data} isActive={selectedIface === iface} onClick={() => setSelectedIface(prev => prev === iface ? null : iface)} />
                             ))}
                         </div>
                     )}
