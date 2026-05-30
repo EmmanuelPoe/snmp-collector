@@ -214,3 +214,5 @@ data/
 
 # Claude working files
 .superpowers/
+data/db/metrics.db
+backend/test_bootstrap.db
