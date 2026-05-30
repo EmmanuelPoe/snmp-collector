@@ -23,6 +23,7 @@ class Device(Base):
     priv_protocol = Column(String(50), nullable=True)
     priv_password = Column(String(255), nullable=True)
     assigned_agent_id = Column(String(255), nullable=True)
+    tags = Column(JSON, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

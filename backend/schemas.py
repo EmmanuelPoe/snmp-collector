@@ -19,6 +19,7 @@ class DeviceBase(BaseModel):
     priv_protocol: Optional[str] = None
     priv_password: Optional[str] = None
     assigned_agent_id: Optional[str] = None
+    tags: List[str] = []
 
 
 class DeviceCreate(DeviceBase):
@@ -41,6 +42,7 @@ class DeviceUpdate(BaseModel):
     priv_protocol: Optional[str] = None
     priv_password: Optional[str] = None
     assigned_agent_id: Optional[str] = None
+    tags: Optional[List[str]] = None
 
 
 class DeviceResponse(BaseModel):
@@ -54,6 +56,7 @@ class DeviceResponse(BaseModel):
     description: Optional[str] = None
     enabled: bool
     assigned_agent_id: Optional[str] = None
+    tags: List[str] = []
     created_at: datetime
     updated_at: Optional[datetime] = None
 

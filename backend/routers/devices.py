@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from auth import get_current_user, require_role
 from database import get_db
@@ -12,15 +12,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
+@router.get("/tags", response_model=List[str])
+def list_tags(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    rows = db.query(Device.tags).all()
+    all_tags = set()
+    for (tags,) in rows:
+        if tags:
+            all_tags.update(tags)
+    return sorted(all_tags)
+
+
 @router.get("", response_model=List[DeviceResponse])
 def list_devices(
     skip: int = 0, limit: int = 100, enabled_only: bool = False,
+    tag: Optional[str] = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     q = db.query(Device)
     if enabled_only:
         q = q.filter(Device.enabled == True)
+    if tag:
+        q = q.filter(Device.tags.contains([tag]))
     return q.offset(skip).limit(limit).all()
 
 
