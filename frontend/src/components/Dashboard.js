@@ -50,6 +50,7 @@ export default function Dashboard() {
   const [alerts, setAlerts] = useState([]);
   const [allTags, setAllTags] = useState([]);
   const [tagFilter, setTagFilter] = useState('');
+  const [secsAgo, setSecsAgo] = useState(0);
   const prevAlertIds = React.useRef(new Set());
 
   const loadData = useCallback(async () => {
@@ -103,6 +104,13 @@ export default function Dashboard() {
   }, [showToast]);
 
   useEffect(() => {
+    if (!lastUpdated) return;
+    setSecsAgo(0);
+    const iv = setInterval(() => setSecsAgo(s => s + 1), 1000);
+    return () => clearInterval(iv);
+  }, [lastUpdated]);
+
+  useEffect(() => {
     if (agents.length === 0) return;
     const degraded = agents.filter(a => a.status !== 'online');
     if (degraded.length > 0) {
@@ -140,7 +148,7 @@ export default function Dashboard() {
           <div className="page-title">Dashboard</div>
           {lastUpdated && (
             <div className="page-subtitle">
-              updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {secsAgo < 5 ? 'updated just now' : `updated ${secsAgo}s ago`}
             </div>
           )}
         </div>
@@ -187,9 +195,13 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Recent Polls</div>
-          <div className="stat-value violet">{trafficData.length}</div>
-          <div className="stat-sub">data points loaded</div>
+          <div className="stat-label">Open Alerts</div>
+          <div className="stat-value" style={{ color: alerts.length > 0 ? 'var(--color-error)' : 'var(--color-success)' }}>
+            {alerts.length}
+          </div>
+          <div className="stat-sub">
+            {alerts.length === 0 ? 'all clear' : `${alerts.length} active`}
+          </div>
         </div>
       </div>
 

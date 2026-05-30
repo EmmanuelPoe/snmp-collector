@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getTraps, getDevices } from '../services/api';
 
 const TIME_RANGES = [
@@ -8,13 +8,19 @@ const TIME_RANGES = [
     { label: '7d',  hours: 168 },
 ];
 
+function trapKey(t) {
+    return `${t.received_at}:${t.device_ip}:${t.trap_oid}`;
+}
+
 export default function TrapsPage() {
     const [traps, setTraps] = useState([]);
+    const [newKeys, setNewKeys] = useState(new Set());
     const [devices, setDevices] = useState([]);
     const [loading, setLoading] = useState(true);
     const [hours, setHours] = useState(24);
     const [deviceFilter, setDeviceFilter] = useState('');
     const [oidFilter, setOidFilter] = useState('');
+    const prevKeys = useRef(null);
 
     useEffect(() => {
         getDevices().then(setDevices).catch(() => {});
@@ -26,7 +32,13 @@ export default function TrapsPage() {
             const params = { hours, limit: 200 };
             if (deviceFilter) params.device_id = deviceFilter;
             if (oidFilter) params.trap_oid = oidFilter;
-            setTraps(await getTraps(params));
+            const data = await getTraps(params);
+            const keys = new Set(data.map(trapKey));
+            if (prevKeys.current !== null) {
+                setNewKeys(new Set([...keys].filter(k => !prevKeys.current.has(k))));
+            }
+            prevKeys.current = keys;
+            setTraps(data);
         } catch {
             // non-fatal
         } finally {
@@ -120,7 +132,7 @@ export default function TrapsPage() {
                             </tr>
                         )}
                         {!loading && traps.map((trap, i) => (
-                            <tr key={i}>
+                            <tr key={i} className={newKeys.has(trapKey(trap)) ? 'trap-new' : ''}>
                                 <td className="font-mono text-sm text-muted">
                                     {new Date(trap.received_at).toLocaleString()}
                                 </td>
