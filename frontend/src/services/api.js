@@ -53,6 +53,10 @@ export const getDeviceCredentials = async (deviceId) => {
     const response = await api.get(`/devices/${deviceId}/credentials`);
     return response.data;
 };
+export const getDeviceTags = async () => {
+    const response = await api.get('/devices/tags');
+    return response.data;
+};
 
 // ===== Metrics =====
 export const getMetrics = async (params = {}) => {

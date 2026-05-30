@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDevices, createDevice, updateDevice, deleteDevice, getModules, getAgents, getDeviceCredentials, getAlertRules, saveAlertRules } from '../services/api';
+import { getDevices, createDevice, updateDevice, deleteDevice, getModules, getAgents, getDeviceCredentials, getAlertRules, saveAlertRules, getDeviceTags } from '../services/api';
 import { useToast } from '../hooks/useToast';
 
 export default function DeviceManagement() {
@@ -23,19 +23,24 @@ export default function DeviceManagement() {
   });
 
   const [thresholds, setThresholds] = useState({ bandwidth_in_pct: '', bandwidth_out_pct: '', error_rate: '', enabled: true });
+  const [allTags, setAllTags] = useState([]);
+  const [tagInput, setTagInput] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
 
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     try {
-      const [devicesData, modulesData, agentsData] = await Promise.all([
+      const [devicesData, modulesData, agentsData, tagsData] = await Promise.all([
         getDevices(),
         getModules().catch(() => []),
         getAgents().catch(() => []),
+        getDeviceTags().catch(() => []),
       ]);
       setDevices(devicesData);
       setAvailableModules(modulesData);
       setAgents(agentsData);
+      setAllTags(tagsData);
     } catch {
       showToast('Failed to load devices', 'error');
     } finally {
@@ -90,7 +95,9 @@ export default function DeviceManagement() {
       auth_protocol: 'SHA', auth_password: '',
       priv_protocol: 'AES', priv_password: '',
       assigned_agent_id: device.assigned_agent_id || '',
+      tags: device.tags || [],
     });
+    setTagInput('');
     setThresholds({ bandwidth_in_pct: '', bandwidth_out_pct: '', error_rate: '', enabled: true });
     setShowModal(true);
     try {
@@ -141,14 +148,29 @@ export default function DeviceManagement() {
       description: '', enabled: true,
       username: '', auth_protocol: 'SHA', auth_password: '',
       priv_protocol: 'AES', priv_password: '', assigned_agent_id: '',
+      tags: [],
     });
     setThresholds({ bandwidth_in_pct: '', bandwidth_out_pct: '', error_rate: '', enabled: true });
+    setTagInput('');
+  };
+
+  const addTag = (tag) => {
+    const normalized = tag.trim().toLowerCase().replace(/\s+/g, '-');
+    if (normalized && !formData.tags?.includes(normalized)) {
+      setFormData(f => ({ ...f, tags: [...(f.tags || []), normalized] }));
+    }
+    setTagInput('');
+  };
+
+  const removeTag = (tag) => {
+    setFormData(f => ({ ...f, tags: (f.tags || []).filter(t => t !== tag) }));
   };
 
   const filtered = devices
     .filter(d =>
-      d.name.toLowerCase().includes(search.toLowerCase()) ||
-      d.ip_address.includes(search)
+      (!tagFilter || d.tags?.includes(tagFilter)) &&
+      (d.name.toLowerCase().includes(search.toLowerCase()) ||
+       d.ip_address.includes(search))
     )
     .sort((a, b) => {
       const valA = (a[sort.col] || '').toString().toLowerCase();
@@ -184,6 +206,19 @@ export default function DeviceManagement() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+          {allTags.length > 0 && (
+            <select
+              className="input"
+              value={tagFilter}
+              onChange={e => setTagFilter(e.target.value)}
+              style={{ width: 'auto' }}
+            >
+              <option value="">All tags</option>
+              {allTags.map(tag => (
+                <option key={tag} value={tag}>{tag}</option>
+              ))}
+            </select>
+          )}
           <button className="btn btn-primary" onClick={() => { resetForm(); setShowModal(true); }}>
             + Add Device
           </button>
@@ -213,7 +248,20 @@ export default function DeviceManagement() {
             ) : (
               filtered.map(device => (
                 <tr key={device.id}>
-                  <td><strong>{device.name}</strong></td>
+                  <td>
+                    <strong>{device.name}</strong>
+                    {device.tags?.length > 0 && (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+                        {device.tags.map(tag => (
+                          <span key={tag} style={{
+                            fontSize: 10, padding: '1px 6px', borderRadius: 3,
+                            background: 'rgba(99,102,241,0.15)', color: 'var(--color-accent)',
+                            border: '1px solid rgba(99,102,241,0.3)',
+                          }}>{tag}</span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="font-mono text-sm">{device.ip_address}</td>
                   <td className="text-muted">{device.device_type || '—'}</td>
                   <td className="font-mono text-sm">{device.snmp_version}</td>
@@ -367,6 +415,46 @@ export default function DeviceManagement() {
                 <input className="input" type="text" value={formData.description}
                   onChange={e => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Optional" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Tags</label>
+                {(formData.tags || []).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                    {(formData.tags || []).map(tag => (
+                      <span key={tag} style={{
+                        background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)',
+                        borderRadius: 4, padding: '2px 8px', fontSize: 12,
+                        display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-accent)',
+                      }}>
+                        {tag}
+                        <button type="button" onClick={() => removeTag(tag)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-faint)', padding: 0, lineHeight: 1 }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Add tag… (Enter or comma to add)"
+                    value={tagInput}
+                    onChange={e => setTagInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); }
+                    }}
+                  />
+                  <button type="button" className="btn btn-secondary" onClick={() => addTag(tagInput)}>Add</button>
+                </div>
+                {allTags.filter(t => !formData.tags?.includes(t)).length > 0 && (
+                  <div className="form-hint">
+                    Existing:{' '}
+                    {allTags.filter(t => !formData.tags?.includes(t)).map(t => (
+                      <button key={t} type="button" onClick={() => setFormData(f => ({ ...f, tags: [...(f.tags || []), t] }))}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-accent)', padding: '0 4px', fontSize: 12 }}>{t}</button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>

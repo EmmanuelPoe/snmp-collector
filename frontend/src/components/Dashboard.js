@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getDevices, getAgents, getMetrics, getInterfaceRates, getAlerts } from '../services/api';
+import { getDevices, getAgents, getMetrics, getInterfaceRates, getAlerts, getDeviceTags } from '../services/api';
 import { useToast } from '../hooks/useToast';
 import {
   LineChart, Line, BarChart, Bar,
@@ -48,14 +48,18 @@ export default function Dashboard() {
   const [trafficHours, setTrafficHours] = useState(1);
   const [deviceNames, setDeviceNames] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [allTags, setAllTags] = useState([]);
+  const [tagFilter, setTagFilter] = useState('');
   const prevAlertIds = React.useRef(new Set());
 
   const loadData = useCallback(async () => {
     try {
-      const [devicesRes, agentsRes] = await Promise.all([
+      const [devicesRes, agentsRes, tagsRes] = await Promise.all([
         getDevices(),
         getAgents().catch(() => []),
+        getDeviceTags().catch(() => []),
       ]);
+      setAllTags(tagsRes);
       setDevices(devicesRes);
       setAgents(agentsRes);
       const ratesResults = await Promise.all(
@@ -116,6 +120,10 @@ export default function Dashboard() {
     return <div className="loading-center"><div className="spinner" /></div>;
   }
 
+  const visibleDeviceNames = tagFilter
+    ? devices.filter(d => d.tags?.includes(tagFilter)).map(d => d.name)
+    : deviceNames;
+
   const totalDevices = devices.length;
   const activeDevices = devices.filter(d => d.enabled).length;
   const onlineAgents = agents.filter(a => a.status === 'online').length;
@@ -136,7 +144,22 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-        <span className="live-badge"><span className="live-dot" />LIVE</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {allTags.length > 0 && (
+            <select
+              className="input"
+              value={tagFilter}
+              onChange={e => setTagFilter(e.target.value)}
+              style={{ width: 'auto' }}
+            >
+              <option value="">All devices</option>
+              {allTags.map(tag => (
+                <option key={tag} value={tag}>{tag}</option>
+              ))}
+            </select>
+          )}
+          <span className="live-badge"><span className="live-dot" />LIVE</span>
+        </div>
       </div>
 
       <div className="stats-row">
@@ -180,14 +203,14 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-          {trafficData.length > 0 && deviceNames.length > 0 ? (
+          {trafficData.length > 0 && visibleDeviceNames.length > 0 ? (
             <ResponsiveContainer width="100%" height={90}>
               <LineChart data={trafficData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
                 <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'var(--color-text-faint)', fontFamily: 'IBM Plex Mono' }} tickLine={false} axisLine={false} />
                 <YAxis hide />
                 <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 11 }} formatter={v => formatBytes(v)} />
-                {deviceNames.map((name, i) => (
+                {visibleDeviceNames.map((name, i) => (
                   <Line key={name} type="monotone" dataKey={name} stroke={DEVICE_COLORS[i % DEVICE_COLORS.length]} strokeWidth={1.5} dot={false} connectNulls />
                 ))}
               </LineChart>
