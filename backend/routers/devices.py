@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import cast
+from sqlalchemy.dialects.postgresql import JSONB
 from typing import List, Optional
 
 from auth import get_current_user, require_role
@@ -36,7 +38,7 @@ def list_devices(
     if enabled_only:
         q = q.filter(Device.enabled == True)
     if tag:
-        q = q.filter(Device.tags.contains([tag]))
+        q = q.filter(cast(Device.tags, JSONB).contains([tag]))
     return q.offset(skip).limit(limit).all()
 
 
