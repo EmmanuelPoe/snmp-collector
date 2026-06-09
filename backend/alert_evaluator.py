@@ -12,6 +12,13 @@ logger = logging.getLogger(__name__)
 
 _RATES_LOOKBACK_HOURS = 0.1  # 6-minute window
 
+# Linux virtual/system interfaces that are permanently down; never alert on them.
+_VIRTUAL_IFACE_PREFIXES = ("erspan", "gre", "sit", "tunl", "ip6tnl", "bond", "lo")
+
+
+def _is_virtual_iface(name: str) -> bool:
+    return name.startswith(_VIRTUAL_IFACE_PREFIXES)
+
 
 def _headers():
     return {"Authorization": f"Bearer {settings.manager_api_key}"}
@@ -74,7 +81,8 @@ def _check_interface_down(db, devices: list):
             continue
         try:
             data = _fetch_rates(device.ip_address)
-            down = [n for n, i in data.get("interfaces", {}).items() if i.get("status") == "down"]
+            down = [n for n, i in data.get("interfaces", {}).items()
+                    if i.get("status") == "down" and not _is_virtual_iface(n)]
             if down:
                 names = ", ".join(down)
                 existing = db.query(Alert).filter(
@@ -130,6 +138,34 @@ def _check_bandwidth_thresholds(db, devices: list):
             logger.warning("bandwidth check failed for %s: %s", device.name, exc)
 
 
+def _check_error_rate(db, devices: list):
+    rules = {r.device_id: r for r in
+             db.query(AlertRule).filter(AlertRule.enabled == True).all()}
+    window_seconds = _RATES_LOOKBACK_HOURS * 3600
+    for device in devices:
+        rule = rules.get(device.id)
+        if not rule or rule.error_rate is None or not device.enabled:
+            continue
+        try:
+            data = _fetch_rates(device.ip_address)
+            fired = False
+            for iface_name, iface in data.get("interfaces", {}).items():
+                if _is_virtual_iface(iface_name):
+                    continue
+                errors_per_sec = iface.get("error_count", 0) / window_seconds
+                if errors_per_sec > rule.error_rate:
+                    fired = True
+                    if not _open_alert_exists(db, AlertType.error_rate, device_id=device.id):
+                        _create_alert(db, AlertType.error_rate,
+                                      f"{device.name} — {iface_name} at {errors_per_sec:.2f} errors/sec",
+                                      device_id=device.id)
+                    break
+            if not fired:
+                _resolve_alerts(db, AlertType.error_rate, device_id=device.id)
+        except Exception as exc:
+            logger.warning("error_rate check failed for %s: %s", device.name, exc)
+
+
 def _check_agent_offline(db):
     try:
         resp = httpx.get(f"{settings.manager_url}/agents", headers=_headers(), timeout=5)
@@ -157,6 +193,7 @@ def run_evaluation():
         _check_device_unreachable(db, devices)
         _check_interface_down(db, devices)
         _check_bandwidth_thresholds(db, devices)
+        _check_error_rate(db, devices)
         _check_agent_offline(db)
         db.commit()
     except Exception as exc:

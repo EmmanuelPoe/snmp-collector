@@ -62,6 +62,7 @@ class AlertType(str, enum.Enum):
     interface_down = "interface_down"
     bandwidth_threshold = "bandwidth_threshold"
     agent_offline = "agent_offline"
+    error_rate = "error_rate"
 
 
 class AlertStatus(str, enum.Enum):
