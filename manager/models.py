@@ -15,6 +15,7 @@ class DeviceConfig(BaseModel):
     auth_password: Optional[str] = None
     priv_protocol: Optional[str] = None
     priv_password: Optional[str] = None
+    oids: Optional[list[dict]] = None
 
 
 class RegisterRequest(BaseModel):

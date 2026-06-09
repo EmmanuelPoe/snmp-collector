@@ -114,18 +114,26 @@ export default function ConfigurationManager() {
                     <span className={`badge ${cfg.enabled ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 8 }}>
                       {cfg.enabled ? 'Active' : 'Disabled'}
                     </span>
-                    <button
-                      className={`btn btn-sm ${cfg.enabled ? 'btn-secondary' : 'btn-primary'}`}
-                      onClick={() => handleToggle(cfg)}
-                      disabled={togglingId === cfg.id}
-                    >
-                      {cfg.enabled ? 'Disable' : 'Enable'}
-                    </button>
+                    {cfg.required ? (
+                      <span className="badge" title="Required by the metrics pipeline">Required</span>
+                    ) : (
+                      <button
+                        className={`btn btn-sm ${cfg.enabled ? 'btn-secondary' : 'btn-primary'}`}
+                        onClick={() => handleToggle(cfg)}
+                        disabled={togglingId === cfg.id}
+                      >
+                        {cfg.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                    )}
                   </td>
                   <td>
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(cfg)}>
-                      Delete
-                    </button>
+                    {cfg.required ? (
+                      <span className="text-sm text-muted" title="Required OIDs cannot be deleted">🔒 Locked</span>
+                    ) : (
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(cfg)}>
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

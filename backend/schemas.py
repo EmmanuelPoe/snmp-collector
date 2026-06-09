@@ -108,6 +108,7 @@ class CollectionConfigUpdate(BaseModel):
 
 class CollectionConfigResponse(CollectionConfigBase):
     id: int
+    required: bool = False
     created_at: datetime
 
     class Config:

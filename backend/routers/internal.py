@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from auth import require_manager_key
 from database import get_db
-from models import Device
+from models import CollectionConfig, Device
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -19,11 +19,14 @@ def get_devices_for_agent(
         or_(Device.assigned_agent_id == agent_id, Device.assigned_agent_id == None),
         Device.enabled == True,
     ).all()
-    return [_to_device_config(d) for d in devices]
+    oids = [{"oid": c.oid, "oid_name": c.oid_name}
+            for c in db.query(CollectionConfig).filter(CollectionConfig.enabled == True).all()]
+    return [_to_device_config(d, oids) for d in devices]
 
 
-def _to_device_config(d: Device) -> dict:
+def _to_device_config(d: Device, oids: list) -> dict:
     return {
+        "oids": oids,
         "id": str(d.id),
         "ip": d.ip_address,
         "hostname": d.name,

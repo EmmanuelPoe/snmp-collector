@@ -50,7 +50,11 @@ def update_config(
     db_config = db.query(CollectionConfig).filter(CollectionConfig.id == config_id).first()
     if not db_config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
-    for field, value in updates.model_dump(exclude_unset=True).items():
+    changes = updates.model_dump(exclude_unset=True)
+    if db_config.required and changes.get("enabled") is False:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail=f"OID {db_config.oid_name} is required by the metrics pipeline and cannot be disabled")
+    for field, value in changes.items():
         setattr(db_config, field, value)
     db.commit()
     db.refresh(db_config)
@@ -66,5 +70,8 @@ def delete_config(
     db_config = db.query(CollectionConfig).filter(CollectionConfig.id == config_id).first()
     if not db_config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
+    if db_config.required:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail=f"OID {db_config.oid_name} is required by the metrics pipeline and cannot be deleted")
     db.delete(db_config)
     db.commit()

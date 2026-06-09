@@ -116,3 +116,37 @@ def test_list_modules(client, auth):
 def test_config_requires_auth(client):
     resp = client.get("/config/configs")
     assert resp.status_code == 401
+
+
+def _seed_required(client):
+    db = client.app.dependency_overrides[get_db]()
+    cfg = CollectionConfig(oid="1.3.6.1.2.1.2.2.1.14", oid_name="ifInErrors",
+                           enabled=True, required=True)
+    db.add(cfg)
+    db.commit()
+    db.refresh(cfg)
+    return cfg.id
+
+
+def test_required_config_cannot_be_disabled(client, auth):
+    config_id = _seed_required(client)
+    resp = client.put(f"/config/configs/{config_id}", json={"enabled": False}, headers=auth)
+    assert resp.status_code == 409
+
+
+def test_required_config_can_update_description(client, auth):
+    config_id = _seed_required(client)
+    resp = client.put(f"/config/configs/{config_id}", json={"description": "errors in"}, headers=auth)
+    assert resp.status_code == 200
+    assert resp.json()["description"] == "errors in"
+
+
+def test_required_config_cannot_be_deleted(client, auth):
+    config_id = _seed_required(client)
+    resp = client.delete(f"/config/configs/{config_id}", headers=auth)
+    assert resp.status_code == 409
+
+
+def test_config_response_exposes_required_flag(client, auth):
+    create = client.post("/config/configs", json={"oid": "1.3.6.1.2.1.1.5.0", "oid_name": "sysName", "enabled": True}, headers=auth)
+    assert create.json()["required"] is False

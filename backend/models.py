@@ -36,6 +36,9 @@ class CollectionConfig(Base):
     oid_name = Column(String(255), nullable=False)
     description = Column(Text)
     enabled = Column(Boolean, default=True)
+    # Core OIDs the metrics/alerting pipeline depends on. Cannot be disabled or
+    # deleted via the API; reseeded by migration 013.
+    required = Column(Boolean, default=False, nullable=False, server_default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

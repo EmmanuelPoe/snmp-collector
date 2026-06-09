@@ -18,6 +18,9 @@ _PRIV = {
     "DES": usmDESPrivProtocol,
 }
 
+# Default OID set, used as a fallback when the backend supplies no whitelist
+# (e.g. older backend or empty collection_configs). When device.oids is present
+# it governs collection instead.
 _IF_OIDS = {
     "1.3.6.1.2.1.2.2.1.2":   "ifDescr",
     "1.3.6.1.2.1.2.2.1.7":   "ifAdminStatus",
@@ -29,6 +32,10 @@ _IF_OIDS = {
     "1.3.6.1.2.1.31.1.1.1.6":  "ifHCInOctets",
     "1.3.6.1.2.1.31.1.1.1.10": "ifHCOutOctets",
 }
+
+# ifDescr is required to build the interface-name map for every row, so it is
+# always walked regardless of the configured whitelist.
+_IFDESCR_OID = "1.3.6.1.2.1.2.2.1.2"
 
 
 def _auth_data(device: DeviceConfig):
@@ -51,7 +58,7 @@ def walk_device(device: DeviceConfig) -> list[dict]:
     interface_names: dict[str, str] = {}
     for err_ind, err_stat, _, var_binds in nextCmd(
         engine, auth, transport, ContextData(),
-        ObjectType(ObjectIdentity("1.3.6.1.2.1.2.2.1.2")),
+        ObjectType(ObjectIdentity(_IFDESCR_OID)),
         lexicographicMode=False,
     ):
         if err_ind or err_stat:
@@ -60,9 +67,12 @@ def walk_device(device: DeviceConfig) -> list[dict]:
             idx = str(oid).rsplit(".", 1)[-1]
             interface_names[idx] = str(val)
 
+    # Whitelist from the backend governs collection; fall back to the default set.
+    oid_map = {o["oid"]: o["oid_name"] for o in device.oids} if device.oids else dict(_IF_OIDS)
+
     rows = []
-    for base_oid, oid_name in _IF_OIDS.items():
-        if oid_name == "ifDescr":
+    for base_oid, oid_name in oid_map.items():
+        if base_oid == _IFDESCR_OID:
             continue
         for err_ind, err_stat, _, var_binds in nextCmd(
             engine, auth, transport, ContextData(),

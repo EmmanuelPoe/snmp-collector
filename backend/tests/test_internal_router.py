@@ -1,4 +1,22 @@
-from models import Device
+from models import CollectionConfig, Device
+
+
+def test_internal_devices_includes_enabled_oids(client, db_session):
+    db_session.add(Device(name="sw", ip_address="10.1.1.9", snmp_version="2c",
+                          snmp_community="public", assigned_agent_id="agent-abc", enabled=True))
+    db_session.add(CollectionConfig(oid="1.3.6.1.2.1.2.2.1.14", oid_name="ifInErrors",
+                                    enabled=True, required=True))
+    db_session.add(CollectionConfig(oid="1.3.6.1.2.1.2.2.1.99", oid_name="ifDisabled",
+                                    enabled=False, required=False))
+    db_session.commit()
+
+    resp = client.get("/internal/devices?agent_id=agent-abc",
+                      headers={"Authorization": "Bearer change-me-in-production"})
+    assert resp.status_code == 200
+    oids = resp.json()[0]["oids"]
+    names = {o["oid_name"] for o in oids}
+    assert "ifInErrors" in names
+    assert "ifDisabled" not in names  # disabled OIDs are excluded
 
 
 def test_internal_devices_returns_assigned_devices(client, db_session):
