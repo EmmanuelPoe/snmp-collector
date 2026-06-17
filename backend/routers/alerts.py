@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 from auth import get_current_user, require_role
 from database import get_db
 from models import Alert, AlertRule, AlertStatus, Device, User
-from schemas import AlertCountResponse, AlertResponse, AlertRuleCreate, AlertRuleResponse
+from schemas import (
+    AlertAssignRequest, AlertCountResponse, AlertNoteRequest, AlertResponse,
+    AlertRuleCreate, AlertRuleResponse,
+)
 
 alerts_router = APIRouter(prefix="/alerts", tags=["alerts"])
 rules_router = APIRouter(prefix="/alert-rules", tags=["alert-rules"])
@@ -45,6 +48,57 @@ def resolve_alert(
         raise HTTPException(status_code=404, detail="Alert not found")
     alert.status = AlertStatus.resolved
     alert.resolved_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(alert)
+    return alert
+
+
+def _get_alert(alert_id: int, db: Session) -> Alert:
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return alert
+
+
+@alerts_router.put("/{alert_id}/acknowledge", response_model=AlertResponse)
+def acknowledge_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("editor", "admin")),
+):
+    alert = _get_alert(alert_id, db)
+    alert.acknowledged_by = current_user.id
+    alert.acknowledged_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(alert)
+    return alert
+
+
+@alerts_router.put("/{alert_id}/assign", response_model=AlertResponse)
+def assign_alert(
+    alert_id: int,
+    body: AlertAssignRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("editor", "admin")),
+):
+    alert = _get_alert(alert_id, db)
+    if body.assigned_to is not None and not db.query(User).filter(User.id == body.assigned_to).first():
+        raise HTTPException(status_code=404, detail="Assignee not found")
+    alert.assigned_to = body.assigned_to
+    db.commit()
+    db.refresh(alert)
+    return alert
+
+
+@alerts_router.put("/{alert_id}/note", response_model=AlertResponse)
+def set_alert_note(
+    alert_id: int,
+    body: AlertNoteRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("editor", "admin")),
+):
+    alert = _get_alert(alert_id, db)
+    alert.note = body.note
     db.commit()
     db.refresh(alert)
     return alert

@@ -200,6 +200,22 @@ export const resolveAlert = async (alertId) => {
     const response = await api.put(`/alerts/${alertId}/resolve`);
     return response.data;
 };
+export const acknowledgeAlert = async (alertId) => {
+    const response = await api.put(`/alerts/${alertId}/acknowledge`);
+    return response.data;
+};
+export const assignAlert = async (alertId, assignedTo) => {
+    const response = await api.put(`/alerts/${alertId}/assign`, { assigned_to: assignedTo });
+    return response.data;
+};
+export const setAlertNote = async (alertId, note) => {
+    const response = await api.put(`/alerts/${alertId}/note`, { note });
+    return response.data;
+};
+export const getAssignableUsers = async () => {
+    const response = await api.get('/auth/users/assignable');
+    return response.data;
+};
 export const getAlertRules = async (deviceId) => {
     const response = await api.get(`/alert-rules/${deviceId}`);
     return response.data;

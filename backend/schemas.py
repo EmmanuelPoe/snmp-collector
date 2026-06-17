@@ -125,9 +125,23 @@ class AlertResponse(BaseModel):
     triggered_at: datetime
     resolved_at: Optional[datetime] = None
     status: str
+    acknowledged_by: Optional[int] = None
+    acknowledged_by_email: Optional[str] = None
+    acknowledged_at: Optional[datetime] = None
+    assigned_to: Optional[int] = None
+    assigned_to_email: Optional[str] = None
+    note: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class AlertAssignRequest(BaseModel):
+    assigned_to: Optional[int] = None  # null to unassign
+
+
+class AlertNoteRequest(BaseModel):
+    note: Optional[str] = None
 
 
 class AlertCountResponse(BaseModel):

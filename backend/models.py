@@ -1,5 +1,6 @@
 import enum
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, Enum, Float
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, Enum, Float, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 
@@ -92,6 +93,21 @@ class Alert(Base):
     triggered_at = Column(DateTime(timezone=True), server_default=func.now())
     resolved_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(Enum(AlertStatus), nullable=False, default=AlertStatus.open, server_default="open")
+    acknowledged_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
+    note = Column(Text, nullable=True)
+
+    acknowledger = relationship("User", foreign_keys=[acknowledged_by])
+    assignee = relationship("User", foreign_keys=[assigned_to])
+
+    @property
+    def acknowledged_by_email(self):
+        return self.acknowledger.email if self.acknowledger else None
+
+    @property
+    def assigned_to_email(self):
+        return self.assignee.email if self.assignee else None
 
 
 class AlertRule(Base):

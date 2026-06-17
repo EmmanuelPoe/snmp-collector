@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getDevices, getAgents, getMetrics, getInterfaceRates, getAlerts, getDeviceTags } from '../services/api';
+import { getDevices, getAgents, getMetrics, getInterfaceRates, getAlerts, getDeviceTags,
+  acknowledgeAlert, assignAlert, setAlertNote, getAssignableUsers } from '../services/api';
 import { useToast } from '../hooks/useToast';
+import { useAuth } from '../hooks/useAuth';
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -39,6 +41,9 @@ const CHART_TOOLTIP_STYLE = {
 
 export default function Dashboard() {
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const canManageAlerts = user?.role === 'admin' || user?.role === 'editor';
+  const [assignableUsers, setAssignableUsers] = useState([]);
   const [devices, setDevices] = useState([]);
   const [agents, setAgents] = useState([]);
   const [trafficData, setTrafficData] = useState([]);
@@ -102,6 +107,31 @@ export default function Dashboard() {
     const iv = setInterval(poll, 30000);
     return () => clearInterval(iv);
   }, [showToast]);
+
+  useEffect(() => {
+    if (!canManageAlerts) return;
+    getAssignableUsers().then(setAssignableUsers).catch(() => {});
+  }, [canManageAlerts]);
+
+  const _applyAlertUpdate = (updated) =>
+    setAlerts(prev => prev.map(a => a.id === updated.id ? updated : a));
+
+  const handleAck = async (alert) => {
+    try { _applyAlertUpdate(await acknowledgeAlert(alert.id)); }
+    catch { showToast('Failed to acknowledge alert', 'error'); }
+  };
+
+  const handleAssign = async (alert, value) => {
+    try { _applyAlertUpdate(await assignAlert(alert.id, value === '' ? null : Number(value))); }
+    catch { showToast('Failed to assign alert', 'error'); }
+  };
+
+  const handleNote = async (alert) => {
+    const note = window.prompt('Note for this alert:', alert.note || '');
+    if (note === null) return;
+    try { _applyAlertUpdate(await setAlertNote(alert.id, note)); }
+    catch { showToast('Failed to save note', 'error'); }
+  };
 
   useEffect(() => {
     if (!lastUpdated) return;
@@ -261,7 +291,7 @@ export default function Dashboard() {
               const sevColor = { critical: 'var(--color-error)', warning: 'var(--color-warning, #d97706)', info: 'var(--color-text-faint)' }[alert.severity] || 'var(--color-error)';
               return (
               <div key={alert.id} className="agent-row">
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     {alert.severity && (
                       <span className="badge" style={{ background: sevColor, color: '#fff', fontSize: 10, textTransform: 'uppercase', padding: '1px 6px' }}>
@@ -273,6 +303,24 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div className="agent-meta">{alert.message}</div>
+                  {canManageAlerts && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                      {alert.acknowledged_by_email ? (
+                        <span className="badge badge-success" style={{ fontSize: 10 }}>✓ ack {alert.acknowledged_by_email}</span>
+                      ) : (
+                        <button className="btn btn-sm btn-secondary" onClick={() => handleAck(alert)}>Acknowledge</button>
+                      )}
+                      <select className="input" style={{ height: 24, fontSize: 11, padding: '0 4px', width: 'auto' }}
+                        value={alert.assigned_to || ''} onChange={e => handleAssign(alert, e.target.value)}>
+                        <option value="">Unassigned</option>
+                        {assignableUsers.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}
+                      </select>
+                      <button className="btn btn-sm btn-secondary" onClick={() => handleNote(alert)}>
+                        {alert.note ? 'Note ✎' : '+ Note'}
+                      </button>
+                      {alert.note && <span className="text-faint text-xs" title={alert.note}>“{alert.note.length > 40 ? alert.note.slice(0, 40) + '…' : alert.note}”</span>}
+                    </div>
+                  )}
                 </div>
                 <span className="text-faint text-xs">
                   {Math.round((Date.now() - new Date(alert.triggered_at)) / 60000)}m ago

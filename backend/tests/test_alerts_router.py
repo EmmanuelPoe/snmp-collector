@@ -183,3 +183,71 @@ def test_viewer_cannot_save_rules(client, viewer_auth):
 def test_alerts_require_auth(client):
     assert client.get("/alerts").status_code == 401
     assert client.get("/alerts/count").status_code == 401
+
+
+def _open_alert(client):
+    db = client.app.dependency_overrides[get_db]()
+    alert = Alert(alert_type=AlertType.interface_down, message="down", status=AlertStatus.open)
+    db.add(alert)
+    db.commit()
+    return db, alert
+
+
+def test_acknowledge_alert(client, auth):
+    _, alert = _open_alert(client)
+    resp = client.put(f"/alerts/{alert.id}/acknowledge", headers=auth)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["acknowledged_at"] is not None
+    assert data["acknowledged_by_email"] == "admin@test.com"
+
+
+def test_assign_alert(client, auth):
+    db, alert = _open_alert(client)
+    viewer = db.query(User).filter(User.email == "viewer@test.com").first()
+    resp = client.put(f"/alerts/{alert.id}/assign", json={"assigned_to": viewer.id}, headers=auth)
+    assert resp.status_code == 200
+    assert resp.json()["assigned_to"] == viewer.id
+    assert resp.json()["assigned_to_email"] == "viewer@test.com"
+
+
+def test_assign_alert_unknown_user(client, auth):
+    _, alert = _open_alert(client)
+    resp = client.put(f"/alerts/{alert.id}/assign", json={"assigned_to": 9999}, headers=auth)
+    assert resp.status_code == 404
+
+
+def test_unassign_alert(client, auth):
+    db, alert = _open_alert(client)
+    viewer = db.query(User).filter(User.email == "viewer@test.com").first()
+    client.put(f"/alerts/{alert.id}/assign", json={"assigned_to": viewer.id}, headers=auth)
+    resp = client.put(f"/alerts/{alert.id}/assign", json={"assigned_to": None}, headers=auth)
+    assert resp.status_code == 200
+    assert resp.json()["assigned_to"] is None
+
+
+def test_set_alert_note(client, auth):
+    _, alert = _open_alert(client)
+    resp = client.put(f"/alerts/{alert.id}/note", json={"note": "investigating"}, headers=auth)
+    assert resp.status_code == 200
+    assert resp.json()["note"] == "investigating"
+
+
+def test_viewer_cannot_acknowledge(client, viewer_auth):
+    _, alert = _open_alert(client)
+    assert client.put(f"/alerts/{alert.id}/acknowledge", headers=viewer_auth).status_code == 403
+
+
+def test_acknowledge_not_found(client, auth):
+    assert client.put("/alerts/999/acknowledge", headers=auth).status_code == 404
+
+
+def test_assignable_users_for_editor(client, auth):
+    resp = client.get("/auth/users/assignable", headers=auth)
+    assert resp.status_code == 200
+    emails = {u["email"] for u in resp.json()}
+    assert {"admin@test.com", "viewer@test.com"} <= emails
+
+
+def test_assignable_users_requires_role(client):
+    assert client.get("/auth/users/assignable").status_code == 401

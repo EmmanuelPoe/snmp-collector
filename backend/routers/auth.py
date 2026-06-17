@@ -85,6 +85,23 @@ def list_users(
     return db.query(User).order_by(User.id).all()
 
 
+class AssignableUser(BaseModel):
+    id: int
+    email: str
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/users/assignable", response_model=list[AssignableUser])
+def list_assignable_users(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("editor", "admin")),
+):
+    """Minimal active-user list for alert assignment dropdowns (editor/admin)."""
+    return db.query(User).filter(User.is_active == True).order_by(User.email).all()
+
+
 @router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
