@@ -150,7 +150,13 @@ The research doc's "fastest path to a meaningfully better product." All containe
 
 ---
 
-# Phase 2 — Integration & retention
+# Phase 2 — Integration & retention  ✅ DONE (commits 41e7e6f, 45c3a89, 222c02f)
+
+**Resolved decisions:** Step 8 auth = dedicated `PROMETHEUS_SCRAPE_TOKEN` (empty disables the endpoint, 503). Step 9 = delete-only purge (physical file shrink deferred). Step 10 CSV = per-interface max/avg summary, range presets 7d/30d/90d.
+
+**Endpoints added:** `GET /api/metrics/prometheus` (bearer-token exposition), `GET /api/metrics/export/csv/{device_id}` (CSV attachment), manager `GET /internal/metrics/summary`. Manager runs a weekly `_retention_loop` purging rows older than `METRICS_RETENTION_DAYS` (default 90). Backend tests 109 → 121; manager 68.
+
+**Also flagged for later (not done):** the Prometheus exporter does N sequential manager calls per scrape (one per device) — fine for small fleets, worth batching into a single manager endpoint if device counts grow.
 
 ## Step 8 — Real Prometheus device exporter
 
