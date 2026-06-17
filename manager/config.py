@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     manager_public_url: str = "http://localhost:8001"
     dead_letter_path: str = "/data/dead-letter"
     backend_url: str = "http://backend:8000"
+    metrics_retention_days: int = 90
 
     model_config = {"env_file": ".env"}
 

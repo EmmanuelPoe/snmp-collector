@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -5,8 +6,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from db import get_db, close_db
+import config
+from db import get_db, close_db, purge_old_metrics
 from routers import registration, ingest, metrics, slots
+
+logger = logging.getLogger(__name__)
+
+_RETENTION_INTERVAL_SECONDS = 7 * 24 * 3600  # weekly
 
 
 class _JsonFormatter(logging.Formatter):
@@ -29,10 +35,27 @@ def _setup_logging():
 _setup_logging()
 
 
+async def _retention_loop():
+    while True:
+        try:
+            result = await purge_old_metrics(config.settings.metrics_retention_days)
+            if result["polls_deleted"] or result["traps_deleted"]:
+                logger.info("retention purge: %s", result)
+        except Exception as exc:
+            logger.warning("retention purge failed: %s", exc)
+        await asyncio.sleep(_RETENTION_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     get_db()
+    task = asyncio.create_task(_retention_loop())
     yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
     close_db()
 
 

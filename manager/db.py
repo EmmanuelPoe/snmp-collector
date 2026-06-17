@@ -1,5 +1,6 @@
 import duckdb
 import asyncio
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import config
 
@@ -77,6 +78,22 @@ async def execute(sql: str, params: list | None = None) -> None:
             conn.execute(sql, params)
         else:
             conn.execute(sql)
+
+
+async def purge_old_metrics(retention_days: int) -> dict:
+    """Delete polls/traps older than retention_days. Delete-only: DuckDB reuses
+    the freed space for subsequent inserts, so the file stabilises at steady
+    state rather than growing unboundedly."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    async with _write_lock:
+        conn = get_db()
+        polls = conn.execute(
+            "SELECT COUNT(*) FROM snmp_polls WHERE collected_at < ?", [cutoff]).fetchone()[0]
+        traps = conn.execute(
+            "SELECT COUNT(*) FROM snmp_traps WHERE received_at < ?", [cutoff]).fetchone()[0]
+        conn.execute("DELETE FROM snmp_polls WHERE collected_at < ?", [cutoff])
+        conn.execute("DELETE FROM snmp_traps WHERE received_at < ?", [cutoff])
+    return {"polls_deleted": polls, "traps_deleted": traps}
 
 
 async def ingest_parquet(table: str, file_path: str) -> int:
