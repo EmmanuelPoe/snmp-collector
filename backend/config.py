@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     # Dedicated bearer token for the Prometheus scrape endpoint. Empty disables
     # the endpoint (503) so it is never unintentionally exposed unauthenticated.
     prometheus_scrape_token: str = ""
+    # Dynamic baseline anomaly detection (off by default to avoid surprise noise).
+    baseline_anomaly_enabled: bool = False
+    baseline_multiplier: float = 1.5
+    baseline_min_samples: int = 100
+    baseline_window_days: float = 7.0
 
     class Config:
         env_file = ".env"

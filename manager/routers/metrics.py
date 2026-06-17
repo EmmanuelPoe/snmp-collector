@@ -238,6 +238,53 @@ async def interface_summary(
     return {"interfaces": interfaces}
 
 
+@router.get("/baseline")
+async def interface_baseline(
+    device_ip: str,
+    days: float = Query(default=7.0, gt=0, le=90),
+    _: str = Depends(require_api_key),
+):
+    """Per-interface p95 of in/out bps over the window — the rolling baseline
+    used for anomaly detection. Counter resets (negative deltas) are excluded."""
+    cutoff = _dt.now(timezone.utc) - timedelta(days=days)
+    rows = await query(
+        """
+        WITH d AS (
+          SELECT interface_name, oid_name,
+            TRY_CAST(value AS DOUBLE) - LAG(TRY_CAST(value AS DOUBLE))
+              OVER (PARTITION BY interface_name, oid_name ORDER BY collected_at) AS dv,
+            date_diff('second',
+              LAG(collected_at) OVER (PARTITION BY interface_name, oid_name ORDER BY collected_at),
+              collected_at) AS dt
+          FROM snmp_polls
+          WHERE device_ip = ? AND collected_at >= ? AND interface_name IS NOT NULL
+            AND oid_name IN ('ifHCInOctets','ifInOctets','ifHCOutOctets','ifOutOctets')
+        )
+        SELECT interface_name, oid_name, quantile_cont((dv / dt) * 8, 0.95), COUNT(*)
+        FROM d
+        WHERE dv >= 0 AND dt > 0
+        GROUP BY interface_name, oid_name
+        """,
+        [device_ip, cutoff],
+    )
+
+    raw: dict[str, dict[str, tuple]] = {}
+    for iface, oid_name, p95, cnt in rows:
+        raw.setdefault(iface, {})[oid_name] = (p95, cnt)
+
+    interfaces = {}
+    for iface, oids in raw.items():
+        inp = oids.get("ifHCInOctets") or oids.get("ifInOctets")
+        outp = oids.get("ifHCOutOctets") or oids.get("ifOutOctets")
+        interfaces[iface] = {
+            "in_p95_bps": round(inp[0], 2) if inp and inp[0] is not None else None,
+            "in_samples": inp[1] if inp else 0,
+            "out_p95_bps": round(outp[0], 2) if outp and outp[0] is not None else None,
+            "out_samples": outp[1] if outp else 0,
+        }
+    return {"interfaces": interfaces}
+
+
 @router.get("/history")
 async def interface_history(
     device_ip: str,

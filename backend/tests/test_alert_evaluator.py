@@ -143,6 +143,85 @@ def test_bandwidth_quiet_when_speed_missing(db_session, monkeypatch):
     assert _open_count(db_session, AlertType.bandwidth_threshold) == 0
 
 
+def _enable_baseline(monkeypatch, **over):
+    import config
+    monkeypatch.setattr(config.settings, "baseline_anomaly_enabled", True)
+    monkeypatch.setattr(config.settings, "baseline_multiplier", over.get("mult", 1.5))
+    monkeypatch.setattr(config.settings, "baseline_min_samples", over.get("min_samples", 100))
+
+
+def test_baseline_anomaly_disabled_by_default(db_session, monkeypatch):
+    device = Device(name="d1", ip_address="10.0.0.1", enabled=True)
+    db_session.add(device)
+    db_session.commit()
+    # flag defaults to False; check should short-circuit and never fetch
+    called = {"rates": False}
+    def _rates(ip):
+        called["rates"] = True
+        return {"interfaces": {}}
+    monkeypatch.setattr(alert_evaluator, "_fetch_rates", _rates)
+    alert_evaluator._check_baseline_anomaly(db_session, [device])
+    assert called["rates"] is False
+
+
+def test_baseline_anomaly_fires_above_p95(db_session, monkeypatch):
+    _enable_baseline(monkeypatch)
+    device = Device(name="d1", ip_address="10.0.0.1", enabled=True)
+    db_session.add(device)
+    db_session.commit()
+    monkeypatch.setattr(alert_evaluator, "_fetch_rates", lambda ip: {
+        "interfaces": {"eth0": {"current_in_bps": 1000, "current_out_bps": 0}}})
+    monkeypatch.setattr(alert_evaluator, "_get_baseline", lambda ip: {
+        "interfaces": {"eth0": {"in_p95_bps": 500, "in_samples": 5000,
+                                "out_p95_bps": 100, "out_samples": 5000}}})
+    # 1000 > 500 * 1.5 = 750 -> fire
+    alert_evaluator._check_baseline_anomaly(db_session, [device])
+    assert _open_count(db_session, AlertType.baseline_anomaly) == 1
+
+
+def test_baseline_anomaly_quiet_within_band(db_session, monkeypatch):
+    _enable_baseline(monkeypatch)
+    device = Device(name="d1", ip_address="10.0.0.1", enabled=True)
+    db_session.add(device)
+    db_session.commit()
+    monkeypatch.setattr(alert_evaluator, "_fetch_rates", lambda ip: {
+        "interfaces": {"eth0": {"current_in_bps": 700, "current_out_bps": 0}}})
+    monkeypatch.setattr(alert_evaluator, "_get_baseline", lambda ip: {
+        "interfaces": {"eth0": {"in_p95_bps": 500, "in_samples": 5000,
+                                "out_p95_bps": 100, "out_samples": 5000}}})
+    # 700 < 500 * 1.5 = 750 -> quiet
+    alert_evaluator._check_baseline_anomaly(db_session, [device])
+    assert _open_count(db_session, AlertType.baseline_anomaly) == 0
+
+
+def test_baseline_anomaly_respects_min_samples(db_session, monkeypatch):
+    _enable_baseline(monkeypatch, min_samples=100)
+    device = Device(name="d1", ip_address="10.0.0.1", enabled=True)
+    db_session.add(device)
+    db_session.commit()
+    monkeypatch.setattr(alert_evaluator, "_fetch_rates", lambda ip: {
+        "interfaces": {"eth0": {"current_in_bps": 100000, "current_out_bps": 0}}})
+    monkeypatch.setattr(alert_evaluator, "_get_baseline", lambda ip: {
+        "interfaces": {"eth0": {"in_p95_bps": 10, "in_samples": 5,  # too few samples
+                                "out_p95_bps": 10, "out_samples": 5}}})
+    alert_evaluator._check_baseline_anomaly(db_session, [device])
+    assert _open_count(db_session, AlertType.baseline_anomaly) == 0
+
+
+def test_baseline_anomaly_skips_virtual(db_session, monkeypatch):
+    _enable_baseline(monkeypatch)
+    device = Device(name="d1", ip_address="10.0.0.1", enabled=True)
+    db_session.add(device)
+    db_session.commit()
+    monkeypatch.setattr(alert_evaluator, "_fetch_rates", lambda ip: {
+        "interfaces": {"gre0": {"current_in_bps": 100000, "current_out_bps": 0}}})
+    monkeypatch.setattr(alert_evaluator, "_get_baseline", lambda ip: {
+        "interfaces": {"gre0": {"in_p95_bps": 1, "in_samples": 5000,
+                                "out_p95_bps": 1, "out_samples": 5000}}})
+    alert_evaluator._check_baseline_anomaly(db_session, [device])
+    assert _open_count(db_session, AlertType.baseline_anomaly) == 0
+
+
 def test_error_rate_resolves_when_back_to_normal(db_session, monkeypatch):
     device = Device(name="d1", ip_address="10.0.0.1", enabled=True)
     db_session.add(device)

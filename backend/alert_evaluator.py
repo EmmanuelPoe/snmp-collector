@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 
 import httpx
@@ -49,7 +50,13 @@ _SEVERITY_BY_TYPE = {
     AlertType.interface_down: AlertSeverity.warning,
     AlertType.bandwidth_threshold: AlertSeverity.warning,
     AlertType.error_rate: AlertSeverity.warning,
+    AlertType.baseline_anomaly: AlertSeverity.warning,
 }
+
+# Baselines are a heavy 7-day query, so they are cached per device and refreshed
+# at most once per TTL rather than recomputed on every 30s evaluation pass.
+_BASELINE_TTL_SECONDS = 3600
+_baseline_cache: dict = {}
 
 
 def _is_suppressed(device_id) -> bool:
@@ -194,6 +201,66 @@ def _check_error_rate(db, devices: list):
             logger.warning("error_rate check failed for %s: %s", device.name, exc)
 
 
+def _fetch_baseline(device_ip: str) -> dict:
+    url = f"{settings.manager_url}/internal/metrics/baseline"
+    resp = httpx.get(url, params={"device_ip": device_ip, "days": settings.baseline_window_days},
+                     headers=_headers(), timeout=20)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _get_baseline(device_ip: str) -> dict:
+    now = time.monotonic()
+    cached = _baseline_cache.get(device_ip)
+    if cached and now - cached[0] < _BASELINE_TTL_SECONDS:
+        return cached[1]
+    data = _fetch_baseline(device_ip)
+    _baseline_cache[device_ip] = (now, data)
+    return data
+
+
+def _check_baseline_anomaly(db, devices: list):
+    if not settings.baseline_anomaly_enabled:
+        return
+    mult = settings.baseline_multiplier
+    min_samples = settings.baseline_min_samples
+    for device in devices:
+        if not device.enabled:
+            continue
+        try:
+            rates = _fetch_rates(device.ip_address)
+            baseline = _get_baseline(device.ip_address).get("interfaces", {})
+            fired = False
+            for name, iface in rates.get("interfaces", {}).items():
+                if _is_virtual_iface(name):
+                    continue
+                b = baseline.get(name)
+                if not b:
+                    continue
+                in_p95 = b.get("in_p95_bps") or 0
+                out_p95 = b.get("out_p95_bps") or 0
+                cur_in = iface.get("current_in_bps", 0)
+                cur_out = iface.get("current_out_bps", 0)
+                if in_p95 > 0 and b.get("in_samples", 0) >= min_samples and cur_in > in_p95 * mult:
+                    fired = True
+                    if not _open_alert_exists(db, AlertType.baseline_anomaly, device_id=device.id):
+                        _create_alert(db, AlertType.baseline_anomaly,
+                                      f"{device.name} — {name} inbound {cur_in:.0f} bps exceeds baseline p95 {in_p95:.0f} bps (x{mult})",
+                                      device_id=device.id)
+                    break
+                if out_p95 > 0 and b.get("out_samples", 0) >= min_samples and cur_out > out_p95 * mult:
+                    fired = True
+                    if not _open_alert_exists(db, AlertType.baseline_anomaly, device_id=device.id):
+                        _create_alert(db, AlertType.baseline_anomaly,
+                                      f"{device.name} — {name} outbound {cur_out:.0f} bps exceeds baseline p95 {out_p95:.0f} bps (x{mult})",
+                                      device_id=device.id)
+                    break
+            if not fired:
+                _resolve_alerts(db, AlertType.baseline_anomaly, device_id=device.id)
+        except Exception as exc:
+            logger.warning("baseline check failed for %s: %s", device.name, exc)
+
+
 def _check_agent_offline(db):
     try:
         resp = httpx.get(f"{settings.manager_url}/agents", headers=_headers(), timeout=5)
@@ -233,6 +300,7 @@ def run_evaluation():
         _check_interface_down(db, devices)
         _check_bandwidth_thresholds(db, devices)
         _check_error_rate(db, devices)
+        _check_baseline_anomaly(db, devices)
         _check_agent_offline(db)
         new_alerts = [o for o in db.new if isinstance(o, Alert)]
         db.commit()
