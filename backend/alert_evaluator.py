@@ -67,10 +67,12 @@ def _is_suppressed(device_id) -> bool:
 
 def _create_alert(db, alert_type: AlertType, message: str, device_id=None, agent_id=None):
     if _is_suppressed(device_id):
-        return
-    db.add(Alert(alert_type=alert_type, message=message, device_id=device_id,
-                 agent_id=agent_id, status=AlertStatus.open,
-                 severity=_SEVERITY_BY_TYPE.get(alert_type, AlertSeverity.info)))
+        return None
+    alert = Alert(alert_type=alert_type, message=message, device_id=device_id,
+                  agent_id=agent_id, status=AlertStatus.open,
+                  severity=_SEVERITY_BY_TYPE.get(alert_type, AlertSeverity.info))
+    db.add(alert)
+    return alert
 
 
 def _resolve_alerts(db, alert_type: AlertType, device_id=None, agent_id=None):
@@ -261,6 +263,119 @@ def _check_baseline_anomaly(db, devices: list):
             logger.warning("baseline check failed for %s: %s", device.name, exc)
 
 
+# --- Trap correlation ---------------------------------------------------------
+
+_SNMP_TRAP_OID = "1.3.6.1.6.3.1.1.4.1.0"   # snmpTrapOID.0 — value is the trap type
+_LINK_DOWN = "1.3.6.1.6.3.1.1.5.3"
+_LINK_UP = "1.3.6.1.6.3.1.1.5.4"
+_IFINDEX_PREFIX = "1.3.6.1.2.1.2.2.1.1"    # ifIndex.<n>
+
+# High-water mark so each trap is correlated once. None = first pass: adopt the
+# newest trap timestamp and skip history (no alert storm from old traps on boot).
+_last_trap_ts = None
+
+
+def _fetch_recent_traps(hours: float = 0.25) -> list:
+    resp = httpx.get(f"{settings.manager_url}/internal/metrics/traps",
+                     params={"hours": hours, "limit": 500}, headers=_headers(), timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _parse_ts(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _trap_type(varbinds: dict, trap_oid_col: str):
+    return varbinds.get(_SNMP_TRAP_OID) or trap_oid_col
+
+
+def _extract_ifindex(varbinds: dict):
+    for key, val in varbinds.items():
+        if key.startswith(_IFINDEX_PREFIX):
+            return val
+    return None
+
+
+def _open_interface_down(db, device_id):
+    return db.query(Alert).filter(
+        Alert.alert_type == AlertType.interface_down,
+        Alert.device_id == device_id,
+        Alert.status == AlertStatus.open,
+    ).first()
+
+
+def _append_note(alert, note: str):
+    if alert.note and note in alert.note:
+        return
+    alert.note = f"{alert.note}\n{note}" if alert.note else note
+
+
+def _process_trap(db, device_map, trap, ts):
+    import json
+    try:
+        varbinds = json.loads(trap.get("varbinds") or "{}")
+    except (ValueError, TypeError):
+        varbinds = {}
+    ttype = _trap_type(varbinds, trap.get("trap_oid"))
+    if ttype not in (_LINK_DOWN, _LINK_UP):
+        return
+    device = device_map.get(trap.get("device_ip"))
+    if not device:
+        return  # trap from an unknown device — nothing to correlate against
+
+    ifindex = _extract_ifindex(varbinds)
+    where = f"ifIndex {ifindex}" if ifindex else "an interface"
+    stamp = ts.isoformat() if ts else "unknown time"
+    existing = _open_interface_down(db, device.id)
+
+    if ttype == _LINK_DOWN:
+        note = f"linkDown trap at {stamp} ({where})"
+        if existing:
+            _append_note(existing, note)  # confirm/enrich the polled alert
+        else:
+            alert = _create_alert(db, AlertType.interface_down,
+                                  f"{device.name} — linkDown trap ({where})",
+                                  device_id=device.id)
+            if alert is not None:
+                alert.note = note
+    else:  # linkUp — informational annotation on any open alert
+        if existing:
+            _append_note(existing, f"linkUp trap at {stamp} ({where})")
+
+
+def _correlate_traps(db, devices: list):
+    global _last_trap_ts
+    try:
+        traps = _fetch_recent_traps()
+    except Exception as exc:
+        logger.warning("trap correlation fetch failed: %s", exc)
+        return
+
+    parsed = [(_parse_ts(t.get("received_at")), t) for t in traps]
+    parsed = [(ts, t) for ts, t in parsed if ts is not None]
+    parsed.sort(key=lambda x: x[0])
+
+    if _last_trap_ts is None:
+        _last_trap_ts = parsed[-1][0] if parsed else datetime.now(timezone.utc)
+        return
+
+    device_map = {d.ip_address: d for d in devices}
+    new_max = _last_trap_ts
+    for ts, trap in parsed:
+        if ts <= _last_trap_ts:
+            continue
+        _process_trap(db, device_map, trap, ts)
+        if ts > new_max:
+            new_max = ts
+    _last_trap_ts = new_max
+
+
 def _check_agent_offline(db):
     try:
         resp = httpx.get(f"{settings.manager_url}/agents", headers=_headers(), timeout=5)
@@ -298,6 +413,7 @@ def run_evaluation():
         devices = db.query(Device).all()
         _check_device_unreachable(db, devices)
         _check_interface_down(db, devices)
+        _correlate_traps(db, devices)
         _check_bandwidth_thresholds(db, devices)
         _check_error_rate(db, devices)
         _check_baseline_anomaly(db, devices)
