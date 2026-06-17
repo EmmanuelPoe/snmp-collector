@@ -219,9 +219,15 @@ The research doc's "fastest path to a meaningfully better product." All containe
 
 Largest scope. LLDP MIB collection in the agent (`lldpRemTable`), topology graph stored in Postgres, React graph viz (Cytoscape.js or D3), and parent-down → child-suppression in the evaluator. Highest differentiator per the research doc; do last.
 
-## Step 14 — Trap correlation / enrichment
+## Step 14 — Trap correlation / enrichment  ✅ DONE (commit 9c7f5bd)
 
-Cross-reference incoming traps (currently stored as raw JSON varbinds in DuckDB `snmp_traps`) with polled interface status — e.g. a `linkDown` trap on `eth0` annotates or auto-creates the corresponding `interface_down` alert. Deduplicate within a time window; enrich with device context.
+**Resolved decision:** behavior = annotate existing polled `interface_down` alert **and** auto-create one when none exists (traps beat the 30s poll), reusing `interface_down` (unified — polling still handles resolution, no double-fire).
+
+**Built:** `_correlate_traps` in the evaluator reads recent traps from the manager, identifies linkDown/linkUp via `snmpTrapOID.0`, resolves the device by source IP, extracts ifIndex, and annotates via the `note` field or auto-creates. High-water-mark dedup (first pass adopts newest ts to avoid boot-time storms). Maintenance suppression + notifications apply since it routes through `_create_alert`. No migration.
+
+**Verification caveat:** this environment has no live trap source (net-snmp simulator doesn't emit traps; `TRAP_ENABLED` off), so correlation is covered by 8 synthetic-trap unit tests rather than a live trap. Worth a real linkDown test against trap-capable hardware before relying on it in production.
+
+**Phase 3 remaining:** Step 12 (MIB browser — needs agent command channel), Step 13 (topology map — largest).
 
 ---
 
