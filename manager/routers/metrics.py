@@ -165,6 +165,79 @@ async def interface_rates(
     return {"interfaces": interfaces}
 
 
+@router.get("/summary")
+async def interface_summary(
+    device_ip: str,
+    hours: float = Query(default=24.0, gt=0, le=8760),
+    _: str = Depends(require_api_key),
+):
+    """Per-interface max/avg in/out bps and utilization over the window — the
+    aggregate behind CSV report export."""
+    cutoff = _dt.now(timezone.utc) - timedelta(hours=hours)
+    rows = await query(
+        "SELECT interface_name, oid_name, TRY_CAST(value AS DOUBLE), collected_at "
+        "FROM snmp_polls "
+        "WHERE device_ip = ? AND collected_at >= ? AND interface_name IS NOT NULL "
+        "ORDER BY interface_name, oid_name, collected_at ASC",
+        [device_ip, cutoff],
+    )
+
+    oid_series: dict[str, dict[str, list]] = {}
+    for iface, oid_name, value, ts in rows:
+        oid_series.setdefault(iface, {}).setdefault(oid_name, []).append((value, ts))
+
+    def _deltas(pts: list) -> list:
+        result = []
+        for i in range(1, len(pts)):
+            v1, t1 = pts[i - 1]
+            v2, t2 = pts[i]
+            if v1 is None or v2 is None:
+                continue
+            dt_sec = (t2 - t1).total_seconds()
+            if dt_sec <= 0:
+                continue
+            result.append(max(0.0, v2 - v1) / dt_sec)
+        return result
+
+    def _max(xs):
+        return round(max(xs), 2) if xs else 0.0
+
+    def _avg(xs):
+        return round(sum(xs) / len(xs), 2) if xs else 0.0
+
+    interfaces: dict = {}
+    for iface, oids in oid_series.items():
+        in_bps = [d * 8 for d in _deltas(oids.get("ifHCInOctets") or oids.get("ifInOctets", []))]
+        out_bps = [d * 8 for d in _deltas(oids.get("ifHCOutOctets") or oids.get("ifOutOctets", []))]
+
+        speed_bps = None
+        if oids.get("ifHighSpeed") and oids["ifHighSpeed"][-1][0]:
+            speed_bps = oids["ifHighSpeed"][-1][0] * 1_000_000
+        elif oids.get("ifSpeed") and oids["ifSpeed"][-1][0]:
+            speed_bps = oids["ifSpeed"][-1][0]
+
+        util_series = []
+        if speed_bps:
+            n = max(len(in_bps), len(out_bps))
+            for i in range(n):
+                iv = in_bps[i] if i < len(in_bps) else 0.0
+                ov = out_bps[i] if i < len(out_bps) else 0.0
+                util_series.append(max(iv, ov) / speed_bps * 100)
+
+        interfaces[iface] = {
+            "max_in_bps": _max(in_bps),
+            "avg_in_bps": _avg(in_bps),
+            "max_out_bps": _max(out_bps),
+            "avg_out_bps": _avg(out_bps),
+            "speed_bps": speed_bps,
+            "max_utilization_pct": round(max(util_series), 2) if util_series else None,
+            "avg_utilization_pct": round(sum(util_series) / len(util_series), 2) if util_series else None,
+            "samples": max(len(in_bps), len(out_bps)),
+        }
+
+    return {"interfaces": interfaces}
+
+
 @router.get("/history")
 async def interface_history(
     device_ip: str,

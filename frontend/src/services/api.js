@@ -87,6 +87,10 @@ export const getTraps = async (params = {}) => {
     const response = await api.get('/metrics/traps', { params });
     return response.data;
 };
+export const exportDeviceCsv = async (deviceId, hours = 720) => {
+    const response = await api.get(`/metrics/export/csv/${deviceId}`, { params: { hours }, responseType: 'blob' });
+    return response;
+};
 export const getInterfaceHistory = async (deviceId, interfaceName, hours = 1, buckets = 60) => {
     const response = await api.get(`/metrics/history/${deviceId}`, {
         params: { interface_name: interfaceName, hours, buckets },

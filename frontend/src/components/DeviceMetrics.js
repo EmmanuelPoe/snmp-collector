@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getDevices, getInterfaceRates } from '../services/api';
+import { getDevices, getInterfaceRates, exportDeviceCsv } from '../services/api';
 import InterfaceCard from './InterfaceCard';
 import InterfacePanel from './InterfacePanel';
+
+const EXPORT_RANGES = [{ label: '7d', hours: 168 }, { label: '30d', hours: 720 }, { label: '90d', hours: 2160 }];
 
 function DeviceMetrics() {
     const [searchParams] = useSearchParams();
@@ -11,6 +13,8 @@ function DeviceMetrics() {
     const [ratesData, setRatesData] = useState(null);
     const [selectedIface, setSelectedIface] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [exportHours, setExportHours] = useState(720);
+    const [exporting, setExporting] = useState(false);
     const intervalRef = useRef(null);
 
     useEffect(() => {
@@ -56,6 +60,28 @@ function DeviceMetrics() {
         }
     };
 
+    const handleExport = async () => {
+        if (!selectedDevice) return;
+        setExporting(true);
+        try {
+            const resp = await exportDeviceCsv(selectedDevice, exportHours);
+            const match = /filename="?([^"]+)"?/.exec(resp.headers['content-disposition'] || '');
+            const filename = match ? match[1] : `device_${selectedDevice}_bandwidth.csv`;
+            const url = window.URL.createObjectURL(new Blob([resp.data], { type: 'text/csv' }));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('CSV export failed', err);
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const interfaces = ratesData ? Object.entries(ratesData.interfaces) : [];
 
     return (
@@ -68,6 +94,16 @@ function DeviceMetrics() {
                         <option key={d.id} value={d.id}>{d.name} ({d.ip_address})</option>
                     ))}
                 </select>
+                {selectedDevice && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <select className="select" value={exportHours} onChange={e => setExportHours(Number(e.target.value))} style={{ width: 'auto' }} title="Report range">
+                            {EXPORT_RANGES.map(r => <option key={r.hours} value={r.hours}>{r.label}</option>)}
+                        </select>
+                        <button className="btn btn-secondary btn-sm" onClick={handleExport} disabled={exporting}>
+                            {exporting ? 'Exporting…' : 'Export CSV'}
+                        </button>
+                    </div>
+                )}
                 {selectedDevice && (
                     <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', padding: '3px 10px', borderRadius: 12, fontSize: 11 }}>
                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', animation: 'pulse 1.5s infinite' }} />

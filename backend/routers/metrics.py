@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+import csv
+import io
 import httpx
 
 from auth import get_current_user
@@ -142,6 +144,46 @@ def get_traps(
     if trap_oid:
         params["trap_oid"] = trap_oid
     return _manager_get("/traps", params)
+
+
+_CSV_COLUMNS = [
+    "interface", "max_in_bps", "avg_in_bps", "max_out_bps", "avg_out_bps",
+    "speed_bps", "max_utilization_pct", "avg_utilization_pct", "samples",
+]
+
+
+@router.get("/export/csv/{device_id}")
+def export_csv(
+    device_id: int,
+    hours: float = 720.0,  # default 30 days
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    summary = _manager_get("/summary", {"device_ip": device.ip_address, "hours": hours})
+    interfaces = summary.get("interfaces", {})
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(_CSV_COLUMNS)
+    for name, s in sorted(interfaces.items()):
+        writer.writerow([
+            name, s["max_in_bps"], s["avg_in_bps"], s["max_out_bps"], s["avg_out_bps"],
+            s.get("speed_bps") if s.get("speed_bps") is not None else "",
+            s.get("max_utilization_pct") if s.get("max_utilization_pct") is not None else "",
+            s.get("avg_utilization_pct") if s.get("avg_utilization_pct") is not None else "",
+            s.get("samples", 0),
+        ])
+
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in device.name)
+    filename = f"{safe_name}_bandwidth_{int(hours)}h.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/stats/{device_id}/{interface_name}")
