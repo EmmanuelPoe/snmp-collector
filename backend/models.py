@@ -121,3 +121,15 @@ class NotificationChannel(Base):
     severity_filter = Column(JSON, default=list)
     enabled = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class MaintenanceWindow(Base):
+    __tablename__ = "maintenance_windows"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # Null device_id = global window (suppresses all devices and agent alerts).
+    device_id = Column(Integer, nullable=True)
+    start_at = Column(DateTime(timezone=True), nullable=False)
+    end_at = Column(DateTime(timezone=True), nullable=False)
+    reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

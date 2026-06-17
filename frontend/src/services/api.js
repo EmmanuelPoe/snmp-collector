@@ -136,6 +136,19 @@ export const deleteNotificationChannel = async (channelId) => {
     await api.delete(`/notification-channels/${channelId}`);
 };
 
+// ===== Maintenance Windows =====
+export const getMaintenanceWindows = async (activeOnly = false) => {
+    const response = await api.get('/maintenance-windows', { params: { active_only: activeOnly } });
+    return response.data;
+};
+export const createMaintenanceWindow = async (data) => {
+    const response = await api.post('/maintenance-windows', data);
+    return response.data;
+};
+export const deleteMaintenanceWindow = async (windowId) => {
+    await api.delete(`/maintenance-windows/${windowId}`);
+};
+
 // ===== Auth =====
 export const changePassword = async (currentPassword, newPassword) => {
     await api.post('/auth/change-password', {

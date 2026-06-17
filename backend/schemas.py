@@ -174,3 +174,22 @@ class NotificationChannelResponse(NotificationChannelBase):
 
     class Config:
         from_attributes = True
+
+
+class MaintenanceWindowCreate(BaseModel):
+    device_id: Optional[int] = None  # null = global (all devices)
+    start_at: datetime
+    end_at: datetime
+    reason: Optional[str] = None
+
+
+class MaintenanceWindowResponse(BaseModel):
+    id: int
+    device_id: Optional[int] = None
+    start_at: datetime
+    end_at: datetime
+    reason: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -13,7 +13,7 @@ from auth import hash_password
 from config import settings
 from database import SessionLocal
 from models import User, UserRole
-from routers import agents, config, devices, internal, metrics, notifications
+from routers import agents, config, devices, internal, maintenance, metrics, notifications
 from routers.alerts import alerts_router, rules_router
 from routers.auth import router as auth_router
 
@@ -92,6 +92,7 @@ app.include_router(agents.router)
 app.include_router(alerts_router)
 app.include_router(rules_router)
 app.include_router(notifications.router)
+app.include_router(maintenance.router)
 
 
 @app.get("/")

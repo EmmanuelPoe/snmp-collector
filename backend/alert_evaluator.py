@@ -6,12 +6,21 @@ import httpx
 
 from config import settings
 from database import SessionLocal
-from models import Alert, AlertRule, AlertSeverity, AlertStatus, AlertType, Device
+from models import (
+    Alert, AlertRule, AlertSeverity, AlertStatus, AlertType, Device, MaintenanceWindow,
+)
 from services import notifications
 
 logger = logging.getLogger(__name__)
 
 _RATES_LOOKBACK_HOURS = 0.1  # 6-minute window
+
+# Maintenance suppression for the current evaluation pass. Set at the top of
+# run_evaluation and read by _create_alert. The evaluator is single-threaded
+# (one asyncio task) so module-level state is safe here. Suppression blocks the
+# creation of NEW alerts only; existing alerts still resolve normally.
+_suppress_all = False
+_suppressed_devices: set = set()
 
 # Linux virtual/system interfaces that are permanently down; never alert on them.
 _VIRTUAL_IFACE_PREFIXES = ("erspan", "gre", "sit", "tunl", "ip6tnl", "bond", "lo")
@@ -43,7 +52,15 @@ _SEVERITY_BY_TYPE = {
 }
 
 
+def _is_suppressed(device_id) -> bool:
+    if _suppress_all:
+        return True
+    return device_id is not None and device_id in _suppressed_devices
+
+
 def _create_alert(db, alert_type: AlertType, message: str, device_id=None, agent_id=None):
+    if _is_suppressed(device_id):
+        return
     db.add(Alert(alert_type=alert_type, message=message, device_id=device_id,
                  agent_id=agent_id, status=AlertStatus.open,
                  severity=_SEVERITY_BY_TYPE.get(alert_type, AlertSeverity.info)))
@@ -197,9 +214,20 @@ def _check_agent_offline(db):
         logger.warning("agent_offline check failed: %s", exc)
 
 
+def _load_suppression(db):
+    """Populate maintenance-window suppression state for this pass."""
+    global _suppress_all, _suppressed_devices
+    now = datetime.now(timezone.utc)
+    windows = db.query(MaintenanceWindow).filter(
+        MaintenanceWindow.start_at <= now, MaintenanceWindow.end_at >= now).all()
+    _suppress_all = any(w.device_id is None for w in windows)
+    _suppressed_devices = {w.device_id for w in windows if w.device_id is not None}
+
+
 def run_evaluation():
     db = SessionLocal()
     try:
+        _load_suppression(db)
         devices = db.query(Device).all()
         _check_device_unreachable(db, devices)
         _check_interface_down(db, devices)
