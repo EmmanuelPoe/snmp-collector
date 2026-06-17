@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_hours: int = 8
     frontend_url: str = "http://localhost"
+    # Dedicated bearer token for the Prometheus scrape endpoint. Empty disables
+    # the endpoint (503) so it is never unintentionally exposed unauthenticated.
+    prometheus_scrape_token: str = ""
 
     class Config:
         env_file = ".env"
