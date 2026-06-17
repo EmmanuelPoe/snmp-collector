@@ -76,9 +76,17 @@ Smallest diffs, removes active alert noise. Ship these first.
 
 ---
 
-# Phase 1 — Alerting workflow
+# Phase 1 — Alerting workflow  ✅ DONE (commits 5b96fec, 6df4e39, 6a78d28, 465c103, df81209)
 
 The research doc's "fastest path to a meaningfully better product." All contained backend + migration + frontend work.
+
+**Resolved decisions:** Step 5 channels = Slack + generic webhook. Step 6 = suppress-new-only (open alerts still resolve). Step 7 `assigned_to` = FK to `users.id`, with `assigned_to_email`/`acknowledged_by_email` surfaced and a new editor/admin `GET /auth/users/assignable` endpoint for dropdowns.
+
+**Also shipped (Phase 0.5, commit 5b96fec):** the `ifHighSpeed`/`ifSpeed` fix flagged at the end of Phase 0 — speed OIDs are now collected (migration 014), so `speed_bps` resolves and `bandwidth_threshold` alerts can finally fire.
+
+**Deviation (Step 6):** built a dedicated **Maintenance page** (with a device/global scope selector) rather than a "Schedule Maintenance" button inside the device edit modal. Same capability, lower-risk than surgically editing the device modal. A per-device shortcut button could still be added later.
+
+**Migrations added this phase:** 014 (speed OIDs), 015 (alert severity), 016 (notification_channels), 017 (maintenance_windows), 018 (alert ack/assign/note). Backend test count grew 87 → 109.
 
 ## Step 4 — Severity tiers on alerts
 
