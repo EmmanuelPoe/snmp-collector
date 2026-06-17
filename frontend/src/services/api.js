@@ -123,6 +123,16 @@ export const deleteConfig = async (configId) => {
     await api.delete(`/config/configs/${configId}`);
 };
 
+// ===== MIB Browser (on-demand walk) =====
+export const walkDevice = async (deviceId, baseOid = '1.3.6.1.2.1') => {
+    const r = await api.post(`/devices/${deviceId}/walk`, null, { params: { base_oid: baseOid } });
+    return r.data;
+};
+export const getWalkResult = async (commandId) => {
+    const r = await api.get(`/devices/walk/${commandId}`);
+    return r.data;
+};
+
 // ===== Notification Channels =====
 export const getNotificationChannels = async () => {
     const response = await api.get('/notification-channels');

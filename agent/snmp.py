@@ -50,6 +50,29 @@ def _auth_data(device: DeviceConfig):
     )
 
 
+def walk_oid(device: DeviceConfig, base_oid: str, max_rows: int = 500) -> list[dict]:
+    """Ad-hoc SNMP walk from base_oid, for the MIB browser. Returns [{oid, value}]
+    capped at max_rows."""
+    auth = _auth_data(device)
+    transport = UdpTransportTarget((device.ip, device.snmp_port), timeout=5, retries=1)
+    engine = SnmpEngine()
+    rows = []
+    for err_ind, err_stat, _, var_binds in nextCmd(
+        engine, auth, transport, ContextData(),
+        ObjectType(ObjectIdentity(base_oid)),
+        lexicographicMode=False,
+    ):
+        if err_ind:
+            raise RuntimeError(str(err_ind))
+        if err_stat:
+            raise RuntimeError(err_stat.prettyPrint())
+        for oid, val in var_binds:
+            rows.append({"oid": str(oid), "value": str(val)})
+            if len(rows) >= max_rows:
+                return rows
+    return rows
+
+
 def walk_device(device: DeviceConfig) -> list[dict]:
     auth = _auth_data(device)
     transport = UdpTransportTarget((device.ip, device.snmp_port), timeout=5, retries=2)

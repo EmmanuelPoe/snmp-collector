@@ -63,6 +63,7 @@ export default function Sidebar() {
 
   const MANAGE_ITEMS = [
     { to: '/config', icon: '⊞', label: 'Configuration' },
+    { to: '/mib-browser', icon: '◳', label: 'MIB Browser' },
     { to: '/notifications', icon: '✉', label: 'Notifications' },
     { to: '/maintenance', icon: '⚒', label: 'Maintenance' },
   ];

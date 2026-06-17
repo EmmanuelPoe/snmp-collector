@@ -8,7 +8,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 import config
 from db import get_db, close_db, purge_old_metrics
-from routers import registration, ingest, metrics, slots
+from routers import registration, ingest, metrics, slots, commands
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,7 @@ app.include_router(registration.router)
 app.include_router(ingest.router)
 app.include_router(metrics.router)
 app.include_router(slots.router)
+app.include_router(commands.router)
 
 
 @app.get("/health")

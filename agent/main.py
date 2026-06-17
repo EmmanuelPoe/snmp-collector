@@ -8,7 +8,7 @@ import httpx
 
 import config
 from models import DeviceConfig
-from snmp import walk_device
+from snmp import walk_device, walk_oid
 from trap_receiver import run_trap_listener
 from uploader import TrapBuffer, UploadBuffer
 
@@ -149,6 +149,54 @@ async def _retry_loop() -> None:
             await _trap_buffer.flush()
 
 
+async def _post_command_result(client, command_id, status, result=None, error=None):
+    try:
+        await client.post(
+            f"{config.settings.manager_url}/commands/{command_id}/result",
+            json={"status": status, "result": result, "error": error},
+            headers={"Authorization": f"Bearer {config.settings.manager_api_key}"},
+            timeout=10.0,
+        )
+    except Exception as exc:
+        log.warning("Failed to post command result %s: %s", command_id, exc)
+
+
+async def _execute_command(client, cmd) -> None:
+    command_id = cmd.get("command_id")
+    if cmd.get("type") != "walk":
+        await _post_command_result(client, command_id, "error", error=f"unknown command type: {cmd.get('type')}")
+        return
+    params = cmd.get("params") or {}
+    try:
+        device = DeviceConfig(**params["device"])
+        base_oid = params.get("base_oid", "1.3.6.1.2.1")
+        max_rows = params.get("max_rows", 500)
+        rows = await asyncio.to_thread(walk_oid, device, base_oid, max_rows)
+        await _post_command_result(client, command_id, "done", result=rows)
+        log.info("Walk command %s: %d OIDs from %s", command_id, len(rows), device.ip)
+    except Exception as exc:
+        await _post_command_result(client, command_id, "error", error=str(exc))
+        log.warning("Walk command %s failed: %s", command_id, exc)
+
+
+async def _command_loop() -> None:
+    while True:
+        await asyncio.sleep(5)
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"{config.settings.manager_url}/agents/{_agent_id}/commands",
+                    headers={"Authorization": f"Bearer {config.settings.manager_api_key}"},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                commands = resp.json()
+                for cmd in commands:
+                    await _execute_command(client, cmd)
+        except Exception as exc:
+            log.debug("Command poll failed: %s", exc)
+
+
 async def _trap_loop() -> None:
     await run_trap_listener(_agent_id, _trap_buffer)
 
@@ -162,6 +210,7 @@ async def main() -> None:
         _heartbeat_loop(),
         _poll_loop(),
         _retry_loop(),
+        _command_loop(),
     ]
 
     if config.settings.trap_enabled:
