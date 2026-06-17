@@ -201,7 +201,7 @@ The research doc's "fastest path to a meaningfully better product." All containe
 
 # Phase 3 — Differentiators (larger scope, after Phase 0–1 prove out)
 
-**Status:** Step 11 ✅ DONE (commit 9d9880b). Steps 12–14 not started. These remain independent; tackle in any order.
+**Status:** Steps 11 ✅, 14 ✅, 12 ✅ done. Only **Step 13 (topology map)** remains.
 
 ## Step 11 — Dynamic baselines (anomaly detection)  ✅ DONE (commit 9d9880b)
 
@@ -211,9 +211,13 @@ The research doc's "fastest path to a meaningfully better product." All containe
 
 **To turn on:** set `BASELINE_ANOMALY_ENABLED=true` in `.env` and restart the backend.
 
-## Step 12 — MIB browser / OID explorer
+## Step 12 — MIB browser / OID explorer  ✅ DONE (commit 863d620)
 
-"Walk Device" UI action → backend → agent performs an on-demand SNMP walk → returns the OID tree for browsing; clicking an OID adds it to `CollectionConfig`. Builds directly on Step 3's OID wire-up. Requires a new agent command channel (the agent currently only polls + uploads; it has no request/response path for ad-hoc walks) — that's the main new surface.
+**Resolved decisions:** command delivery = dedicated **5s agent poll loop** (responsive walks); default walk scope = **mib-2 (1.3.6.1.2.1) capped at 500** OIDs (custom base OID allowed).
+
+**Built the agent command channel** (the main new surface): since the agent is outbound-only, it now polls the manager for pending commands and posts results back. Manager holds a transient in-memory command store (TTL 300s) with enqueue/fetch/result/get endpoints. Agent `_command_loop` runs `snmp.walk_oid` and returns rows. Backend `POST /devices/{id}/walk` (editor/admin) resolves the device's agent — or any online agent — forwards creds + base OID; `GET /devices/walk/{cmd}` proxies the result. Frontend MIB Browser page walks and adds OIDs to the collection (ties into Step 3's whitelist).
+
+**Verified live** end-to-end against the simulator (37 system-subtree OIDs through backend→manager→agent→manager→backend), plus 12 unit tests. This command channel is reusable for any future agent request/response feature.
 
 ## Step 13 — Topology map + dependency suppression
 
