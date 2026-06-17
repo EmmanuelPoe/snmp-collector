@@ -103,3 +103,21 @@ class AlertRule(Base):
     bandwidth_out_pct = Column(Float, nullable=True)
     error_rate = Column(Float, nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
+
+
+class NotificationChannelType(str, enum.Enum):
+    slack = "slack"
+    webhook = "webhook"
+
+
+class NotificationChannel(Base):
+    __tablename__ = "notification_channels"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    type = Column(Enum(NotificationChannelType), nullable=False)
+    url = Column(String(1024), nullable=False)
+    # Severities that trigger this channel. Empty list = all severities.
+    severity_filter = Column(JSON, default=list)
+    enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -7,6 +7,7 @@ import httpx
 from config import settings
 from database import SessionLocal
 from models import Alert, AlertRule, AlertSeverity, AlertStatus, AlertType, Device
+from services import notifications
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +206,10 @@ def run_evaluation():
         _check_bandwidth_thresholds(db, devices)
         _check_error_rate(db, devices)
         _check_agent_offline(db)
+        new_alerts = [o for o in db.new if isinstance(o, Alert)]
         db.commit()
+        for alert in new_alerts:
+            notifications.dispatch_alert(db, alert)
     except Exception as exc:
         logger.error("Alert evaluation error: %s", exc)
         db.rollback()

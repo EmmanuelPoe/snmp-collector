@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import DeviceManagement from './components/DeviceManagement';
 import DeviceMetrics from './components/DeviceMetrics';
 import ConfigurationManager from './components/ConfigurationManager';
+import NotificationSettings from './components/NotificationSettings';
 import AgentsPage from './components/AgentsPage';
 import TrapsPage from './components/TrapsPage';
 import LoginPage from './pages/LoginPage';
@@ -27,6 +28,7 @@ function AppShell() {
             <Route path="/agents" element={<PrivateRoute><AgentsPage /></PrivateRoute>} />
             <Route path="/traps" element={<PrivateRoute><TrapsPage /></PrivateRoute>} />
             <Route path="/config" element={<PrivateRoute><ConfigurationManager /></PrivateRoute>} />
+            <Route path="/notifications" element={<PrivateRoute><NotificationSettings /></PrivateRoute>} />
             <Route path="/users" element={<PrivateRoute><UserManagementPage /></PrivateRoute>} />
           </Routes>
         </div>

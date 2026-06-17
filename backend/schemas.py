@@ -147,3 +147,30 @@ class AlertRuleResponse(AlertRuleCreate):
 
     class Config:
         from_attributes = True
+
+
+class NotificationChannelBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    type: str = Field(..., pattern="^(slack|webhook)$")
+    url: str = Field(..., min_length=1, max_length=1024)
+    severity_filter: List[str] = Field(default=["critical", "warning", "info"])
+    enabled: bool = True
+
+
+class NotificationChannelCreate(NotificationChannelBase):
+    pass
+
+
+class NotificationChannelUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    url: Optional[str] = Field(None, min_length=1, max_length=1024)
+    severity_filter: Optional[List[str]] = None
+    enabled: Optional[bool] = None
+
+
+class NotificationChannelResponse(NotificationChannelBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

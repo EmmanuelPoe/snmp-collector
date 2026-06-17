@@ -63,6 +63,7 @@ export default function Sidebar() {
 
   const MANAGE_ITEMS = [
     { to: '/config', icon: '⊞', label: 'Configuration' },
+    { to: '/notifications', icon: '✉', label: 'Notifications' },
   ];
 
   const ADMIN_ITEMS = [

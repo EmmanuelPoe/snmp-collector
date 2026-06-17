@@ -119,6 +119,23 @@ export const deleteConfig = async (configId) => {
     await api.delete(`/config/configs/${configId}`);
 };
 
+// ===== Notification Channels =====
+export const getNotificationChannels = async () => {
+    const response = await api.get('/notification-channels');
+    return response.data;
+};
+export const createNotificationChannel = async (data) => {
+    const response = await api.post('/notification-channels', data);
+    return response.data;
+};
+export const updateNotificationChannel = async (channelId, updates) => {
+    const response = await api.put(`/notification-channels/${channelId}`, updates);
+    return response.data;
+};
+export const deleteNotificationChannel = async (channelId) => {
+    await api.delete(`/notification-channels/${channelId}`);
+};
+
 // ===== Auth =====
 export const changePassword = async (currentPassword, newPassword) => {
     await api.post('/auth/change-password', {
