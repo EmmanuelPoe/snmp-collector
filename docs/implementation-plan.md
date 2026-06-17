@@ -201,9 +201,15 @@ The research doc's "fastest path to a meaningfully better product." All containe
 
 # Phase 3 — Differentiators (larger scope, after Phase 0–1 prove out)
 
-## Step 11 — Dynamic baselines (anomaly detection)
+**Status:** Step 11 ✅ DONE (commit 9d9880b). Steps 12–14 not started. These remain independent; tackle in any order.
 
-7-day rolling p95 per interface per metric via a single DuckDB query; alert when current value `> rolling_p95 * 1.5`. New `AlertType`. Requires enough history to be meaningful — ship after retention (Step 9) is in place so the window is bounded. Decision: per-metric multiplier and minimum-history guard before the baseline is trusted.
+## Step 11 — Dynamic baselines (anomaly detection)  ✅ DONE (commit 9d9880b)
+
+**Resolved decisions:** enablement = global flag `BASELINE_ANOMALY_ENABLED`, **default OFF** (no surprise noise on upgrade); metric scope = in/out **bps only** (errors deferred — too spiky for p95); multiplier ×1.5, min-samples guard 100, window 7d — all configurable.
+
+**Built:** manager `GET /internal/metrics/baseline` computes per-interface p95 of in/out bps via a DuckDB window query (counter resets excluded). Backend `_check_baseline_anomaly` fires the new `baseline_anomaly` AlertType (migration 019). Key design point: baselines are **cached per device with a 1h TTL** so the heavy 7-day query never runs on the 30s evaluation loop. Min-samples guard + virtual-interface skip prevent false positives.
+
+**To turn on:** set `BASELINE_ANOMALY_ENABLED=true` in `.env` and restart the backend.
 
 ## Step 12 — MIB browser / OID explorer
 
