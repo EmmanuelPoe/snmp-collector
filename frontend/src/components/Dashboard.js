@@ -257,11 +257,20 @@ export default function Dashboard() {
               <span className="text-faint text-xs">All clear</span>
             </div>
           ) : (
-            alerts.map(alert => (
+            alerts.map(alert => {
+              const sevColor = { critical: 'var(--color-error)', warning: 'var(--color-warning, #d97706)', info: 'var(--color-text-faint)' }[alert.severity] || 'var(--color-error)';
+              return (
               <div key={alert.id} className="agent-row">
                 <div>
-                  <div className="agent-name" style={{ color: 'var(--color-error)', fontSize: 12 }}>
-                    {alert.alert_type.replace(/_/g, ' ')}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {alert.severity && (
+                      <span className="badge" style={{ background: sevColor, color: '#fff', fontSize: 10, textTransform: 'uppercase', padding: '1px 6px' }}>
+                        {alert.severity}
+                      </span>
+                    )}
+                    <span className="agent-name" style={{ color: sevColor, fontSize: 12 }}>
+                      {alert.alert_type.replace(/_/g, ' ')}
+                    </span>
                   </div>
                   <div className="agent-meta">{alert.message}</div>
                 </div>
@@ -269,7 +278,7 @@ export default function Dashboard() {
                   {Math.round((Date.now() - new Date(alert.triggered_at)) / 60000)}m ago
                 </span>
               </div>
-            ))
+            );})
           )}
         </div>
 

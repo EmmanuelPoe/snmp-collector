@@ -1,13 +1,22 @@
 """Unit tests for Phase 0 alert-evaluator changes: virtual-interface denylist
 and error-rate alerting."""
 import alert_evaluator
-from models import Alert, AlertRule, AlertType, AlertStatus, Device
+from models import Alert, AlertRule, AlertSeverity, AlertType, AlertStatus, Device
 
 
 def _open_count(db, alert_type):
     return db.query(Alert).filter(
         Alert.alert_type == alert_type, Alert.status == AlertStatus.open
     ).count()
+
+
+def test_create_alert_assigns_severity_by_type(db_session):
+    alert_evaluator._create_alert(db_session, AlertType.device_unreachable, "x", device_id=1)
+    alert_evaluator._create_alert(db_session, AlertType.interface_down, "y", device_id=2)
+    db_session.commit()
+    by_type = {a.alert_type: a.severity for a in db_session.query(Alert).all()}
+    assert by_type[AlertType.device_unreachable] == AlertSeverity.critical
+    assert by_type[AlertType.interface_down] == AlertSeverity.warning
 
 
 def test_is_virtual_iface():

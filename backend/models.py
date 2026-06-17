@@ -73,6 +73,12 @@ class AlertStatus(str, enum.Enum):
     resolved = "resolved"
 
 
+class AlertSeverity(str, enum.Enum):
+    critical = "critical"
+    warning = "warning"
+    info = "info"
+
+
 class Alert(Base):
     __tablename__ = "alerts"
 
@@ -80,6 +86,8 @@ class Alert(Base):
     device_id = Column(Integer, nullable=True)
     agent_id = Column(String(255), nullable=True)
     alert_type = Column(Enum(AlertType), nullable=False)
+    severity = Column(Enum(AlertSeverity), nullable=False,
+                      default=AlertSeverity.warning, server_default="warning")
     message = Column(Text, nullable=False)
     triggered_at = Column(DateTime(timezone=True), server_default=func.now())
     resolved_at = Column(DateTime(timezone=True), nullable=True)

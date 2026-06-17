@@ -6,7 +6,7 @@ import httpx
 
 from config import settings
 from database import SessionLocal
-from models import Alert, AlertRule, AlertStatus, AlertType, Device
+from models import Alert, AlertRule, AlertSeverity, AlertStatus, AlertType, Device
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +33,19 @@ def _open_alert_exists(db, alert_type: AlertType, device_id=None, agent_id=None)
     return q.first() is not None
 
 
+_SEVERITY_BY_TYPE = {
+    AlertType.device_unreachable: AlertSeverity.critical,
+    AlertType.agent_offline: AlertSeverity.critical,
+    AlertType.interface_down: AlertSeverity.warning,
+    AlertType.bandwidth_threshold: AlertSeverity.warning,
+    AlertType.error_rate: AlertSeverity.warning,
+}
+
+
 def _create_alert(db, alert_type: AlertType, message: str, device_id=None, agent_id=None):
     db.add(Alert(alert_type=alert_type, message=message, device_id=device_id,
-                 agent_id=agent_id, status=AlertStatus.open))
+                 agent_id=agent_id, status=AlertStatus.open,
+                 severity=_SEVERITY_BY_TYPE.get(alert_type, AlertSeverity.info)))
 
 
 def _resolve_alerts(db, alert_type: AlertType, device_id=None, agent_id=None):

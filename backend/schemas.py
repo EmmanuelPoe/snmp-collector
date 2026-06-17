@@ -120,6 +120,7 @@ class AlertResponse(BaseModel):
     device_id: Optional[int] = None
     agent_id: Optional[str] = None
     alert_type: str
+    severity: str
     message: str
     triggered_at: datetime
     resolved_at: Optional[datetime] = None
