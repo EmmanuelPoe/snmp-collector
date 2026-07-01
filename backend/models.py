@@ -140,6 +140,24 @@ class NotificationChannel(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class TopologyEdge(Base):
+    __tablename__ = "topology_edges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    local_device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"),
+                             nullable=False, index=True)
+    local_port = Column(String(255), nullable=True)
+    remote_chassis_id = Column(String(255), nullable=True)
+    remote_sysname = Column(String(255), nullable=True)
+    remote_port_id = Column(String(255), nullable=True)
+    remote_port_desc = Column(String(255), nullable=True)
+    # Set when the LLDP neighbour resolves to a known device (by sysname/IP).
+    remote_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"),
+                              nullable=True, index=True)
+    last_seen = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class MaintenanceWindow(Base):
     __tablename__ = "maintenance_windows"
 

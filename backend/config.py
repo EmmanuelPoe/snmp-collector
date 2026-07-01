@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     baseline_multiplier: float = 1.5
     baseline_min_samples: int = 100
     baseline_window_days: float = 7.0
+    # Topology dependency suppression: when a device on a child's only path to the
+    # topology root(s) is down, suppress the child's (collateral) alerts. Off by
+    # default so it never changes alerting behaviour on upgrade without opt-in.
+    topology_suppression_enabled: bool = False
 
     class Config:
         env_file = ".env"

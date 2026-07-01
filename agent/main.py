@@ -8,7 +8,7 @@ import httpx
 
 import config
 from models import DeviceConfig
-from snmp import walk_device, walk_oid
+from snmp import walk_device, walk_oid, walk_lldp
 from trap_receiver import run_trap_listener
 from uploader import TrapBuffer, UploadBuffer
 
@@ -163,20 +163,25 @@ async def _post_command_result(client, command_id, status, result=None, error=No
 
 async def _execute_command(client, cmd) -> None:
     command_id = cmd.get("command_id")
-    if cmd.get("type") != "walk":
-        await _post_command_result(client, command_id, "error", error=f"unknown command type: {cmd.get('type')}")
+    ctype = cmd.get("type")
+    if ctype not in ("walk", "lldp"):
+        await _post_command_result(client, command_id, "error", error=f"unknown command type: {ctype}")
         return
     params = cmd.get("params") or {}
     try:
         device = DeviceConfig(**params["device"])
-        base_oid = params.get("base_oid", "1.3.6.1.2.1")
-        max_rows = params.get("max_rows", 500)
-        rows = await asyncio.to_thread(walk_oid, device, base_oid, max_rows)
+        if ctype == "walk":
+            base_oid = params.get("base_oid", "1.3.6.1.2.1")
+            max_rows = params.get("max_rows", 500)
+            rows = await asyncio.to_thread(walk_oid, device, base_oid, max_rows)
+            log.info("Walk command %s: %d OIDs from %s", command_id, len(rows), device.ip)
+        else:  # lldp
+            rows = await asyncio.to_thread(walk_lldp, device)
+            log.info("LLDP command %s: %d neighbours from %s", command_id, len(rows), device.ip)
         await _post_command_result(client, command_id, "done", result=rows)
-        log.info("Walk command %s: %d OIDs from %s", command_id, len(rows), device.ip)
     except Exception as exc:
         await _post_command_result(client, command_id, "error", error=str(exc))
-        log.warning("Walk command %s failed: %s", command_id, exc)
+        log.warning("Command %s (%s) failed: %s", command_id, ctype, exc)
 
 
 async def _command_loop() -> None:

@@ -133,6 +133,16 @@ export const getWalkResult = async (commandId) => {
     return r.data;
 };
 
+// ===== Topology =====
+export const getTopologyGraph = async () => {
+    const r = await api.get('/topology/graph');
+    return r.data;
+};
+export const discoverTopology = async () => {
+    const r = await api.post('/topology/discover');
+    return r.data;
+};
+
 // ===== Notification Channels =====
 export const getNotificationChannels = async () => {
     const response = await api.get('/notification-channels');

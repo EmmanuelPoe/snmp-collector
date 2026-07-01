@@ -7,6 +7,7 @@ import ConfigurationManager from './components/ConfigurationManager';
 import NotificationSettings from './components/NotificationSettings';
 import MaintenanceWindows from './components/MaintenanceWindows';
 import MibBrowser from './components/MibBrowser';
+import TopologyMap from './components/TopologyMap';
 import AgentsPage from './components/AgentsPage';
 import TrapsPage from './components/TrapsPage';
 import LoginPage from './pages/LoginPage';
@@ -33,6 +34,7 @@ function AppShell() {
             <Route path="/notifications" element={<PrivateRoute><NotificationSettings /></PrivateRoute>} />
             <Route path="/maintenance" element={<PrivateRoute><MaintenanceWindows /></PrivateRoute>} />
             <Route path="/mib-browser" element={<PrivateRoute><MibBrowser /></PrivateRoute>} />
+            <Route path="/topology" element={<PrivateRoute><TopologyMap /></PrivateRoute>} />
             <Route path="/users" element={<PrivateRoute><UserManagementPage /></PrivateRoute>} />
           </Routes>
         </div>

@@ -58,6 +58,7 @@ export default function Sidebar() {
     { to: '/devices', icon: '◻', label: 'Devices' },
     { to: '/metrics', icon: '▦', label: 'Metrics' },
     { to: '/agents',  icon: '◎', label: 'Agents' },
+    { to: '/topology', icon: '⧉', label: 'Topology' },
     { to: '/traps',   icon: '⊿', label: 'Traps',         badge: trapCount > 0 ? trapCount : null, badgeClass: 'badge-warning' },
   ];
 

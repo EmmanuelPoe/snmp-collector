@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 
 import httpx
@@ -9,6 +10,7 @@ from config import settings
 from database import SessionLocal
 from models import (
     Alert, AlertRule, AlertSeverity, AlertStatus, AlertType, Device, MaintenanceWindow,
+    TopologyEdge,
 )
 from services import notifications
 
@@ -96,20 +98,84 @@ def _fetch_rates(device_ip: str) -> dict:
 
 
 def _check_device_unreachable(db, devices: list):
+    # First determine reachability for every device, so topology suppression can
+    # mark collateral children before we create any device_unreachable alert.
+    reachable: dict = {}
     for device in devices:
         if not device.enabled:
             continue
         try:
             data = _fetch_rates(device.ip_address)
-            if data.get("interfaces"):
-                _resolve_alerts(db, AlertType.device_unreachable, device_id=device.id)
-            else:
-                if not _open_alert_exists(db, AlertType.device_unreachable, device_id=device.id):
-                    _create_alert(db, AlertType.device_unreachable,
-                                  f"{device.name} — no SNMP data received in last 5 minutes",
-                                  device_id=device.id)
+            reachable[device.id] = bool(data.get("interfaces"))
         except Exception as exc:
             logger.warning("device_unreachable check failed for %s: %s", device.name, exc)
+
+    down_ids = {did for did, ok in reachable.items() if not ok}
+    _apply_topology_suppression(db, devices, down_ids)
+
+    by_id = {d.id: d for d in devices}
+    for device_id, ok in reachable.items():
+        device = by_id[device_id]
+        if ok:
+            _resolve_alerts(db, AlertType.device_unreachable, device_id=device_id)
+        elif not _open_alert_exists(db, AlertType.device_unreachable, device_id=device_id):
+            # _create_alert skips devices marked collateral by topology suppression.
+            _create_alert(db, AlertType.device_unreachable,
+                          f"{device.name} — no SNMP data received in last 5 minutes",
+                          device_id=device_id)
+
+
+def _topology_roots(devices: list, adj: dict) -> set:
+    """Root(s) of the topology: devices tagged core/gateway, else highest-degree."""
+    tagged = {
+        d.id for d in devices
+        if d.id in adj and d.tags and any(str(t).lower() in ("core", "gateway") for t in d.tags)
+    }
+    if tagged:
+        return tagged
+    if not adj:
+        return set()
+    max_deg = max(len(n) for n in adj.values())
+    return {node for node, nbrs in adj.items() if len(nbrs) == max_deg}
+
+
+def _bfs_depths(adj: dict, roots: set) -> dict:
+    depth = {r: 0 for r in roots}
+    q = deque(roots)
+    while q:
+        node = q.popleft()
+        for nbr in adj.get(node, ()):
+            if nbr not in depth:
+                depth[nbr] = depth[node] + 1
+                q.append(nbr)
+    return depth
+
+
+def _apply_topology_suppression(db, devices: list, down_ids: set):
+    """Gateway-rooted BFS dependency suppression: a down device is collateral (and
+    suppressed) when every one of its parents (neighbours closer to a root) is also
+    down. Root-cause devices — those with at least one up parent, or no parent —
+    still alert. Adds collateral device ids to the maintenance suppression set so
+    _create_alert skips them for the rest of the pass."""
+    if not settings.topology_suppression_enabled or not down_ids:
+        return
+    edges = db.query(TopologyEdge).filter(TopologyEdge.remote_device_id.isnot(None)).all()
+    if not edges:
+        return
+    adj: dict = defaultdict(set)
+    for e in edges:
+        adj[e.local_device_id].add(e.remote_device_id)
+        adj[e.remote_device_id].add(e.local_device_id)
+
+    roots = _topology_roots(devices, adj)
+    if not roots:
+        return
+    depth = _bfs_depths(adj, roots)
+    inf = float("inf")
+    for d in down_ids:
+        parents = {n for n in adj.get(d, ()) if depth.get(n, inf) < depth.get(d, inf)}
+        if parents and parents <= down_ids:
+            _suppressed_devices.add(d)
 
 
 def _check_interface_down(db, devices: list):
