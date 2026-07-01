@@ -201,7 +201,7 @@ The research doc's "fastest path to a meaningfully better product." All containe
 
 # Phase 3 — Differentiators (larger scope, after Phase 0–1 prove out)
 
-**Status:** Steps 11 ✅, 14 ✅, 12 ✅ done. Only **Step 13 (topology map)** remains.
+**Status:** Steps 11 ✅, 12 ✅, 13 ✅, 14 ✅ — **Phase 3 complete.**
 
 ## Step 11 — Dynamic baselines (anomaly detection)  ✅ DONE (commit 9d9880b)
 
@@ -219,9 +219,19 @@ The research doc's "fastest path to a meaningfully better product." All containe
 
 **Verified live** end-to-end against the simulator (37 system-subtree OIDs through backend→manager→agent→manager→backend), plus 12 unit tests. This command channel is reusable for any future agent request/response feature.
 
-## Step 13 — Topology map + dependency suppression
+## Step 13 — Topology map + dependency suppression  ✅ DONE (migration 020)
 
-Largest scope. LLDP MIB collection in the agent (`lldpRemTable`), topology graph stored in Postgres, React graph viz (Cytoscape.js or D3), and parent-down → child-suppression in the evaluator. Highest differentiator per the research doc; do last.
+**Resolved decisions:** parent model = **gateway-rooted BFS** (roots = devices tagged `core`/`gateway`, else highest-degree node; a child that loses its only path to a root is collateral); viz library = **Cytoscape.js** (`cytoscape` + `react-cytoscapejs`); suppression enablement = global flag `TOPOLOGY_SUPPRESSION_ENABLED`, **default OFF** (no behaviour change on upgrade without opt-in).
+
+**Built (reuses the Step 12 agent command channel — no manager changes):**
+- **Agent** — `walk_lldp` in [agent/snmp.py](../agent/snmp.py) walks `lldpRemTable` (chassis/port/sysname) + `lldpLocPortDesc`; a new `lldp` command type in `_execute_command` returns parsed neighbour rows.
+- **Backend** — migration 020 `topology_edges`, `TopologyEdge` model, [routers/topology.py](../backend/routers/topology.py): `POST /topology/discover` (editor/admin) enqueues an LLDP walk per enabled device via the manager command channel, resolves neighbours to known devices by sysname/IP, and rebuilds each device's adjacency (delete-then-insert); `GET /topology/graph` returns nodes (status from open `device_unreachable` alerts) + resolved edges + unresolved external neighbours.
+- **Evaluator** — `_apply_topology_suppression` in [alert_evaluator.py](../backend/alert_evaluator.py): multi-source BFS depth from the root(s); a down device is suppressed only when **every** parent (lower-depth neighbour) is also down. Wired into a restructured `_check_device_unreachable` so a collateral child never fires (adds to the same `_suppressed_devices` set maintenance windows use → new-alert suppression only, existing alerts still resolve).
+- **Frontend** — Cytoscape [TopologyMap](../frontend/src/components/TopologyMap.js) page (Monitor nav): node colour = reachability, diamonds = roots, dashed = unresolved neighbours; "Discover topology" button.
+
+**Verification:** 9 backend unit tests (BFS depths, root selection, chain/parent-up/root-never-suppressed, collateral-alert suppression, graph read, discover-with-neighbour-resolution); backend suite 136 → 145. Live end-to-end against the simulator: `POST /topology/discover` completed the full backend→manager→agent→`walk_lldp`→backend round-trip (`devices_walked=1, timed_out=0`).
+
+**Verification caveat:** the net-snmp simulator exposes **no LLDP-MIB data**, so live discovery returns zero edges (same "no live source" limitation as Step 14 traps). Edge building, neighbour resolution and suppression are therefore covered by synthetic unit tests — worth a real LLDP-capable device test before relying on dependency suppression in production.
 
 ## Step 14 — Trap correlation / enrichment  ✅ DONE (commit 9c7f5bd)
 
@@ -231,7 +241,7 @@ Largest scope. LLDP MIB collection in the agent (`lldpRemTable`), topology graph
 
 **Verification caveat:** this environment has no live trap source (net-snmp simulator doesn't emit traps; `TRAP_ENABLED` off), so correlation is covered by 8 synthetic-trap unit tests rather than a live trap. Worth a real linkDown test against trap-capable hardware before relying on it in production.
 
-**Phase 3 remaining:** Step 12 (MIB browser — needs agent command channel), Step 13 (topology map — largest).
+**Phase 3 remaining:** none — all steps (11–14) complete.
 
 ---
 
