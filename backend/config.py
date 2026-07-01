@@ -12,10 +12,13 @@ class Settings(BaseSettings):
     manager_url: str = "http://manager:8000"
     api_title: str = "SNMP Metrics Collector API"
     api_version: str = "1.0.0"
-    manager_api_key: str = "change-me-in-production"
+    manager_api_key: str = ""
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_expire_hours: int = 8
+    # Fernet key for encrypting SNMP credentials at rest. When empty, a stable key
+    # is derived from jwt_secret (see crypto.py). Set a dedicated key in production.
+    encryption_key: Optional[str] = None
     frontend_url: str = "http://localhost"
     # Dedicated bearer token for the Prometheus scrape endpoint. Empty disables
     # the endpoint (503) so it is never unintentionally exposed unauthenticated.
@@ -44,3 +47,48 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# Secrets that ship as defaults/placeholders in config or .env.example. Starting
+# with any of these means the deployment is using a publicly known secret.
+_PLACEHOLDER_SECRETS = {
+    "change-me-in-production",
+    "replace-with-a-long-random-secret",
+    "changeme",
+    "change-me",
+    "secret",
+    "password",
+    "replace-me",
+    "your-secret-here",
+}
+_MIN_SECRET_LENGTH = 16
+
+
+def _secret_problems(name: str, value: Optional[str]) -> list[str]:
+    if not value:
+        return [f"{name} is not set"]
+    if value.strip().lower() in _PLACEHOLDER_SECRETS:
+        return [f"{name} is set to a known placeholder/default value"]
+    if len(value) < _MIN_SECRET_LENGTH:
+        return [f"{name} must be at least {_MIN_SECRET_LENGTH} characters"]
+    return []
+
+
+def check_required_secrets() -> None:
+    """Fail fast if any required secret is unset, a known placeholder, or too short.
+
+    Called at application startup so an insecure deployment aborts with a clear
+    message instead of silently running with a publicly known secret.
+    """
+    problems = _secret_problems("JWT_SECRET", settings.jwt_secret)
+    problems += _secret_problems("MANAGER_API_KEY", settings.manager_api_key)
+    # ENCRYPTION_KEY may be empty (a key is derived from JWT_SECRET); only reject a
+    # placeholder value. Its Fernet format is validated on first use in crypto.py.
+    if settings.encryption_key and settings.encryption_key.strip().lower() in _PLACEHOLDER_SECRETS:
+        problems.append("ENCRYPTION_KEY is set to a known placeholder value")
+    if problems:
+        raise RuntimeError(
+            "Insecure secret configuration — refusing to start:\n  - "
+            + "\n  - ".join(problems)
+            + "\nSet strong, unique values for these (see .env.example)."
+        )

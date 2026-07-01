@@ -94,7 +94,7 @@ def test_deregister_unknown_agent_returns_404(client, auth_headers):
 
 
 def test_internal_agents_requires_no_auth(client, mock_backend_empty):
-    reg = client.post("/register", json={"hostname": "nyc-int", "ip": "10.1.1.1"}, headers={"Authorization": "Bearer test-key"})
+    reg = client.post("/register", json={"hostname": "nyc-int", "ip": "10.1.1.1"}, headers={"Authorization": "Bearer test-manager-api-key"})
     assert reg.status_code == 200
     resp = client.get("/internal/agents")   # no auth header
     assert resp.status_code == 200

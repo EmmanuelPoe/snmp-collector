@@ -1,4 +1,16 @@
-.PHONY: help setup build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend
+.PHONY: help setup ensure-env build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend
+
+# Create .env from the example on first run, generating strong random secrets so
+# the stack starts securely out of the box (the services refuse to start with the
+# placeholder secrets shipped in .env.example). ENCRYPTION_KEY is left empty and
+# derived from JWT_SECRET; set a dedicated one for production.
+ensure-env:
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		python3 -c "import secrets, re, pathlib; p = pathlib.Path('.env'); t = p.read_text(); sub = lambda t, k: re.sub(r'(?m)^' + k + r'=.*', k + '=' + secrets.token_urlsafe(32), t); t = sub(t, 'JWT_SECRET'); t = sub(t, 'MANAGER_API_KEY'); p.write_text(t)" \
+			&& echo "Created .env with generated JWT_SECRET and MANAGER_API_KEY" \
+			|| echo "Created .env — set JWT_SECRET and MANAGER_API_KEY to strong random values before starting"; \
+	fi
 
 # Default target
 help:
@@ -26,15 +38,14 @@ help:
 	@echo ""
 
 # First-time setup: build, start, and migrate in one command
-setup:
-	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env — set JWT_SECRET and MANAGER_API_KEY before production use"; fi
+setup: ensure-env
 	docker-compose build
 	docker-compose up -d
 	@echo "Waiting for backend to be ready..."
 	@until docker-compose exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" >/dev/null 2>&1; do sleep 2; done
 	docker-compose exec -T backend alembic upgrade head
 	@echo ""
-	@echo "Ready at http://localhost  (admin@localhost / changeme — you will be prompted to change your password)"
+	@echo "Ready at http://localhost  (login as admin@localhost — the one-time password is printed in 'make logs-backend')"
 
 # Build all containers
 build:
@@ -42,9 +53,8 @@ build:
 	docker-compose build
 
 # Start the application
-up:
+up: ensure-env
 	@echo "Starting SNMP Collector application..."
-	@cp -n .env.example .env 2>/dev/null || true
 	docker-compose up -d
 	@echo ""
 	@echo "✅ Application started successfully!"
@@ -53,9 +63,9 @@ up:
 	@echo "  App:         http://localhost"
 	@echo "  Manager API: http://localhost:8001"
 	@echo ""
-	@echo "Default credentials (first login only):"
-	@echo "  Email:    admin@localhost"
-	@echo "  Password: changeme  ← you will be prompted to change this"
+	@echo "First login (admin@localhost):"
+	@echo "  The one-time password is printed once in the backend log — run 'make logs-backend'"
+	@echo "  You will be prompted to change it on first login"
 	@echo ""
 	@echo "View logs: make logs"
 	@echo "Stop application: make down"

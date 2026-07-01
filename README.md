@@ -59,11 +59,11 @@ Access the app at **http://localhost**.
 On first startup, a bootstrap admin account is created:
 
 - **Email:** `admin@localhost`
-- **Password:** `changeme`
+- **Password:** a random one-time password printed once in the backend log — find it with `make logs-backend` (look for "Bootstrap admin created").
 
 You will be prompted to set a new password on first login.
 
-> **Before deploying to production:** set `JWT_SECRET` and `MANAGER_API_KEY` to strong random values in `.env`.
+> **Secrets are enforced:** the backend and manager refuse to start if `JWT_SECRET` or `MANAGER_API_KEY` is unset, a known placeholder, or shorter than 16 characters. `make up` generates strong values into `.env` automatically; set your own (and a dedicated `ENCRYPTION_KEY`) for production.
 
 ## Using the UI
 
@@ -140,7 +140,8 @@ curl -X POST http://localhost/api/auth/register \
 ### Environment variables
 
 ```bash
-# Required — startup fails without these
+# Required — startup fails if unset, a known placeholder, or shorter than 16 chars.
+# `make up` generates strong values automatically; the values below are placeholders.
 JWT_SECRET=replace-with-a-long-random-secret
 MANAGER_API_KEY=change-me-in-production
 

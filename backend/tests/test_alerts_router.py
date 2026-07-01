@@ -4,12 +4,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("POSTGRES_USER", "test")
 os.environ.setdefault("POSTGRES_PASSWORD", "test")
 os.environ.setdefault("POSTGRES_DB", "test")
-os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
 import pytest
 import config
 config.settings.database_url = "sqlite:///:memory:"
-config.settings.jwt_secret = "test-secret"
+config.settings.jwt_secret = "test-secret-for-unit-tests"
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -21,8 +21,8 @@ from models import User, UserRole, Alert, AlertRule, AlertType, AlertStatus, Dev
 
 @pytest.fixture(scope="function")
 def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(config.settings, "jwt_secret", "test-secret")
-    monkeypatch.setattr(config.settings, "manager_api_key", "mgr-key")
+    monkeypatch.setattr(config.settings, "jwt_secret", "test-secret-for-unit-tests")
+    monkeypatch.setattr(config.settings, "manager_api_key", "mgr-test-key-1234567")
     monkeypatch.setattr(config.settings, "frontend_url", "http://localhost")
     engine = create_engine(f"sqlite:///{tmp_path}/alert.db", connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=engine)

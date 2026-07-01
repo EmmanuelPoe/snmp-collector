@@ -4,7 +4,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("POSTGRES_USER", "test")
 os.environ.setdefault("POSTGRES_PASSWORD", "test")
 os.environ.setdefault("POSTGRES_DB", "test")
-os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
 import pytest
 from unittest.mock import MagicMock
@@ -13,7 +13,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from database import Base
 config.settings.database_url = "sqlite:///:memory:"
-config.settings.jwt_secret = "test-secret"
+config.settings.jwt_secret = "test-secret-for-unit-tests"
 
 from auth import hash_password, verify_password, create_access_token, get_current_user, require_role, require_manager_key
 from database import get_db
@@ -30,7 +30,7 @@ def test_hash_and_verify_password():
 
 def test_create_access_token_contains_sub():
     token = create_access_token({"sub": "user@example.com", "role": "viewer"})
-    payload = jwt.decode(token, "test-secret", algorithms=["HS256"])
+    payload = jwt.decode(token, "test-secret-for-unit-tests", algorithms=["HS256"])
     assert payload["sub"] == "user@example.com"
     assert payload["role"] == "viewer"
 
@@ -51,15 +51,15 @@ def test_require_role_passes_for_correct_role():
 
 
 def test_require_manager_key_rejects_wrong_key(monkeypatch):
-    monkeypatch.setattr(config.settings, "manager_api_key", "real-key")
+    monkeypatch.setattr(config.settings, "manager_api_key", "real-test-key-123456")
     with pytest.raises(HTTPException) as exc:
         require_manager_key(authorization="Bearer wrong-key")
     assert exc.value.status_code == 401
 
 
 def test_require_manager_key_accepts_correct_key(monkeypatch):
-    monkeypatch.setattr(config.settings, "manager_api_key", "real-key")
-    result = require_manager_key(authorization="Bearer real-key")
+    monkeypatch.setattr(config.settings, "manager_api_key", "real-test-key-123456")
+    result = require_manager_key(authorization="Bearer real-test-key-123456")
     assert result is True
 
 
@@ -85,7 +85,7 @@ def test_get_current_user_rejects_expired_token(db):
     from datetime import datetime, timedelta, timezone
     from jose import jwt
     expired_payload = {"sub": "user@test.com", "exp": datetime.now(timezone.utc) - timedelta(hours=1)}
-    expired_token = jwt.encode(expired_payload, "test-secret", algorithm="HS256")
+    expired_token = jwt.encode(expired_payload, "test-secret-for-unit-tests", algorithm="HS256")
     with pytest.raises(HTTPException) as exc:
         get_current_user(token=expired_token, db=db)
     assert exc.value.status_code == 401
@@ -116,7 +116,7 @@ def test_get_current_user_returns_user(db):
 
 
 def test_require_manager_key_rejects_missing_header(monkeypatch):
-    monkeypatch.setattr(config.settings, "manager_api_key", "real-key")
+    monkeypatch.setattr(config.settings, "manager_api_key", "real-test-key-123456")
     with pytest.raises(HTTPException) as exc:
         require_manager_key(authorization=None)
     assert exc.value.status_code == 401
@@ -129,8 +129,8 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture(scope="function")
 def auth_client(tmp_path, monkeypatch):
-    monkeypatch.setattr(config.settings, "jwt_secret", "test-secret")
-    monkeypatch.setattr(config.settings, "manager_api_key", "mgr-key")
+    monkeypatch.setattr(config.settings, "jwt_secret", "test-secret-for-unit-tests")
+    monkeypatch.setattr(config.settings, "manager_api_key", "mgr-test-key-1234567")
     monkeypatch.setattr(config.settings, "frontend_url", "http://localhost")
     db_url = f"sqlite:///{tmp_path}/auth_test.db"
     engine = create_engine(db_url, connect_args={"check_same_thread": False})

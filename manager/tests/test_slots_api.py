@@ -113,4 +113,4 @@ def test_install_command_does_not_contain_api_key(client, auth_headers):
     """The install command must never expose the actual MANAGER_API_KEY."""
     resp = client.post("/slots", json={"label": "test"}, headers=auth_headers)
     cmd = resp.json()["install_command"]
-    assert "test-key" not in cmd  # test-key is the MANAGER_API_KEY in tests
+    assert "test-manager-api-key" not in cmd  # the MANAGER_API_KEY used in tests

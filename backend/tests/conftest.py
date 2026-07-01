@@ -9,6 +9,7 @@ os.environ.setdefault("POSTGRES_PASSWORD", "test")
 os.environ.setdefault("POSTGRES_DB", "test")
 os.environ.setdefault("POSTGRES_HOST", "localhost")
 os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
+os.environ.setdefault("MANAGER_API_KEY", "test-manager-api-key")
 
 # Override database_url to SQLite before database.py is imported and creates its engine
 import config

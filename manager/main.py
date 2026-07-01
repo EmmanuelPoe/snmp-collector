@@ -48,6 +48,7 @@ async def _retention_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    config.check_required_secrets()
     get_db()
     task = asyncio.create_task(_retention_loop())
     yield

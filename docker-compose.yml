@@ -32,9 +32,10 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_HOST: postgres
       MANAGER_URL: http://manager:8000
-      MANAGER_API_KEY: ${MANAGER_API_KEY:-change-me-in-production}
+      MANAGER_API_KEY: ${MANAGER_API_KEY:-}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS:-8}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
     networks:
       - snmp-network
@@ -80,7 +81,7 @@ services:
       - ./data/dead-letter:/data/dead-letter
       - ./data/registry:/data/registry
     environment:
-      - MANAGER_API_KEY=${MANAGER_API_KEY:-change-me-in-production}
+      - MANAGER_API_KEY=${MANAGER_API_KEY:-}
       - DB_PATH=/data/db/metrics.db
       - REGISTRY_PATH=/data/registry/registry.json
       - DEAD_LETTER_PATH=/data/dead-letter
@@ -99,7 +100,7 @@ services:
     container_name: snmp-agent
     environment:
       - MANAGER_URL=http://manager:8000
-      - MANAGER_API_KEY=${MANAGER_API_KEY:-change-me-in-production}
+      - MANAGER_API_KEY=${MANAGER_API_KEY:-}
       - AGENT_HOSTNAME=${AGENT_HOSTNAME:-snmp-agent-01}
       - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-60}
       - UPLOAD_MAX_ROWS=500

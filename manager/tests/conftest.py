@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 @pytest.fixture(autouse=True)
 def patch_settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("MANAGER_API_KEY", "test-key")
+    monkeypatch.setenv("MANAGER_API_KEY", "test-manager-api-key")
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("REGISTRY_PATH", str(tmp_path / "registry.json"))
     monkeypatch.setenv("SLOTS_PATH", str(tmp_path / "slots.json"))
@@ -50,7 +50,7 @@ def client(patch_settings, reset_db, reset_registry, reset_slots):
 
 @pytest.fixture
 def auth_headers():
-    return {"Authorization": "Bearer test-key"}
+    return {"Authorization": "Bearer test-manager-api-key"}
 
 @pytest.fixture
 def mock_backend_empty(respx_mock):

@@ -14,3 +14,32 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env"}
 
 settings = Settings()
+
+# Secrets that ship as defaults/placeholders; starting with any means the
+# deployment is using a publicly known secret.
+_PLACEHOLDER_SECRETS = {
+    "change-me-in-production",
+    "replace-with-a-long-random-secret",
+    "changeme",
+    "change-me",
+    "secret",
+    "password",
+}
+_MIN_SECRET_LENGTH = 16
+
+
+def check_required_secrets() -> None:
+    """Fail fast at startup if MANAGER_API_KEY is unset, a placeholder, or too short."""
+    value = settings.manager_api_key
+    problem = None
+    if not value:
+        problem = "MANAGER_API_KEY is not set"
+    elif value.strip().lower() in _PLACEHOLDER_SECRETS:
+        problem = "MANAGER_API_KEY is set to a known placeholder/default value"
+    elif len(value) < _MIN_SECRET_LENGTH:
+        problem = f"MANAGER_API_KEY must be at least {_MIN_SECRET_LENGTH} characters"
+    if problem:
+        raise RuntimeError(
+            f"Insecure secret configuration — refusing to start: {problem}. "
+            "Set a strong, unique value (see .env.example)."
+        )

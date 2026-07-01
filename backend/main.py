@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,7 +11,7 @@ from sqlalchemy.exc import OperationalError
 
 from alert_evaluator import evaluation_loop
 from auth import hash_password
-from config import settings
+from config import settings, check_required_secrets
 from database import SessionLocal
 from models import User, UserRole
 from routers import agents, config, devices, internal, maintenance, metrics, notifications, prometheus, topology
@@ -41,18 +42,24 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    check_required_secrets()
     db = SessionLocal()
     try:
         if db.query(User).count() == 0:
+            password = secrets.token_urlsafe(16)
             admin = User(
                 email="admin@localhost",
-                hashed_password=hash_password("changeme"),
+                hashed_password=hash_password(password),
                 role=UserRole.admin,
                 force_password_change=True,
             )
             db.add(admin)
             db.commit()
-            logger.warning("Bootstrap admin created — login with admin@localhost / changeme and change your password")
+            logger.warning(
+                "Bootstrap admin created — login with admin@localhost / %s then change your password. "
+                "This one-time password is not shown again.",
+                password,
+            )
     except OperationalError:
         pass
     finally:

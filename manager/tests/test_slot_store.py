@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 
 @pytest.fixture(autouse=True)
 def patch_settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("MANAGER_API_KEY", "test-key")
+    monkeypatch.setenv("MANAGER_API_KEY", "test-manager-api-key")
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("REGISTRY_PATH", str(tmp_path / "registry.json"))
     monkeypatch.setenv("SLOTS_PATH", str(tmp_path / "slots.json"))

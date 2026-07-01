@@ -11,7 +11,7 @@ def test_internal_devices_includes_enabled_oids(client, db_session):
     db_session.commit()
 
     resp = client.get("/internal/devices?agent_id=agent-abc",
-                      headers={"Authorization": "Bearer change-me-in-production"})
+                      headers={"Authorization": "Bearer test-manager-api-key"})
     assert resp.status_code == 200
     oids = resp.json()[0]["oids"]
     names = {o["oid_name"] for o in oids}
@@ -34,7 +34,7 @@ def test_internal_devices_returns_assigned_devices(client, db_session):
 
     resp = client.get(
         "/internal/devices?agent_id=agent-abc",
-        headers={"Authorization": "Bearer change-me-in-production"},
+        headers={"Authorization": "Bearer test-manager-api-key"},
     )
     assert resp.status_code == 200
     devices = resp.json()
@@ -58,7 +58,7 @@ def test_internal_devices_excludes_other_agents(client, db_session):
 
     resp = client.get(
         "/internal/devices?agent_id=agent-abc",
-        headers={"Authorization": "Bearer change-me-in-production"},
+        headers={"Authorization": "Bearer test-manager-api-key"},
     )
     assert resp.status_code == 200
     assert resp.json() == []
@@ -78,7 +78,7 @@ def test_internal_devices_excludes_disabled(client, db_session):
 
     resp = client.get(
         "/internal/devices?agent_id=agent-abc",
-        headers={"Authorization": "Bearer change-me-in-production"},
+        headers={"Authorization": "Bearer test-manager-api-key"},
     )
     assert resp.status_code == 200
     assert resp.json() == []
@@ -103,7 +103,7 @@ def test_internal_devices_v3_device(client, db_session):
 
     resp = client.get(
         "/internal/devices?agent_id=agent-abc",
-        headers={"Authorization": "Bearer change-me-in-production"},
+        headers={"Authorization": "Bearer test-manager-api-key"},
     )
     assert resp.status_code == 200
     devices = resp.json()
@@ -122,7 +122,7 @@ def test_get_devices_requires_manager_key(client):
 
 def test_get_devices_rejects_wrong_key(client, monkeypatch):
     import config
-    monkeypatch.setattr(config.settings, "manager_api_key", "real-key")
+    monkeypatch.setattr(config.settings, "manager_api_key", "real-test-key-123456")
     resp = client.get(
         "/internal/devices?agent_id=agent-1",
         headers={"Authorization": "Bearer wrong-key"},
@@ -132,9 +132,9 @@ def test_get_devices_rejects_wrong_key(client, monkeypatch):
 
 def test_get_devices_accepts_correct_key(client, monkeypatch):
     import config
-    monkeypatch.setattr(config.settings, "manager_api_key", "real-key")
+    monkeypatch.setattr(config.settings, "manager_api_key", "real-test-key-123456")
     resp = client.get(
         "/internal/devices?agent_id=agent-1",
-        headers={"Authorization": "Bearer real-key"},
+        headers={"Authorization": "Bearer real-test-key-123456"},
     )
     assert resp.status_code == 200

@@ -3,6 +3,7 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, E
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
+from crypto import EncryptedString
 
 
 class Device(Base):
@@ -12,7 +13,8 @@ class Device(Base):
     name = Column(String(255), unique=True, nullable=False, index=True)
     ip_address = Column(String(45), nullable=False)
     snmp_version = Column(String(10), default="2c")
-    snmp_community = Column(String(255), default="public")
+    # Secrets encrypted at rest (Fernet) via EncryptedString.
+    snmp_community = Column(EncryptedString(), default="public")
     snmp_port = Column(Integer, default=161)
     snmp_modules = Column(JSON, default=["if_mib"])
     device_type = Column(String(50))
@@ -20,9 +22,9 @@ class Device(Base):
     enabled = Column(Boolean, default=True)
     username = Column(String(255), nullable=True)
     auth_protocol = Column(String(50), nullable=True)
-    auth_password = Column(String(255), nullable=True)
+    auth_password = Column(EncryptedString(), nullable=True)
     priv_protocol = Column(String(50), nullable=True)
-    priv_password = Column(String(255), nullable=True)
+    priv_password = Column(EncryptedString(), nullable=True)
     assigned_agent_id = Column(String(255), nullable=True)
     tags = Column(JSON, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
