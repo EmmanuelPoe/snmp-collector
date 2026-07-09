@@ -160,9 +160,23 @@ sessions 401 / fresh token 200.
 
 Start Steps 20–21 in parallel with Phase 4 — they protect every later change.
 
-## Step 20 — CI pipeline *(roadmap 3.1)*
+## Step 20 — CI pipeline *(roadmap 3.1)* ✅ DONE (2026-07-09)
 
-**Problem (verified):** no `.github/workflows` directory exists. Nothing runs tests or builds on a PR.
+**Built:** `.github/workflows/ci.yml` with the five specced jobs (backend-tests,
+manager-tests in-container, agent-tests, build-images, e2e-simulation with
+compose-logs artifact on failure) plus a `docker-compose` shim for runners that
+only ship the `docker compose` plugin. **Latent bug found and fixed:**
+`scripts/run_simulation.sh` had been broken by Step 1.2 (hardcoded
+`admin@localhost / changeme`, but the bootstrap password is now random) and by
+Step 1.4 (it kept using the pre-password-change token, now version-stale) — it
+now parses the one-time bootstrap password from the backend log (or takes
+`SIM_ADMIN_EMAIL`/`SIM_ADMIN_PASSWORD`) and adopts the fresh token returned by
+change-password. Verified: workflow YAML parses; the repaired simulation script
+ran green locally against the live stack including the forced-change path.
+**Manual follow-up:** enable branch protection on `main` requiring the five
+checks (GitHub settings — can't be done from the repo).
+
+**Original problem (verified):** no `.github/workflows` directory exists. Nothing runs tests or builds on a PR.
 
 **Change:** `.github/workflows/ci.yml` with jobs:
 1. `backend-tests` — Python 3.x, `pip install -r backend/requirements.txt`, `cd backend && python -m pytest -q`.

@@ -34,7 +34,7 @@ implementation plan (step number in parentheses).
 - [ ] **Step 1.5** — Audit logging *(plan Step 17)* ← **NEXT**
 - [ ] **Step 1.6** — CORS tightening + TLS/HSTS/security headers *(plan Step 18)*
 - [ ] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19)*
-- [ ] **Step 3.1** — CI pipeline *(plan Step 20 — start in parallel with Tier 1)*
+- [x] **Step 3.1** — CI pipeline *(plan Step 20, done 2026-07-09 — enable branch protection on GitHub to make it merge-blocking)*
 - [ ] **Step 3.2** — Lint / format / type-check gates *(plan Step 21)*
 - [ ] **Step 3.3** — Dependency + image scanning, SBOM *(plan Step 22)*
 - [ ] **Step 3.4** — Secret scanning *(plan Step 23)*
@@ -177,13 +177,17 @@ credential presented to a backend internal endpoint is rejected.
 Numbered Tier 3 but **starts in parallel with Tier 1** — CI protects every change
 that follows.
 
-### Step 3.1 — 🔴 Add a CI pipeline *(plan Step 20)*
-**Why:** No `.github/workflows` exists. Nothing runs tests, lint, or builds on a PR.
-**What to do:** Add CI (GitHub Actions) that on every PR: installs deps, runs the full
-pytest suite (backend/manager/agent), builds all images, and runs the
-`make simulation` end-to-end smoke test against the simulator. Block merge on failure.
-**Verify:** A PR that breaks a test is red and unmergeable; a green PR shows all suites
-passing.
+### Step 3.1 — 🔴 Add a CI pipeline ✅ Done (2026-07-09)
+`.github/workflows/ci.yml`: five jobs on every PR/push-to-main — backend pytest
+(local pip), manager pytest (in-container, authoritative), agent pytest, all-image
+build, and the `make simulation` e2e smoke test (compose logs uploaded as artifact
+on failure). Along the way this repaired `scripts/run_simulation.sh`, which had
+been silently broken by Steps 1.2/1.4 (hardcoded `changeme` password; discarded
+the fresh post-password-change token) — it now parses the one-time bootstrap
+password from the backend log or accepts `SIM_ADMIN_EMAIL`/`SIM_ADMIN_PASSWORD`,
+and adopts the fresh token. Verified locally end-to-end.
+**Remaining manual step:** enable branch protection on `main` in GitHub settings
+requiring these five checks, to make CI merge-blocking.
 
 ### Step 3.2 — 🟠 Linting, formatting, and type checking as gates *(plan Step 21)*
 **Why:** No `ruff`/`mypy`/`eslint`/`prettier` config present. Style and type
