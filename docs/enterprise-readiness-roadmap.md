@@ -29,8 +29,8 @@ implementation plan (step number in parentheses).
 
 - [x] **Step 1.1** — Encrypt SNMP credentials at rest *(done 2026-06-30)*
 - [x] **Step 1.2** — Eliminate default/baked-in secrets + enforce rotation *(done 2026-06-30)*
-- [ ] **Step 1.3** — Rate-limit auth + login lockout *(plan Step 15)* ← **NEXT**
-- [ ] **Step 1.4** — Token lifecycle: revocation, logout *(plan Step 16)*
+- [x] **Step 1.3** — Rate-limit auth + login lockout *(plan Step 15, done 2026-07-09)*
+- [ ] **Step 1.4** — Token lifecycle: revocation, logout *(plan Step 16)* ← **NEXT**
 - [ ] **Step 1.5** — Audit logging *(plan Step 17)*
 - [ ] **Step 1.6** — CORS tightening + TLS/HSTS/security headers *(plan Step 18)*
 - [ ] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19)*
@@ -109,16 +109,18 @@ admin now gets a random one-time password logged once (`backend/main.py`). `make
 generates strong secrets into `.env` on first run. Covered by
 `backend/tests/test_secret_validation.py` and `manager/tests/test_config.py`.
 
-### Step 1.3 — 🟠 Rate-limit authentication + login lockout *(plan Step 15)*
-**Why:** No rate limiting exists anywhere (no slowapi in the backend, no `limit_req`
-in `nginx/conf.d/default.conf`). `/auth/login` is brute-forceable, and the
-MIB-walk endpoint can be used to hammer devices.
-**What to do:** Per-IP rate limiting on `/auth/login`, password change, and
-`/devices/{id}/walk`; per-account failed-login counter with temporary lockout,
-persisted so it survives restarts (and feeds the audit trail in 1.5).
-**Verify:** Automated test issues N rapid bad logins and receives `429` after the
-threshold; the locked account rejects even a correct password until the lockout
-expires.
+### Step 1.3 — 🟠 Rate-limit authentication + login lockout ✅ Done (2026-07-09)
+Implemented via `slowapi` (`backend/rate_limit.py`): per-IP limit on `/auth/login`
+(keyed on nginx's `X-Real-IP`), per-session-token limits on `/auth/change-password`
+and `/devices/{id}/walk`; all limits configurable (`LOGIN_RATE_LIMIT`,
+`WALK_RATE_LIMIT`, `RATE_LIMIT_ENABLED`). Persistent per-account lockout
+(migration `022`: `failed_login_count`/`locked_until` on `users`) returns `423` +
+`Retry-After` after `LOGIN_LOCKOUT_THRESHOLD` failures for `LOGIN_LOCKOUT_MINUTES`,
+checked before password verification so a locked account leaks no signal; the
+frontend surfaces locked/rate-limited states distinctly. Covered by
+`backend/tests/test_rate_limit.py` (8 tests) and verified live (429 after 11 rapid
+bad logins through nginx; 423 on the locked account). Note: limiter state is
+per-uvicorn-worker — the DB-backed lockout is the authoritative brake.
 
 ### Step 1.4 — 🟠 Token lifecycle: revocation and logout *(plan Step 16)*
 **Why:** JWTs are stateless with an 8h lifetime and no revocation

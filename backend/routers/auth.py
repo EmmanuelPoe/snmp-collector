@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_user_unchecked, require_role
+from config import settings
 from database import get_db
 from models import User, UserRole
+from rate_limit import limiter, token_or_ip
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -38,17 +42,53 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+def _as_utc(dt):
+    """SQLite (tests) returns naive datetimes for DateTime(timezone=True); Postgres returns aware."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 @router.post("/login", response_model=TokenResponse)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit(lambda *_: settings.login_rate_limit)
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form_data.username, User.is_active == True).first()
+    now = datetime.now(timezone.utc)
+
+    # Account lockout (Step 1.3): rejected before password verification so a
+    # locked account leaks no signal about whether the password was correct.
+    if user is not None:
+        locked_until = _as_utc(user.locked_until)
+        if locked_until and locked_until > now:
+            retry_after = int((locked_until - now).total_seconds()) + 1
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail="Account temporarily locked after repeated failed logins",
+                headers={"Retry-After": str(retry_after)},
+            )
+
     if not user or not verify_password(form_data.password, user.hashed_password):
+        if user is not None:
+            user.failed_login_count = (user.failed_login_count or 0) + 1
+            if user.failed_login_count >= settings.login_lockout_threshold:
+                user.locked_until = now + timedelta(minutes=settings.login_lockout_minutes)
+                user.failed_login_count = 0  # fresh threshold once the lockout expires
+            db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+
+    if user.failed_login_count or user.locked_until is not None:
+        user.failed_login_count = 0
+        user.locked_until = None
+        db.commit()
+
     token = create_access_token({"sub": user.email, "role": user.role})
     return {"access_token": token, "token_type": "bearer", "force_password_change": user.force_password_change}
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(lambda *_: settings.login_rate_limit, key_func=token_or_ip)
 def change_password(
+    request: Request,
     req: ChangePasswordRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_unchecked),

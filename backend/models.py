@@ -60,6 +60,9 @@ class User(Base):
     role = Column(Enum(UserRole), nullable=False, default=UserRole.viewer)
     is_active = Column(Boolean, default=True)
     force_password_change = Column(Boolean, nullable=False, server_default="true", default=True)
+    # Login lockout (Step 1.3): persisted so lockouts survive restarts.
+    failed_login_count = Column(Integer, nullable=False, default=0, server_default="0")
+    locked_until = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

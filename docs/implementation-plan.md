@@ -34,7 +34,28 @@ Feature work completed 2026-06-08 → 2026-06-30, plus the first two security st
 
 # Phase 4 — Security hardening (roadmap Tier 1 remainder)
 
-## Step 15 — Rate limiting + login lockout *(roadmap 1.3)*
+## Step 15 — Rate limiting + login lockout *(roadmap 1.3)* ✅ DONE (2026-07-09)
+
+**Resolved decisions:** thresholds = the recommended defaults, all configurable
+(`LOGIN_RATE_LIMIT=10/minute`, `WALK_RATE_LIMIT=6/minute`,
+`LOGIN_LOCKOUT_THRESHOLD=10`, `LOGIN_LOCKOUT_MINUTES=15`, `RATE_LIMIT_ENABLED`).
+Lockout status code = `423` + `Retry-After` (distinct from the limiter's `429` so
+the frontend can message each case). Walk/change-password keyed per hashed session
+token, not per user id.
+
+**Built:** `backend/rate_limit.py` (limiter + `client_ip`/`token_or_ip` key funcs);
+migration 022 (`failed_login_count`, `locked_until` on `users`); lockout checked
+before password verification in the login route (no signal leak, counter frozen
+while locked); success resets the counter; frontend `LoginPage` shows distinct
+locked/rate-limited errors. 8 tests in `backend/tests/test_rate_limit.py` (suite
+156 → 164); conftest disables the limiter globally so unrelated tests are
+unaffected. Verified live: 429 after 11 rapid bad logins via nginx (two uvicorn
+workers ⇒ limiter state is per-worker; the DB lockout is authoritative), 423 on
+the locked account from a different IP.
+
+<details><summary>Original spec</summary>
+
+## Step 15 (original spec) — Rate limiting + login lockout *(roadmap 1.3)*
 
 **Problem (verified):** no rate limiting anywhere — no limiter dependency in [backend/requirements.txt](../backend/requirements.txt), no `limit_req` in [nginx/conf.d/default.conf](../nginx/conf.d/default.conf). `/auth/login` is brute-forceable; `POST /devices/{id}/walk` lets an authenticated user hammer devices.
 
@@ -48,6 +69,8 @@ Feature work completed 2026-06-08 → 2026-06-30, plus the first two security st
 **Verify:** backend tests — N rapid bad logins → `429`; N bad passwords → lockout rejects correct password until `locked_until`; success resets the counter. Manual: `for i in $(seq 20); do curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:8000/auth/login …; done`.
 
 **Decision required:** thresholds (per-IP rate, failure count, lockout duration) — recommend 10/min/IP, 10 failures → 15 min lockout, all configurable via `config.py` env settings.
+
+</details>
 
 ## Step 16 — Token lifecycle: revocation + logout *(roadmap 1.4)*
 

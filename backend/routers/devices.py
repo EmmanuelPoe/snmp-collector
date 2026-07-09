@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy import cast
 from sqlalchemy.dialects.postgresql import JSONB
@@ -10,6 +10,7 @@ from auth import get_current_user, require_role
 from config import settings
 from database import get_db
 from models import Device, User
+from rate_limit import limiter, token_or_ip
 from schemas import DeviceCreate, DeviceUpdate, DeviceResponse, DeviceCredentialsResponse
 import logging
 
@@ -122,7 +123,9 @@ def get_device_credentials(
 
 
 @router.post("/{device_id}/walk")
+@limiter.limit(lambda *_: settings.walk_rate_limit, key_func=token_or_ip)
 def walk_device_oids(
+    request: Request,
     device_id: int,
     base_oid: str = "1.3.6.1.2.1",
     db: Session = Depends(get_db),

@@ -24,7 +24,13 @@ export default function LoginPage() {
         body: body.toString(),
       });
       if (!resp.ok) {
-        setError('Invalid email or password.');
+        if (resp.status === 423) {
+          setError('Account temporarily locked after too many failed sign-in attempts. Try again in a few minutes.');
+        } else if (resp.status === 429) {
+          setError('Too many sign-in attempts. Please wait a moment and try again.');
+        } else {
+          setError('Invalid email or password.');
+        }
         setLoading(false);
         return;
       }

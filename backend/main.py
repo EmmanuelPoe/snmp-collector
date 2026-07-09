@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import OperationalError
 
 from alert_evaluator import evaluation_loop
@@ -14,6 +16,7 @@ from auth import hash_password
 from config import settings, check_required_secrets
 from database import SessionLocal
 from models import User, UserRole
+from rate_limit import limiter
 from routers import agents, config, devices, internal, maintenance, metrics, notifications, prometheus, topology
 from routers.alerts import alerts_router, rules_router
 from routers.auth import router as auth_router
@@ -79,6 +82,9 @@ app = FastAPI(
     description="API for collecting and managing SNMP metrics from network devices",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

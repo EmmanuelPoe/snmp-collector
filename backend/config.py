@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # topology root(s) is down, suppress the child's (collateral) alerts. Off by
     # default so it never changes alerting behaviour on upgrade without opt-in.
     topology_suppression_enabled: bool = False
+    # Rate limiting + login lockout (Step 1.3 / plan Step 15). Limits use the
+    # slowapi/limits string format ("N/minute"). The in-process limiter state is
+    # per uvicorn worker; the DB-backed account lockout is the authoritative brake.
+    rate_limit_enabled: bool = True
+    login_rate_limit: str = "10/minute"
+    walk_rate_limit: str = "6/minute"
+    login_lockout_threshold: int = 10
+    login_lockout_minutes: int = 15
 
     class Config:
         env_file = ".env"
