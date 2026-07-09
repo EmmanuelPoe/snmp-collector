@@ -72,9 +72,26 @@ the locked account from a different IP.
 
 </details>
 
-## Step 16 — Token lifecycle: revocation + logout *(roadmap 1.4)*
+## Step 16 — Token lifecycle: revocation + logout *(roadmap 1.4)* ✅ DONE (2026-07-09)
 
-**Problem (verified):** [`create_access_token`](../backend/auth.py#L27-L29) issues stateless 8h JWTs with no `jti`; [`_resolve_user`](../backend/auth.py#L32-L48) checks only signature/expiry/`is_active`. No logout endpoint exists; password change and deactivation leave old tokens valid for up to 8h.
+**Resolved decisions:** as specced (`token_version` + `jti` denylist, no refresh
+tokens). Two design details settled during build: change-password returns a
+**fresh token** (200 + `TokenResponse`, previously 204) so the current session
+survives its own version bump while all other sessions die; and pre-feature
+tokens (no `ver` claim) are treated as version 0, so the upgrade doesn't force a
+mass re-login — the first password change does. Deactivation needed no work:
+`_resolve_user` already filters `is_active`, so it was already immediate.
+
+**Built:** migration 023 (`users.token_version`, `revoked_tokens`); `jti` claim
+in every token; stale-version + denylist checks in `_resolve_user`;
+`POST /auth/logout` (validly-signed token suffices — works mid
+forced-password-change) with opportunistic pruning of expired denylist rows;
+frontend revokes server-side on sign-out (fire-and-forget) and adopts the fresh
+token after password change. 7 tests in `backend/tests/test_token_lifecycle.py`
+(suite 164 → 171); verified live: logout → 401, password change → both old
+sessions 401 / fresh token 200.
+
+**Original problem (verified):** [`create_access_token`](../backend/auth.py#L27-L29) issues stateless 8h JWTs with no `jti`; [`_resolve_user`](../backend/auth.py#L32-L48) checks only signature/expiry/`is_active`. No logout endpoint exists; password change and deactivation leave old tokens valid for up to 8h.
 
 **Change:**
 1. **`token_version`** — new int column on `User`, embedded as `ver` claim in every token; `_resolve_user` rejects mismatches. Bump on password change ([backend/routers/auth.py](../backend/routers/auth.py)) and on user deactivation — invalidates all outstanding tokens for that user at once.

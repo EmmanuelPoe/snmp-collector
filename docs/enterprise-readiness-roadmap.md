@@ -30,8 +30,8 @@ implementation plan (step number in parentheses).
 - [x] **Step 1.1** — Encrypt SNMP credentials at rest *(done 2026-06-30)*
 - [x] **Step 1.2** — Eliminate default/baked-in secrets + enforce rotation *(done 2026-06-30)*
 - [x] **Step 1.3** — Rate-limit auth + login lockout *(plan Step 15, done 2026-07-09)*
-- [ ] **Step 1.4** — Token lifecycle: revocation, logout *(plan Step 16)* ← **NEXT**
-- [ ] **Step 1.5** — Audit logging *(plan Step 17)*
+- [x] **Step 1.4** — Token lifecycle: revocation, logout *(plan Step 16, done 2026-07-09)*
+- [ ] **Step 1.5** — Audit logging *(plan Step 17)* ← **NEXT**
 - [ ] **Step 1.6** — CORS tightening + TLS/HSTS/security headers *(plan Step 18)*
 - [ ] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19)*
 - [ ] **Step 3.1** — CI pipeline *(plan Step 20 — start in parallel with Tier 1)*
@@ -122,16 +122,17 @@ frontend surfaces locked/rate-limited states distinctly. Covered by
 bad logins through nginx; 423 on the locked account). Note: limiter state is
 per-uvicorn-worker — the DB-backed lockout is the authoritative brake.
 
-### Step 1.4 — 🟠 Token lifecycle: revocation and logout *(plan Step 16)*
-**Why:** JWTs are stateless with an 8h lifetime and no revocation
-(`backend/auth.py:27-29`). A leaked token or deactivated user stays valid until
-expiry; there is no logout invalidation and password change does not invalidate
-old tokens.
-**What to do:** Add a `token_version` on `User` (bumped on password change and
-deactivation) plus a `jti` denylist for explicit logout, both checked during token
-resolution. Add `POST /auth/logout`.
-**Verify:** After logout or deactivation, the previously issued token is rejected;
-password change invalidates old tokens.
+### Step 1.4 — 🟠 Token lifecycle: revocation and logout ✅ Done (2026-07-09)
+Implemented via migration `023`: `users.token_version` (embedded as the `ver` JWT
+claim, bumped on password change so all prior tokens go stale) plus a
+`revoked_tokens` jti denylist for explicit logout, both checked in
+`_resolve_user` (`backend/auth.py`). `POST /auth/logout` revokes the presented
+token and opportunistically prunes expired denylist rows; change-password now
+returns a fresh token so the current session continues while every other session
+is invalidated; the frontend revokes server-side on sign-out and adopts the fresh
+token after password change. Deactivation was already immediate (`_resolve_user`
+filters `is_active`). Covered by `backend/tests/test_token_lifecycle.py` (7 tests)
+and verified live (logout → 401; password change → old tokens 401, fresh token 200).
 
 ### Step 1.5 — 🟠 Audit logging *(plan Step 17)*
 **Why:** No audit trail exists (`grep -ri audit backend/` → nothing). Enterprises

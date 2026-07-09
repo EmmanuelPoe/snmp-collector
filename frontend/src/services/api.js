@@ -175,10 +175,23 @@ export const deleteMaintenanceWindow = async (windowId) => {
 
 // ===== Auth =====
 export const changePassword = async (currentPassword, newPassword) => {
-    await api.post('/auth/change-password', {
+    const response = await api.post('/auth/change-password', {
         current_password: currentPassword,
         new_password: newPassword,
     });
+    // Password change invalidates all previously issued tokens (token_version
+    // bump); adopt the fresh token so the current session continues.
+    if (response.data?.access_token) {
+        localStorage.setItem('snmp_access_token', response.data.access_token);
+    }
+};
+export const logoutServer = async () => {
+    // Best effort: revoke the token server-side; local sign-out proceeds regardless.
+    try {
+        await api.post('/auth/logout');
+    } catch {
+        // ignore — token may already be expired/revoked
+    }
 };
 export const getUsers = async () => {
     const response = await api.get('/auth/users');

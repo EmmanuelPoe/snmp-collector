@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { getAlertCount, getTraps } from '../services/api';
+import { getAlertCount, getTraps, logoutServer } from '../services/api';
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
@@ -49,6 +49,7 @@ export default function Sidebar() {
   }
 
   function handleLogout() {
+    logoutServer(); // revoke server-side (best effort, fire-and-forget)
     logout();
     navigate('/login');
   }

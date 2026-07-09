@@ -2,13 +2,14 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from jose import JWTError, jwt
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_user_unchecked, require_role
+from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_user_unchecked, oauth2_scheme, require_role
 from config import settings
 from database import get_db
-from models import User, UserRole
+from models import RevokedToken, User, UserRole
 from rate_limit import limiter, token_or_ip
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -81,11 +82,29 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
         user.locked_until = None
         db.commit()
 
-    token = create_access_token({"sub": user.email, "role": user.role})
+    token = create_access_token({"sub": user.email, "role": user.role, "ver": user.token_version or 0})
     return {"access_token": token, "token_type": "bearer", "force_password_change": user.force_password_change}
 
 
-@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Revoke the presented token (Step 1.4). Requires only a validly signed
+    token — works even mid forced-password-change."""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+    jti = payload.get("jti")
+    if jti:
+        now = datetime.now(timezone.utc)
+        # Opportunistic prune: denylist rows past their token's natural expiry
+        # can never match a live token again.
+        db.query(RevokedToken).filter(RevokedToken.expires_at < now).delete()
+        db.merge(RevokedToken(jti=jti, expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc)))
+        db.commit()
+
+
+@router.post("/change-password", response_model=TokenResponse)
 @limiter.limit(lambda *_: settings.login_rate_limit, key_func=token_or_ip)
 def change_password(
     request: Request,
@@ -97,7 +116,12 @@ def change_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
     current_user.hashed_password = hash_password(req.new_password)
     current_user.force_password_change = False
+    # Step 1.4: invalidate every previously issued token for this user, then
+    # return a fresh one so the current session continues seamlessly.
+    current_user.token_version = (current_user.token_version or 0) + 1
     db.commit()
+    token = create_access_token({"sub": current_user.email, "role": current_user.role, "ver": current_user.token_version})
+    return {"access_token": token, "token_type": "bearer", "force_password_change": False}
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

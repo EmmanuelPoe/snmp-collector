@@ -63,7 +63,19 @@ class User(Base):
     # Login lockout (Step 1.3): persisted so lockouts survive restarts.
     failed_login_count = Column(Integer, nullable=False, default=0, server_default="0")
     locked_until = Column(DateTime(timezone=True), nullable=True)
+    # Token lifecycle (Step 1.4): bumped on password change so all previously
+    # issued tokens (which embed the version as the "ver" claim) become invalid.
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class RevokedToken(Base):
+    """Denylist of logged-out JWTs (by jti), pruned opportunistically at logout
+    once past their natural expiry (Step 1.4)."""
+    __tablename__ = "revoked_tokens"
+
+    jti = Column(String(64), primary_key=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
 
 
 class AlertType(str, enum.Enum):
