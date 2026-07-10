@@ -1,4 +1,4 @@
-.PHONY: help setup ensure-env build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend
+.PHONY: help setup ensure-env ensure-dirs build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend
 
 # Create .env from the example on first run, generating strong random secrets so
 # the stack starts securely out of the box (the services refuse to start with the
@@ -11,6 +11,17 @@ ensure-env:
 			&& echo "Created .env with generated JWT_SECRET and MANAGER_API_KEY" \
 			|| echo "Created .env — set JWT_SECRET and MANAGER_API_KEY to strong random values before starting"; \
 	fi
+
+# Pre-create bind-mounted data dirs. Without this, Docker creates them root-owned
+# on a fresh Linux checkout and the manager (non-root uid 100) cannot open DuckDB
+# ("Permission denied"). Only newly created dirs are chmod'd; existing ones are
+# left untouched. Revisit with named volumes in the production overlay (Step 4.3).
+ensure-dirs:
+	@for d in data/db data/dead-letter data/registry data/agent-queue data/agent-id; do \
+		if [ ! -d $$d ]; then \
+			mkdir -p $$d && chmod 777 $$d; \
+		fi; \
+	done
 
 # Default target
 help:
@@ -38,7 +49,7 @@ help:
 	@echo ""
 
 # First-time setup: build, start, and migrate in one command
-setup: ensure-env
+setup: ensure-env ensure-dirs
 	docker-compose build
 	docker-compose up -d
 	@echo "Waiting for backend to be ready..."
@@ -53,7 +64,7 @@ build:
 	docker-compose build
 
 # Start the application
-up: ensure-env
+up: ensure-env ensure-dirs
 	@echo "Starting SNMP Collector application..."
 	docker-compose up -d
 	@echo ""
