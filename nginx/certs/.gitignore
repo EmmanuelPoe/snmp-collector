@@ -1,0 +1,3 @@
+# TLS private keys and certs live here at runtime — never commit them.
+*
+!.gitignore

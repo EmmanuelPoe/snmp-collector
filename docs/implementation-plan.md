@@ -127,7 +127,19 @@ hooks in every mutating router, admin-only paginated/filterable `GET /audit`
 
 **Decision required:** audit retention length — recommend `AUDIT_RETENTION_DAYS=400` (>1 year, covers annual reviews), pruned by a weekly task mirroring the manager's `_retention_loop` pattern.
 
-## Step 18 — CORS tightening + TLS + security headers *(roadmap 1.6)*
+## Step 18 — CORS tightening + TLS + security headers *(roadmap 1.6)* ✅ DONE (2026-07-15)
+
+**Built:** as specced, with the recommended decisions adopted (dev compose stays
+HTTP; TLS via opt-in `docker-compose.tls.yml` overlay that Step 33's prod
+profile will fold in; HSTS starts at max-age=300). CORS restricted in
+`backend/main.py` (+ `tests/test_cors.py`, suite now 192); shared
+`nginx/security_headers.inc` (CSP Report-Only fitted to the CRA bundle — flip
+to enforcing after a quiet period); TLS vhost `nginx/conf.d-tls/default.conf`
+with 80→443 redirect and `/agent/` manager route (client_max_body_size 50m for
+parquet ingest); `scripts/gen_self_signed_cert.sh`; `docs/runbooks/tls.md`
+(Let's Encrypt / corporate CA / self-signed + HSTS rollout). `nginx/certs/` is
+gitignored. **Pending (Docker down at build time):** `nginx -t`, curl header
+checks, agent-over-TLS e2e, `make simulation`.
 
 **Problem (verified):** CORS allows all methods and headers ([backend/main.py:83-89](../backend/main.py#L83-L89)). nginx listens on plain HTTP :80 only ([nginx/conf.d/default.conf:2](../nginx/conf.d/default.conf#L2)) — no TLS, no HSTS, no security headers. Remote agents reach the manager on :8001 in cleartext carrying SNMP credentials in device-config responses.
 

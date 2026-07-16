@@ -113,8 +113,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Step 1.6: only what the API actually uses — no PATCH/TRACE, no arbitrary
+    # request headers.
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 Instrumentator().instrument(app).expose(app, endpoint="/internal/prometheus")

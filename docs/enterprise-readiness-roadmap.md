@@ -32,8 +32,8 @@ implementation plan (step number in parentheses).
 - [x] **Step 1.3** — Rate-limit auth + login lockout *(plan Step 15, done 2026-07-09)*
 - [x] **Step 1.4** — Token lifecycle: revocation, logout *(plan Step 16, done 2026-07-09)*
 - [x] **Step 1.5** — Audit logging *(plan Step 17, done 2026-07-15)*
-- [ ] **Step 1.6** — CORS tightening + TLS/HSTS/security headers *(plan Step 18)* ← **NEXT**
-- [ ] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19)*
+- [x] **Step 1.6** — CORS tightening + TLS/HSTS/security headers *(plan Step 18, done 2026-07-15 — `nginx -t` + curl verification pending, needs the Docker stack)*
+- [ ] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19)* ← **NEXT**
 - [x] **Step 3.1** — CI pipeline *(plan Step 20, done 2026-07-09 — enable branch protection on GitHub to make it merge-blocking)*
 - [ ] **Step 3.2** — Lint / format / type-check gates *(plan Step 21)*
 - [ ] **Step 3.3** — Dependency + image scanning, SBOM *(plan Step 22)*
@@ -58,7 +58,7 @@ implementation plan (step number in parentheses).
 - [ ] **Step 6.4** — Compliance evidence pack *(plan Step 41)*
 
 **How to verify current state before continuing:**
-- Backend tests (run locally — the backend image has no pytest): `cd backend && python -m pytest -q` → 189 passed.
+- Backend tests (run locally — the backend image has no pytest): `cd backend && python -m pytest -q` → 192 passed.
 - Manager tests (authoritative in-container; local run shows 8 spurious 401-vs-403 failures from a newer local Starlette): `docker-compose build manager && docker-compose run --rm --no-deps -T manager python -m pytest -q` → 80 passed.
 - Agent tests: `cd agent && python -m pytest -q` → 3 passed.
 
@@ -149,16 +149,21 @@ backend lifespan task mirroring the manager's retention loop. Covered by
 `backend/tests/test_audit.py` (18 tests). Deploy note: run `make migrate` to
 create the table.
 
-### Step 1.6 — 🟡 Tighten CORS and transport security *(plan Step 18)*
-**Why:** CORS allows all methods and headers (`backend/main.py:83-89`); nginx
-serves plain HTTP on :80 only (`nginx/conf.d/default.conf`), no TLS — and remote
-agents talk to the manager on :8001 in cleartext, carrying SNMP credentials.
-**What to do:** Restrict CORS methods/headers to what the SPA uses. Add TLS
-termination (nginx 443 + HSTS, redirect 80→443) with a documented cert-management
-path (Let's Encrypt / corporate CA), covering the manager's agent-facing port too.
-Add security headers (CSP, X-Frame-Options, X-Content-Type-Options).
-**Verify:** `curl -I https://…` shows HSTS + security headers; HTTP redirects to
-HTTPS; disallowed CORS method is rejected.
+### Step 1.6 — 🟡 Tighten CORS and transport security ✅ Done (2026-07-15)
+CORS restricted to GET/POST/PUT/DELETE + Authorization/Content-Type
+(`backend/main.py`, covered by `backend/tests/test_cors.py`). Security headers
+(X-Frame-Options DENY, nosniff, Referrer-Policy, CSP **Report-Only** fitted to
+the CRA bundle incl. Google Fonts) in `nginx/security_headers.inc`, included by
+both vhosts. TLS is an opt-in overlay so dev `make up` stays zero-config:
+`docker-compose -f docker-compose.yml -f docker-compose.tls.yml up -d` swaps in
+`nginx/conf.d-tls/default.conf` (80→301→443, HSTS max-age=300 during rollout —
+raise to 6 months once stable, `/agent/` route proxying remote agents to the
+manager over TLS, keeps the runtime-DNS + `/api/internal/` deny patterns).
+Certs at `nginx/certs/` (gitignored); self-signed bootstrap
+`scripts/gen_self_signed_cert.sh`; full cert paths in `docs/runbooks/tls.md`.
+**Verification pending (Docker was down):** `nginx -t` on both vhosts, curl
+checks (301, HSTS headers, `/agent/` claim→ingest), `make simulation`. CSP
+enforcement flip is a follow-up after a quiet Report-Only period.
 
 ### Step 1.7 — 🟡 Per-agent credentials — retire the shared bearer for agents *(plan Step 19)*
 **Why:** One-time **enrollment** tokens already exist (`manager/routers/registration.py`
