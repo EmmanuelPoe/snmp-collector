@@ -6,6 +6,7 @@ from typing import List, Optional
 
 import httpx
 
+import audit
 from auth import get_current_user, require_role
 from config import settings
 from database import get_db
@@ -67,15 +68,20 @@ def list_devices(
 
 @router.post("", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)
 def create_device(
+    request: Request,
     device: DeviceCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("editor", "admin")),
+    current_user: User = Depends(require_role("editor", "admin")),
 ):
     existing = db.query(Device).filter(Device.name == device.name).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Device '{device.name}' already exists")
     db_device = Device(**device.model_dump())
     db.add(db_device)
+    db.flush()  # assign id for the audit row
+    audit.record(db, request, current_user, "device.create", target_type="device",
+                 target_id=db_device.id,
+                 summary=audit.redact(device.model_dump(mode="json", exclude_unset=True)))
     db.commit()
     db.refresh(db_device)
     return db_device
@@ -95,16 +101,20 @@ def get_device(
 
 @router.put("/{device_id}", response_model=DeviceResponse)
 def update_device(
+    request: Request,
     device_id: int,
     device_update: DeviceUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("editor", "admin")),
+    current_user: User = Depends(require_role("editor", "admin")),
 ):
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Device {device_id} not found")
     for field, value in device_update.model_dump(exclude_unset=True).items():
         setattr(device, field, value)
+    audit.record(db, request, current_user, "device.update", target_type="device",
+                 target_id=device.id,
+                 summary=audit.redact(device_update.model_dump(mode="json", exclude_unset=True)))
     db.commit()
     db.refresh(device)
     return device
@@ -129,7 +139,7 @@ def walk_device_oids(
     device_id: int,
     base_oid: str = "1.3.6.1.2.1",
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("editor", "admin")),
+    current_user: User = Depends(require_role("editor", "admin")),
 ):
     """Enqueue an on-demand SNMP walk on the device's agent (MIB browser).
     Returns a command_id to poll for the result."""
@@ -162,7 +172,12 @@ def walk_device_oids(
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Manager error: {exc}")
-    return resp.json()
+    result = resp.json()
+    audit.record(db, request, current_user, "device.walk", target_type="device",
+                 target_id=device.id,
+                 summary={"base_oid": base_oid, "command_id": result.get("command_id")})
+    db.commit()
+    return result
 
 
 @router.get("/walk/{command_id}")
@@ -183,12 +198,16 @@ def get_walk_result(
 
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_device(
+    request: Request,
     device_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin")),
 ):
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Device {device_id} not found")
+    audit.record(db, request, current_user, "device.delete", target_type="device",
+                 target_id=device.id,
+                 summary={"name": device.name, "ip_address": device.ip_address})
     db.delete(device)
     db.commit()

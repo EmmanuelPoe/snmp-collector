@@ -104,7 +104,14 @@ sessions 401 / fresh token 200.
 
 **Decision required:** none — full refresh-token rotation is deliberately out of scope for v1 (8h access + version/denylist meets the revocation requirement with far less surface). Revisit only if idle-session policy (Step 38) forces shorter access tokens.
 
-## Step 17 — Audit logging *(roadmap 1.5)*
+## Step 17 — Audit logging *(roadmap 1.5)* ✅ DONE (2026-07-15)
+
+**Built:** as specced — `audit_log` table (migration `024`), `backend/audit.py`
+`record()` helper (X-Real-IP source, credential redaction incl. webhook `url`),
+hooks in every mutating router, admin-only paginated/filterable `GET /audit`
+(`backend/routers/audit_log.py`), frontend admin Audit Log page, and
+`AUDIT_RETENTION_DAYS=400` weekly prune task in the backend lifespan.
+18 tests in `backend/tests/test_audit.py`; suite now 189. Deploy: `make migrate`.
 
 **Problem (verified):** no audit trail — `grep -ri audit backend/` returns nothing. Logins, device/credential changes, config edits, and alert actions leave no "who/what/when" record. Prerequisite for the compliance pack (Step 41).
 

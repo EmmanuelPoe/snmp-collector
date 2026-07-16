@@ -2,9 +2,10 @@ import time
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+import audit
 from auth import get_current_user, require_role
 from config import settings
 from database import get_db
@@ -61,8 +62,9 @@ def _resolve_neighbour(neighbour: dict, resolver: dict) -> int | None:
 
 @router.post("/discover")
 def discover_topology(
+    request: Request,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("editor", "admin")),
+    current_user: User = Depends(require_role("editor", "admin")),
 ):
     """Walk LLDP on every enabled device via the agent command channel, then
     rebuild the topology edge set. Blocking, bounded by _DISCOVER_TIMEOUT_S."""
@@ -117,14 +119,17 @@ def discover_topology(
                 remote_device_id=_resolve_neighbour(n, resolver),
             ))
             edge_count += 1
-    db.commit()
 
-    return {
+    result = {
         "devices_walked": len(results),
         "devices_no_agent": no_agent,
         "timed_out": len(pending),
         "edges": edge_count,
     }
+    audit.record(db, request, current_user, "topology.discover", summary=result)
+    db.commit()
+
+    return result
 
 
 @router.get("/graph")

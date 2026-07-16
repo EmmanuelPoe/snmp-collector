@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     walk_rate_limit: str = "6/minute"
     login_lockout_threshold: int = 10
     login_lockout_minutes: int = 15
+    # Audit trail retention (Step 1.5): >1 year so annual reviews always have a
+    # full window. Rows are pruned weekly by a background task.
+    audit_retention_days: int = 400
 
     class Config:
         env_file = ".env"

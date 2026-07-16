@@ -201,6 +201,10 @@ export const registerUser = async (email, password, role) => {
     const response = await api.post('/auth/register', { email, password, role });
     return response.data;
 };
+export const getAuditLog = async (params = {}) => {
+    const response = await api.get('/audit', { params });
+    return response.data;
+};
 
 // ===== Health Check =====
 export const healthCheck = async () => {

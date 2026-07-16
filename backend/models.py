@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, Enum, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, Enum, Float, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -76,6 +76,27 @@ class RevokedToken(Base):
 
     jti = Column(String(64), primary_key=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class AuditLog(Base):
+    """Append-only audit trail (Step 1.5): who did what, when, from where.
+    No update/delete route exists for it; rows leave only via retention pruning."""
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # Null actor = unauthenticated action (e.g. failed login attempt).
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"),
+                           nullable=True, index=True)
+    actor_email = Column(String(255), nullable=True)
+    action = Column(String(100), nullable=False)
+    target_type = Column(String(50), nullable=True)
+    target_id = Column(String(255), nullable=True)
+    # Changed fields only; credential values redacted (see audit.redact).
+    summary = Column(JSON, nullable=True)
+    source_ip = Column(String(45), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    __table_args__ = (Index("ix_audit_log_target", "target_type", "target_id"),)
 
 
 class AlertType(str, enum.Enum):

@@ -72,6 +72,7 @@ export default function Sidebar() {
 
   const ADMIN_ITEMS = [
     { to: '/users', icon: '◉', label: 'Users' },
+    { to: '/audit', icon: '≡', label: 'Audit Log' },
   ];
 
   const sections = [

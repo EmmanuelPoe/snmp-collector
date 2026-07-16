@@ -31,8 +31,8 @@ implementation plan (step number in parentheses).
 - [x] **Step 1.2** — Eliminate default/baked-in secrets + enforce rotation *(done 2026-06-30)*
 - [x] **Step 1.3** — Rate-limit auth + login lockout *(plan Step 15, done 2026-07-09)*
 - [x] **Step 1.4** — Token lifecycle: revocation, logout *(plan Step 16, done 2026-07-09)*
-- [ ] **Step 1.5** — Audit logging *(plan Step 17)* ← **NEXT**
-- [ ] **Step 1.6** — CORS tightening + TLS/HSTS/security headers *(plan Step 18)*
+- [x] **Step 1.5** — Audit logging *(plan Step 17, done 2026-07-15)*
+- [ ] **Step 1.6** — CORS tightening + TLS/HSTS/security headers *(plan Step 18)* ← **NEXT**
 - [ ] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19)*
 - [x] **Step 3.1** — CI pipeline *(plan Step 20, done 2026-07-09 — enable branch protection on GitHub to make it merge-blocking)*
 - [ ] **Step 3.2** — Lint / format / type-check gates *(plan Step 21)*
@@ -58,7 +58,7 @@ implementation plan (step number in parentheses).
 - [ ] **Step 6.4** — Compliance evidence pack *(plan Step 41)*
 
 **How to verify current state before continuing:**
-- Backend tests (run locally — the backend image has no pytest): `cd backend && python -m pytest -q` → 156 passed.
+- Backend tests (run locally — the backend image has no pytest): `cd backend && python -m pytest -q` → 189 passed.
 - Manager tests (authoritative in-container; local run shows 8 spurious 401-vs-403 failures from a newer local Starlette): `docker-compose build manager && docker-compose run --rm --no-deps -T manager python -m pytest -q` → 80 passed.
 - Agent tests: `cd agent && python -m pytest -q` → 3 passed.
 
@@ -134,16 +134,20 @@ token after password change. Deactivation was already immediate (`_resolve_user`
 filters `is_active`). Covered by `backend/tests/test_token_lifecycle.py` (7 tests)
 and verified live (logout → 401; password change → old tokens 401, fresh token 200).
 
-### Step 1.5 — 🟠 Audit logging *(plan Step 17)*
-**Why:** No audit trail exists (`grep -ri audit backend/` → nothing). Enterprises
-require "who did what, when" for logins, device/credential changes, config edits,
-and alert acknowledgements — and it is the backbone of the compliance track (6.4).
-**What to do:** Add an append-only `audit_log` table (actor, action, target,
-summary, source IP, timestamp) written from every mutating router, including
-login success/failure. Expose an admin-only, filterable audit view. Credential
-values are never written to audit rows.
-**Verify:** Creating/editing/deleting a device and logging in each produce audit
-rows with the acting user and source IP.
+### Step 1.5 — 🟠 Audit logging ✅ Done (2026-07-15)
+Implemented via migration `024`: append-only `audit_log` table (actor, action,
+target, summary JSON, source IP from `X-Real-IP`, timestamp) written through
+`backend/audit.py` `record()` from every mutating router — auth (login
+success/failure, logout, password change, user create), devices (CRUD + walk),
+config, alerts (resolve/ack/assign/note), alert-rules, notification channels,
+maintenance windows, topology discover. Credential values (`snmp_community`,
+`auth_password`, `priv_password`, passwords, webhook `url`) are redacted from
+summaries; field names remain visible. Admin-only `GET /audit` (paginated,
+filterable by actor/action/target/date) + frontend Audit Log page (admin
+sidebar). Retention: `AUDIT_RETENTION_DAYS` (default 400) pruned weekly by a
+backend lifespan task mirroring the manager's retention loop. Covered by
+`backend/tests/test_audit.py` (18 tests). Deploy note: run `make migrate` to
+create the table.
 
 ### Step 1.6 — 🟡 Tighten CORS and transport security *(plan Step 18)*
 **Why:** CORS allows all methods and headers (`backend/main.py:83-89`); nginx

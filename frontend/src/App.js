@@ -13,6 +13,7 @@ import TrapsPage from './components/TrapsPage';
 import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import UserManagementPage from './pages/UserManagementPage';
+import AuditPage from './pages/AuditPage';
 import PrivateRoute from './components/PrivateRoute';
 import Sidebar from './components/Sidebar';
 import { ToastProvider } from './hooks/useToast';
@@ -36,6 +37,7 @@ function AppShell() {
             <Route path="/mib-browser" element={<PrivateRoute><MibBrowser /></PrivateRoute>} />
             <Route path="/topology" element={<PrivateRoute><TopologyMap /></PrivateRoute>} />
             <Route path="/users" element={<PrivateRoute><UserManagementPage /></PrivateRoute>} />
+            <Route path="/audit" element={<PrivateRoute><AuditPage /></PrivateRoute>} />
           </Routes>
         </div>
       </div>

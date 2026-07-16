@@ -12,12 +12,13 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import OperationalError
 
 from alert_evaluator import evaluation_loop
+from audit import prune_old_entries
 from auth import hash_password
 from config import settings, check_required_secrets
 from database import SessionLocal
 from models import User, UserRole
 from rate_limit import limiter
-from routers import agents, config, devices, internal, maintenance, metrics, notifications, prometheus, topology
+from routers import agents, audit_log, config, devices, internal, maintenance, metrics, notifications, prometheus, topology
 from routers.alerts import alerts_router, rules_router
 from routers.auth import router as auth_router
 
@@ -41,6 +42,25 @@ def _setup_logging():
 
 _setup_logging()
 logger = logging.getLogger(__name__)
+
+
+# Weekly, mirroring the manager's metrics retention loop.
+_AUDIT_RETENTION_INTERVAL_S = 7 * 24 * 3600
+
+
+async def audit_retention_loop():
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                deleted = prune_old_entries(db, settings.audit_retention_days)
+                if deleted:
+                    logger.info("audit retention prune: %d rows deleted", deleted)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.warning("audit retention prune failed: %s", exc)
+        await asyncio.sleep(_AUDIT_RETENTION_INTERVAL_S)
 
 
 @asynccontextmanager
@@ -67,13 +87,16 @@ async def lifespan(app: FastAPI):
         pass
     finally:
         db.close()
-    task = asyncio.create_task(evaluation_loop())
+    tasks = [asyncio.create_task(evaluation_loop()),
+             asyncio.create_task(audit_retention_loop())]
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
@@ -108,6 +131,7 @@ app.include_router(notifications.router)
 app.include_router(maintenance.router)
 app.include_router(prometheus.router)
 app.include_router(topology.router)
+app.include_router(audit_log.router)
 
 
 @app.get("/")

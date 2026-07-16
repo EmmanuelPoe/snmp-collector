@@ -6,6 +6,7 @@ from jose import JWTError, jwt
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+import audit
 from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_user_unchecked, oauth2_scheme, require_role
 from config import settings
 from database import get_db
@@ -74,20 +75,23 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
             if user.failed_login_count >= settings.login_lockout_threshold:
                 user.locked_until = now + timedelta(minutes=settings.login_lockout_minutes)
                 user.failed_login_count = 0  # fresh threshold once the lockout expires
-            db.commit()
+        audit.record(db, request, None, "auth.login_failed", actor_email=form_data.username)
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
 
     if user.failed_login_count or user.locked_until is not None:
         user.failed_login_count = 0
         user.locked_until = None
-        db.commit()
+
+    audit.record(db, request, user, "auth.login")
+    db.commit()
 
     token = create_access_token({"sub": user.email, "role": user.role, "ver": user.token_version or 0})
     return {"access_token": token, "token_type": "bearer", "force_password_change": user.force_password_change}
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def logout(request: Request, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Revoke the presented token (Step 1.4). Requires only a validly signed
     token — works even mid forced-password-change."""
     try:
@@ -101,7 +105,9 @@ def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
         # can never match a live token again.
         db.query(RevokedToken).filter(RevokedToken.expires_at < now).delete()
         db.merge(RevokedToken(jti=jti, expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc)))
-        db.commit()
+    actor = db.query(User).filter(User.email == payload.get("sub")).first()
+    audit.record(db, request, actor, "auth.logout", actor_email=payload.get("sub"))
+    db.commit()
 
 
 @router.post("/change-password", response_model=TokenResponse)
@@ -119,6 +125,8 @@ def change_password(
     # Step 1.4: invalidate every previously issued token for this user, then
     # return a fresh one so the current session continues seamlessly.
     current_user.token_version = (current_user.token_version or 0) + 1
+    audit.record(db, request, current_user, "auth.password_changed",
+                 target_type="user", target_id=current_user.id)
     db.commit()
     token = create_access_token({"sub": current_user.email, "role": current_user.role, "ver": current_user.token_version})
     return {"access_token": token, "token_type": "bearer", "force_password_change": False}
@@ -126,9 +134,10 @@ def change_password(
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(
+    request: Request,
     req: RegisterRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin")),
 ):
     if db.query(User).filter(User.email == req.email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
@@ -136,6 +145,9 @@ def register(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {req.role}")
     user = User(email=req.email, hashed_password=hash_password(req.password), role=req.role)
     db.add(user)
+    db.flush()  # assign user.id for the audit row
+    audit.record(db, request, current_user, "user.create", target_type="user",
+                 target_id=user.id, summary={"email": req.email, "role": req.role})
     db.commit()
     db.refresh(user)
     return user
