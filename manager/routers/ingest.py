@@ -2,7 +2,7 @@ import re
 import tempfile
 from pathlib import Path
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
-from auth import require_api_key
+from auth import require_agent_auth
 from services.ingest import ChecksumError, DuplicateFileError, ingest_file
 
 router = APIRouter(tags=["ingest"])
@@ -16,7 +16,7 @@ async def ingest(
     file: UploadFile = File(...),
     x_file_id: str = Header(...),
     x_sha256: str = Header(...),
-    _: str = Depends(require_api_key),
+    _: str = Depends(require_agent_auth),
 ):
     parts = x_file_id.rsplit("_", 1)
     if len(parts) != 2 or parts[1] not in _VALID_TYPES:

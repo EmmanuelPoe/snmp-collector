@@ -7,6 +7,7 @@ from pathlib import Path
 import httpx
 
 import config
+import credentials
 from models import DeviceConfig
 from snmp import walk_device, walk_oid, walk_lldp
 from trap_receiver import run_trap_listener
@@ -29,17 +30,30 @@ logging.basicConfig(level=logging.INFO, handlers=[_handler], force=True)
 log = logging.getLogger(__name__)
 
 _agent_id: str | None = None
+_agent_secret: str | None = None
 _buffer: UploadBuffer | None = None
 _trap_buffer: TrapBuffer | None = None
 
 
-async def _register() -> str:
+def _auth_token() -> str:
+    return credentials.auth_token(_agent_id, _agent_secret)
+
+
+def _auth_headers() -> dict:
+    return {"Authorization": f"Bearer {_auth_token()}"}
+
+
+async def _register() -> tuple[str, str | None]:
     id_file = Path(config.settings.agent_id_path)
 
     if id_file.exists():
         stored = id_file.read_text().strip()
+        secret = credentials.load_secret()
+        if secret is None:
+            log.warning("No stored agent secret — falling back to the shared key "
+                        "(re-enroll for a per-agent credential)")
         log.info("Reusing stored agent_id: %s", stored)
-        return stored
+        return stored, secret
 
     if config.settings.claim_token:
         while True:
@@ -55,11 +69,14 @@ async def _register() -> str:
                         timeout=10.0,
                     )
                     resp.raise_for_status()
-                    agent_id = resp.json()["agent_id"]
+                    data = resp.json()
+                    agent_id, secret = data["agent_id"], data.get("agent_secret")
                     id_file.parent.mkdir(parents=True, exist_ok=True)
                     id_file.write_text(agent_id)
+                    if secret:
+                        credentials.save_secret(secret)
                     log.info("Claimed slot, registered as agent_id: %s", agent_id)
-                    return agent_id
+                    return agent_id, secret
             except Exception as exc:
                 log.warning("Claim failed: %s — retrying in 10s", exc)
                 await asyncio.sleep(10)
@@ -74,11 +91,14 @@ async def _register() -> str:
                     timeout=10.0,
                 )
                 resp.raise_for_status()
-                agent_id = resp.json()["agent_id"]
+                data = resp.json()
+                agent_id, secret = data["agent_id"], data.get("agent_secret")
                 id_file.parent.mkdir(parents=True, exist_ok=True)
                 id_file.write_text(agent_id)
+                if secret:
+                    credentials.save_secret(secret)
                 log.info("Registered as agent_id: %s", agent_id)
-                return agent_id
+                return agent_id, secret
         except Exception as exc:
             log.warning("Registration failed: %s — retrying in 10s", exc)
             await asyncio.sleep(10)
@@ -92,7 +112,7 @@ async def _heartbeat_loop() -> None:
                 await client.post(
                     f"{config.settings.manager_url}/heartbeat",
                     json={"agent_id": _agent_id, "pending_uploads": _buffer.pending_count() if _buffer else 0},
-                    headers={"Authorization": f"Bearer {config.settings.manager_api_key}"},
+                    headers=_auth_headers(),
                     timeout=5.0,
                 )
         except Exception as exc:
@@ -103,7 +123,7 @@ async def _fetch_devices() -> list[DeviceConfig]:
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{config.settings.manager_url}/config/{_agent_id}",
-            headers={"Authorization": f"Bearer {config.settings.manager_api_key}"},
+            headers=_auth_headers(),
             timeout=10.0,
         )
         resp.raise_for_status()
@@ -154,7 +174,7 @@ async def _post_command_result(client, command_id, status, result=None, error=No
         await client.post(
             f"{config.settings.manager_url}/commands/{command_id}/result",
             json={"status": status, "result": result, "error": error},
-            headers={"Authorization": f"Bearer {config.settings.manager_api_key}"},
+            headers=_auth_headers(),
             timeout=10.0,
         )
     except Exception as exc:
@@ -191,7 +211,7 @@ async def _command_loop() -> None:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(
                     f"{config.settings.manager_url}/agents/{_agent_id}/commands",
-                    headers={"Authorization": f"Bearer {config.settings.manager_api_key}"},
+                    headers=_auth_headers(),
                     timeout=10.0,
                 )
                 resp.raise_for_status()
@@ -207,9 +227,9 @@ async def _trap_loop() -> None:
 
 
 async def main() -> None:
-    global _agent_id, _buffer, _trap_buffer
-    _agent_id = await _register()
-    _buffer = UploadBuffer(agent_id=_agent_id)
+    global _agent_id, _agent_secret, _buffer, _trap_buffer
+    _agent_id, _agent_secret = await _register()
+    _buffer = UploadBuffer(agent_id=_agent_id, token=_auth_token())
 
     loops = [
         _heartbeat_loop(),
@@ -219,7 +239,7 @@ async def main() -> None:
     ]
 
     if config.settings.trap_enabled:
-        _trap_buffer = TrapBuffer(agent_id=_agent_id)
+        _trap_buffer = TrapBuffer(agent_id=_agent_id, token=_auth_token())
         loops.append(_trap_loop())
         log.info("Trap ingestion enabled on port %d", config.settings.trap_listen_port)
 

@@ -16,8 +16,11 @@ log = logging.getLogger(__name__)
 
 
 class UploadBuffer:
-    def __init__(self, agent_id: str):
+    def __init__(self, agent_id: str, token: str | None = None):
         self._agent_id = agent_id
+        # Per-agent credential ("<agent_id>:<secret>", Step 1.7); falls back to
+        # the shared key for pre-1.7 enrollments (manager grace mode).
+        self._token = token or config.settings.manager_api_key
         self._rows: list[dict] = []
         self._first_row_at: float | None = None
         self._queue = Path(config.settings.queue_path)
@@ -67,7 +70,7 @@ class UploadBuffer:
                         f"{config.settings.manager_url}/ingest",
                         files={"file": (path.name, f, "application/octet-stream")},
                         headers={
-                            "Authorization": f"Bearer {config.settings.manager_api_key}",
+                            "Authorization": f"Bearer {self._token}",
                             "X-File-ID": file_id,
                             "X-SHA256": sha256,
                         },
@@ -90,8 +93,9 @@ class UploadBuffer:
 
 
 class TrapBuffer:
-    def __init__(self, agent_id: str):
+    def __init__(self, agent_id: str, token: str | None = None):
         self._agent_id = agent_id
+        self._token = token or config.settings.manager_api_key
         self._rows: list[dict] = []
         self._queue = Path(config.settings.queue_path) / "traps"
         self._queue.mkdir(parents=True, exist_ok=True)
@@ -122,7 +126,7 @@ class TrapBuffer:
                         f"{config.settings.manager_url}/ingest",
                         files={"file": (path.name, f, "application/octet-stream")},
                         headers={
-                            "Authorization": f"Bearer {config.settings.manager_api_key}",
+                            "Authorization": f"Bearer {self._token}",
                             "X-File-ID": file_id,
                             "X-SHA256": sha256,
                         },

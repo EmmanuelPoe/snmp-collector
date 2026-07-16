@@ -33,7 +33,7 @@ implementation plan (step number in parentheses).
 - [x] **Step 1.4** — Token lifecycle: revocation, logout *(plan Step 16, done 2026-07-09)*
 - [x] **Step 1.5** — Audit logging *(plan Step 17, done 2026-07-15)*
 - [x] **Step 1.6** — CORS tightening + TLS/HSTS/security headers *(plan Step 18, done 2026-07-15 — `nginx -t` + curl verification pending, needs the Docker stack)*
-- [ ] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19)* ← **NEXT**
+- [x] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19, done 2026-07-15 — grace mode on; flip `AGENT_AUTH_ENFORCE=true` once all agents re-enrolled)*
 - [x] **Step 3.1** — CI pipeline *(plan Step 20, done 2026-07-09 — enable branch protection on GitHub to make it merge-blocking)*
 - [ ] **Step 3.2** — Lint / format / type-check gates *(plan Step 21)*
 - [ ] **Step 3.3** — Dependency + image scanning, SBOM *(plan Step 22)*
@@ -165,19 +165,24 @@ Certs at `nginx/certs/` (gitignored); self-signed bootstrap
 checks (301, HSTS headers, `/agent/` claim→ingest), `make simulation`. CSP
 enforcement flip is a follow-up after a quiet Report-Only period.
 
-### Step 1.7 — 🟡 Per-agent credentials — retire the shared bearer for agents *(plan Step 19)*
-**Why:** One-time **enrollment** tokens already exist (`manager/routers/registration.py`
-claim flow), but after enrollment every agent authenticates with the same static
-`MANAGER_API_KEY` (`manager/auth.py:11`), which is also what the backend accepts for
-internal calls (`backend/auth.py:81-86`). One leaked agent key compromises every hop,
-and it never rotates.
-**What to do:** Issue a per-agent secret at claim/registration (hash stored with the
-registry record), authenticate all subsequent agent→manager calls with it, and make
-revocation per-agent (deregister = revoke). Keep `MANAGER_API_KEY` only for
-manager↔backend service calls, so a stolen agent credential cannot reach backend
-internal endpoints.
-**Verify:** Revoking one agent's credential blocks only that agent; an agent
-credential presented to a backend internal endpoint is rejected.
+### Step 1.7 — 🟡 Per-agent credentials — retire the shared bearer for agents ✅ Done (2026-07-15)
+Manager issues a per-agent secret (`token_urlsafe(32)`) at `/register` and
+`/claim`, returned exactly once; only the SHA-256 hash lives on the registry
+record (`manager/registry.py`, persists through registry.json reloads). Agents
+send `Bearer <agent_id>:<secret>` on heartbeat/config/ingest/command routes,
+verified constant-time by `require_agent_auth` (`manager/auth.py`); an agent
+can only act as itself (403 otherwise), and a command result is only accepted
+from the agent the command targets. Deregister = instant revocation. Agent
+persists the secret 0600 next to its ID file (`agent/credentials.py`);
+`MANAGER_API_KEY` is now optional for agents — claim-token enrollments never
+hold it (dev compose keeps it for the `/register` bootstrap only). **Grace
+mode:** `AGENT_AUTH_ENFORCE=false` (default) still accepts the shared key on
+agent routes with a warning; flip to `true` once every agent has re-enrolled.
+Operator/backend routes (`/register`, agent list, deregister, enqueue-command,
+`/commands/{id}` polling) keep the shared key; backend internal endpoints
+reject agent credentials by construction. Tests:
+`manager/tests/test_agent_auth.py` (10) + `agent/tests/test_credentials.py` (4).
+**Verification pending (Docker down):** in-container manager suite, `make simulation`.
 
 ---
 

@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     dead_letter_path: str = "/data/dead-letter"
     backend_url: str = "http://backend:8000"
     metrics_retention_days: int = 90
+    # Step 1.7 grace mode: false accepts the shared MANAGER_API_KEY on
+    # agent-facing routes (with a warning) so pre-1.7 agents keep working.
+    # Flip to true once every agent holds a per-agent credential.
+    agent_auth_enforce: bool = False
 
     model_config = {"env_file": ".env"}
 

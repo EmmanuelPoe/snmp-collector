@@ -156,7 +156,20 @@ checks, agent-over-TLS e2e, `make simulation`.
 
 **Decision required:** whether dev compose also runs TLS (self-signed) or stays HTTP — recommend HTTP for dev, TLS only in the prod overlay, so `make up` stays zero-config.
 
-## Step 19 — Per-agent credentials *(roadmap 1.7)*
+## Step 19 — Per-agent credentials *(roadmap 1.7)* ✅ DONE (2026-07-15)
+
+**Built:** as specced, ahead of Step 25 (secret_hash lives on the file-based
+registry record and will migrate to Postgres with it). Per-agent secret issued
+once at `/register`/`/claim` (`registry.new_secret()`, SHA-256 hash stored);
+`require_agent_auth` + `ensure_same_agent` in `manager/auth.py` guard
+heartbeat, `GET /config/{agent_id}`, `/ingest`, command fetch/result; the
+recommended grace mode landed as `AGENT_AUTH_ENFORCE=false` (shared key
+accepted on agent routes with a warning — flip to true next release). Agent
+persists the secret 0600 (`agent/credentials.py`) and sends
+`Bearer <agent_id>:<secret>` everywhere; `MANAGER_API_KEY` optional for agents
+(claim path needs none; dev compose keeps it for `/register` bootstrap only).
+Tests: manager 84+10 local (6 known-spurious 401-vs-403 remain), agent 7.
+**Pending (Docker down):** in-container manager suite, `make simulation`.
 
 **Problem (verified):** one-time **enrollment** tokens already exist — [`/claim`](../manager/routers/registration.py#L19-L30) consumes a slot token from `manager/slots.py` — but every subsequent agent call (heartbeat, config, ingest, commands) authenticates with the single shared `MANAGER_API_KEY` ([manager/auth.py:11](../manager/auth.py#L11)), which is the same credential the backend accepts for internal endpoints ([backend/auth.py:81-86](../backend/auth.py#L81-L86)). A key extracted from any agent host compromises every hop and never rotates.
 

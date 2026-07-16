@@ -1,19 +1,36 @@
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 import config
 
 
+def hash_secret(secret: str) -> str:
+    return hashlib.sha256(secret.encode()).hexdigest()
+
+
+def new_secret() -> str:
+    """Per-agent credential (Step 1.7), returned to the agent exactly once at
+    register/claim; only its hash is stored."""
+    return secrets.token_urlsafe(32)
+
+
 class AgentInfo:
-    def __init__(self, agent_id: str, hostname: str, ip: str):
+    def __init__(self, agent_id: str, hostname: str, ip: str, secret_hash: str | None = None):
         self.agent_id = agent_id
         self.hostname = hostname
         self.ip = ip
+        self.secret_hash = secret_hash
         self.last_seen: datetime | None = None
         self.pending_uploads: int = 0
         self.registered_at = datetime.now(timezone.utc)
+
+    def verify_secret(self, secret: str) -> bool:
+        return bool(self.secret_hash) and hmac.compare_digest(self.secret_hash, hash_secret(secret))
 
     @property
     def status(self) -> str:
@@ -31,6 +48,7 @@ class AgentInfo:
             "agent_id": self.agent_id,
             "hostname": self.hostname,
             "ip": self.ip,
+            "secret_hash": self.secret_hash,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "pending_uploads": self.pending_uploads,
             "registered_at": self.registered_at.isoformat(),
@@ -38,7 +56,9 @@ class AgentInfo:
 
     @classmethod
     def from_dict(cls, d: dict) -> "AgentInfo":
-        agent = cls(d["agent_id"], d["hostname"], d["ip"])
+        # Pre-Step-1.7 registry rows have no secret_hash — those agents can only
+        # authenticate with the shared key (grace mode) until re-enrolled.
+        agent = cls(d["agent_id"], d["hostname"], d["ip"], secret_hash=d.get("secret_hash"))
         if d.get("last_seen"):
             agent.last_seen = datetime.fromisoformat(d["last_seen"])
         agent.pending_uploads = d.get("pending_uploads", 0)
@@ -53,13 +73,20 @@ class AgentRegistry:
         self._agents: dict[str, AgentInfo] = {}
         self._load()
 
-    def register(self, hostname: str, ip: str) -> str:
+    def register(self, hostname: str, ip: str) -> tuple[str, str]:
+        """Returns (agent_id, secret). The secret is not stored — hand it to the
+        agent now or lose it."""
         agent_id = f"{hostname}-{uuid.uuid4().hex[:8]}"
-        info = AgentInfo(agent_id, hostname, ip)
+        secret = new_secret()
+        info = AgentInfo(agent_id, hostname, ip, secret_hash=hash_secret(secret))
         info.last_seen = datetime.now(timezone.utc)
         self._agents[agent_id] = info
         self._persist()
-        return agent_id
+        return agent_id, secret
+
+    def add(self, info: AgentInfo) -> None:
+        self._agents[info.agent_id] = info
+        self._persist()
 
     def heartbeat(self, agent_id: str, pending_uploads: int = 0) -> None:
         if agent_id not in self._agents:

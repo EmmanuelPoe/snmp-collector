@@ -88,6 +88,7 @@ services:
       - REGISTRY_PATH=/data/registry/registry.json
       - DEAD_LETTER_PATH=/data/dead-letter
       - BACKEND_URL=http://backend:8000
+      - AGENT_AUTH_ENFORCE=${AGENT_AUTH_ENFORCE:-false}
     restart: unless-stopped
     networks:
       - snmp-network
@@ -102,6 +103,9 @@ services:
     container_name: snmp-agent
     environment:
       - MANAGER_URL=http://manager:8000
+      # Bootstrap-only (dev): lets the bundled agent self-register via
+      # /register. After that it authenticates with its per-agent secret
+      # (Step 1.7). Remote agents enroll with CLAIM_TOKEN and never hold this.
       - MANAGER_API_KEY=${MANAGER_API_KEY:-}
       - AGENT_HOSTNAME=${AGENT_HOSTNAME:-snmp-agent-01}
       - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-60}

@@ -2,9 +2,9 @@ import httpx
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from models import RegisterRequest, RegisterResponse, HeartbeatRequest, DeviceConfig, ClaimRequest, ClaimResponse
-from registry import registry, AgentInfo
+from registry import registry, AgentInfo, hash_secret, new_secret
 from slots import slot_store
-from auth import require_api_key
+from auth import ensure_same_agent, require_agent_auth, require_api_key
 import config
 
 router = APIRouter(tags=["registration"])
@@ -12,8 +12,9 @@ router = APIRouter(tags=["registration"])
 
 @router.post("/register", response_model=RegisterResponse)
 async def register(req: RegisterRequest, _: str = Depends(require_api_key)):
-    agent_id = registry.register(req.hostname, req.ip)
-    return RegisterResponse(agent_id=agent_id, devices=await _devices_for(agent_id))
+    agent_id, secret = registry.register(req.hostname, req.ip)
+    return RegisterResponse(agent_id=agent_id, agent_secret=secret,
+                            devices=await _devices_for(agent_id))
 
 
 @router.post("/claim", response_model=ClaimResponse)
@@ -22,16 +23,17 @@ async def claim(req: ClaimRequest):
         agent_id = slot_store.claim(req.token, req.hostname, req.ip)
     except KeyError:
         raise HTTPException(status_code=404, detail="Token not found or expired")
-    info = AgentInfo(agent_id, req.hostname, req.ip)
+    secret = new_secret()
+    info = AgentInfo(agent_id, req.hostname, req.ip, secret_hash=hash_secret(secret))
     info.last_seen = datetime.now(timezone.utc)
-    registry._agents[agent_id] = info
-    registry._persist()
+    registry.add(info)
     devices = await _devices_for(agent_id)
-    return ClaimResponse(agent_id=agent_id, devices=devices)
+    return ClaimResponse(agent_id=agent_id, agent_secret=secret, devices=devices)
 
 
 @router.post("/heartbeat")
-def heartbeat(req: HeartbeatRequest, _: str = Depends(require_api_key)):
+def heartbeat(req: HeartbeatRequest, identity: str = Depends(require_agent_auth)):
+    ensure_same_agent(identity, req.agent_id)
     try:
         registry.heartbeat(req.agent_id, req.pending_uploads)
     except KeyError:
@@ -40,7 +42,8 @@ def heartbeat(req: HeartbeatRequest, _: str = Depends(require_api_key)):
 
 
 @router.get("/config/{agent_id}", response_model=list[DeviceConfig])
-async def get_config(agent_id: str, _: str = Depends(require_api_key)):
+async def get_config(agent_id: str, identity: str = Depends(require_agent_auth)):
+    ensure_same_agent(identity, agent_id)
     if not registry.get(agent_id):
         raise HTTPException(status_code=404, detail="Agent not found")
     return await _devices_for(agent_id)
