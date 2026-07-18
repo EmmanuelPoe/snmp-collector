@@ -35,8 +35,8 @@ implementation plan (step number in parentheses).
 - [x] **Step 1.6** — CORS tightening + TLS/HSTS/security headers *(plan Step 18, done 2026-07-15 — `nginx -t` + curl verification pending, needs the Docker stack)*
 - [x] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19, done 2026-07-15 — grace mode on; flip `AGENT_AUTH_ENFORCE=true` once all agents re-enrolled)*
 - [x] **Step 3.1** — CI pipeline *(plan Step 20, done 2026-07-09 — enable branch protection on GitHub to make it merge-blocking)*
-- [ ] **Step 3.2** — Lint / format / type-check gates *(plan Step 21)*
-- [ ] **Step 3.3** — Dependency + image scanning, SBOM *(plan Step 22)*
+- [x] **Step 3.2** — Lint / format / type-check gates *(plan Step 21, done 2026-07-15)*
+- [ ] **Step 3.3** — Dependency + image scanning, SBOM *(plan Step 22)* ← **NEXT**
 - [ ] **Step 3.4** — Secret scanning *(plan Step 23)*
 - [ ] **Step 3.5** — Frontend + E2E test coverage *(plan Step 24)*
 - [ ] **Step 2.1** — Agent registry into Postgres *(plan Step 25)*
@@ -203,14 +203,19 @@ and adopts the fresh token. Verified locally end-to-end.
 **Remaining manual step:** enable branch protection on `main` in GitHub settings
 requiring these five checks, to make CI merge-blocking.
 
-### Step 3.2 — 🟠 Linting, formatting, and type checking as gates *(plan Step 21)*
-**Why:** No `ruff`/`mypy`/`eslint`/`prettier` config present. Style and type
-drift accumulate.
-**What to do:** Add `ruff` (lint + format) + `mypy` for Python and `eslint` +
-`prettier` for the React app, with configs checked in and a `pre-commit` config.
-Wire them into CI.
-**Verify:** CI fails on a lint/type violation; `pre-commit run --all-files` passes
-locally.
+### Step 3.2 — 🟠 Linting, formatting, and type checking as gates ✅ Done (2026-07-15)
+Root `pyproject.toml`: ruff for lint **and** format (defaults + isort + W;
+E711/E712 ignored — SQLAlchemy filter idiom; E402 allowed in tests) and mypy
+per service, lenient baseline — untyped-SQLAlchemy/pydantic noise codes
+disabled with a written ratchet plan (pydantic plugin → Mapped[] models →
+check_untyped_defs). Frontend: `.prettierrc` + prettier pinned as devDependency;
+eslint via CRA's `react-app` config at zero warnings. `.pre-commit-config.yaml`
+(ruff-check, ruff-format, prettier, eslint) — `pre-commit run --all-files`
+passes. Dedicated format-only commit `b8c45ec` (131 files) keeps the mechanical
+churn out of functional history. New CI `lint` job runs all five checks
+(ruff check/format, mypy ×3 services, prettier, eslint). Verified locally: an
+injected violation fails both ruff (F821) and mypy (name-defined); all three
+pytest suites + the frontend build re-ran green after the format pass.
 
 ### Step 3.3 — 🟠 Dependency and container vulnerability scanning *(plan Step 22)*
 **Why:** Deps are pinned (good) but nothing scans them. No SBOM.

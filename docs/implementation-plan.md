@@ -224,7 +224,18 @@ Then enable branch protection on `main` requiring all jobs.
 
 **Decision required:** none.
 
-## Step 21 — Lint, format, type-check gates *(roadmap 3.2)*
+## Step 21 — Lint, format, type-check gates *(roadmap 3.2)* ✅ DONE (2026-07-15)
+
+**Built:** root `pyproject.toml` (ruff lint+format: defaults + I + W, E711/E712
+ignored for the SQLAlchemy idiom, E402 allowed in tests; mypy per service with
+a lenient baseline — SQLAlchemy/pydantic noise codes disabled, ratchet plan
+documented in the file). Frontend `.prettierrc`/`.prettierignore` + prettier
+pinned as a devDependency; eslint = CRA `react-app` config at
+`--max-warnings=0` (two pre-existing warnings fixed). `.pre-commit-config.yaml`
+with ruff-check/ruff-format/prettier/eslint — `pre-commit run --all-files`
+green. Format-only commit `b8c45ec` (131 files). CI `lint` job added to the
+Step 20 workflow. Verified: injected violation fails ruff (F821) and mypy
+(name-defined); all pytest suites + frontend build green post-format.
 
 **Problem (verified):** no `pyproject.toml`, `.pre-commit-config.yaml`, `.eslintrc`, or `.prettierrc` anywhere in the repo.
 
