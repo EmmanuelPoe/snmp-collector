@@ -3,12 +3,11 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
+import config
+from db import close_db, get_db, purge_old_metrics
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
-
-import config
-from db import get_db, close_db, purge_old_metrics
-from routers import registration, ingest, metrics, slots, commands
+from routers import commands, ingest, metrics, registration, slots
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +16,15 @@ _RETENTION_INTERVAL_SECONDS = 7 * 24 * 3600  # weekly
 
 class _JsonFormatter(logging.Formatter):
     def format(self, record):
-        return json.dumps({
-            "time": self.formatTime(record),
-            "level": record.levelname,
-            "service": "manager",
-            "logger": record.name,
-            "message": record.getMessage(),
-        })
+        return json.dumps(
+            {
+                "time": self.formatTime(record),
+                "level": record.levelname,
+                "service": "manager",
+                "logger": record.name,
+                "message": record.getMessage(),
+            }
+        )
 
 
 def _setup_logging():

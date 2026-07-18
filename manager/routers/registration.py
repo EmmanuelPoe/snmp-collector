@@ -1,11 +1,12 @@
-import httpx
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
-from models import RegisterRequest, RegisterResponse, HeartbeatRequest, DeviceConfig, ClaimRequest, ClaimResponse
-from registry import registry, AgentInfo, hash_secret, new_secret
-from slots import slot_store
-from auth import ensure_same_agent, require_agent_auth, require_api_key
+
 import config
+import httpx
+from auth import ensure_same_agent, require_agent_auth, require_api_key
+from fastapi import APIRouter, Depends, HTTPException
+from models import ClaimRequest, ClaimResponse, DeviceConfig, HeartbeatRequest, RegisterRequest, RegisterResponse
+from registry import AgentInfo, hash_secret, new_secret, registry
+from slots import slot_store
 
 router = APIRouter(tags=["registration"])
 
@@ -13,8 +14,7 @@ router = APIRouter(tags=["registration"])
 @router.post("/register", response_model=RegisterResponse)
 async def register(req: RegisterRequest, _: str = Depends(require_api_key)):
     agent_id, secret = registry.register(req.hostname, req.ip)
-    return RegisterResponse(agent_id=agent_id, agent_secret=secret,
-                            devices=await _devices_for(agent_id))
+    return RegisterResponse(agent_id=agent_id, agent_secret=secret, devices=await _devices_for(agent_id))
 
 
 @router.post("/claim", response_model=ClaimResponse)

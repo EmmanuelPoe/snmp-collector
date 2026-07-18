@@ -1,8 +1,9 @@
-import duckdb
 import asyncio
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
 import config
+import duckdb
 
 _conn: duckdb.DuckDBPyConnection | None = None
 _write_lock = asyncio.Lock()
@@ -87,10 +88,8 @@ async def purge_old_metrics(retention_days: int) -> dict:
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
     async with _write_lock:
         conn = get_db()
-        polls = conn.execute(
-            "SELECT COUNT(*) FROM snmp_polls WHERE collected_at < ?", [cutoff]).fetchone()[0]
-        traps = conn.execute(
-            "SELECT COUNT(*) FROM snmp_traps WHERE received_at < ?", [cutoff]).fetchone()[0]
+        polls = conn.execute("SELECT COUNT(*) FROM snmp_polls WHERE collected_at < ?", [cutoff]).fetchone()[0]
+        traps = conn.execute("SELECT COUNT(*) FROM snmp_traps WHERE received_at < ?", [cutoff]).fetchone()[0]
         conn.execute("DELETE FROM snmp_polls WHERE collected_at < ?", [cutoff])
         conn.execute("DELETE FROM snmp_traps WHERE received_at < ?", [cutoff])
     return {"polls_deleted": polls, "traps_deleted": traps}

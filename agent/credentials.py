@@ -6,6 +6,7 @@ persisted next to the agent-ID file with mode 0600 and sent as
 Step 1.7 have no stored secret and fall back to the shared MANAGER_API_KEY,
 which works while the manager runs in grace mode (AGENT_AUTH_ENFORCE=false).
 """
+
 import os
 from pathlib import Path
 

@@ -1,17 +1,24 @@
 from datetime import datetime, timedelta, timezone
 
+import audit
+from auth import (
+    create_access_token,
+    get_current_user,
+    get_current_user_unchecked,
+    hash_password,
+    oauth2_scheme,
+    require_role,
+    verify_password,
+)
+from config import settings
+from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-
-import audit
-from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_user_unchecked, oauth2_scheme, require_role
-from config import settings
-from database import get_db
 from models import RevokedToken, User, UserRole
+from pydantic import BaseModel, Field
 from rate_limit import limiter, token_or_ip
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -125,10 +132,11 @@ def change_password(
     # Step 1.4: invalidate every previously issued token for this user, then
     # return a fresh one so the current session continues seamlessly.
     current_user.token_version = (current_user.token_version or 0) + 1
-    audit.record(db, request, current_user, "auth.password_changed",
-                 target_type="user", target_id=current_user.id)
+    audit.record(db, request, current_user, "auth.password_changed", target_type="user", target_id=current_user.id)
     db.commit()
-    token = create_access_token({"sub": current_user.email, "role": current_user.role, "ver": current_user.token_version})
+    token = create_access_token(
+        {"sub": current_user.email, "role": current_user.role, "ver": current_user.token_version}
+    )
     return {"access_token": token, "token_type": "bearer", "force_password_change": False}
 
 
@@ -146,8 +154,15 @@ def register(
     user = User(email=req.email, hashed_password=hash_password(req.password), role=req.role)
     db.add(user)
     db.flush()  # assign user.id for the audit row
-    audit.record(db, request, current_user, "user.create", target_type="user",
-                 target_id=user.id, summary={"email": req.email, "role": req.role})
+    audit.record(
+        db,
+        request,
+        current_user,
+        "user.create",
+        target_type="user",
+        target_id=user.id,
+        summary={"email": req.email, "role": req.role},
+    )
     db.commit()
     db.refresh(user)
     return user

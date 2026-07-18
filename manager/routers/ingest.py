@@ -1,8 +1,9 @@
 import re
 import tempfile
 from pathlib import Path
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
+
 from auth import require_agent_auth
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from services.ingest import ChecksumError, DuplicateFileError, ingest_file
 
 router = APIRouter(tags=["ingest"])

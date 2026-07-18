@@ -1,12 +1,15 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
-from fastapi.testclient import TestClient
+from datetime import datetime, timezone
+
 import pyarrow as pa
 import pyarrow.parquet as pq
-from datetime import datetime, timezone
+import pytest
+from fastapi.testclient import TestClient
+
 
 @pytest.fixture(autouse=True)
 def patch_settings(tmp_path, monkeypatch):
@@ -17,75 +20,91 @@ def patch_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("DEAD_LETTER_PATH", str(tmp_path / "dead-letter"))
     monkeypatch.setenv("BACKEND_URL", "http://backend-mock:8000")
     import config
+
     config.settings = config.Settings()
+
 
 @pytest.fixture
 def reset_db():
     import db
+
     db._conn = None
     yield
     if db._conn:
         db._conn.close()
         db._conn = None
 
+
 @pytest.fixture
 def reset_registry():
     import registry as reg_mod
+
     reg_mod.registry._agents.clear()
     yield
     reg_mod.registry._agents.clear()
+
 
 @pytest.fixture
 def reset_slots():
     import slots as slots_mod
+
     slots_mod.slot_store._slots.clear()
     yield
     slots_mod.slot_store._slots.clear()
 
+
 @pytest.fixture
 def client(patch_settings, reset_db, reset_registry, reset_slots):
     from main import app
+
     with TestClient(app) as c:
         yield c
+
 
 @pytest.fixture
 def auth_headers():
     return {"Authorization": "Bearer test-manager-api-key"}
 
+
 @pytest.fixture
 def mock_backend_empty(respx_mock):
     import httpx
-    respx_mock.get("http://backend-mock:8000/internal/devices").mock(
-        return_value=httpx.Response(200, json=[])
-    )
+
+    respx_mock.get("http://backend-mock:8000/internal/devices").mock(return_value=httpx.Response(200, json=[]))
     return respx_mock
+
 
 @pytest.fixture
 def sample_polls_parquet(tmp_path):
     rows = 5
-    table = pa.table({
-        "agent_id":       pa.array(["agent-01"] * rows),
-        "device_ip":      pa.array(["192.168.1.1"] * rows),
-        "interface_name": pa.array(["GigabitEthernet0/0"] * rows),
-        "oid_name":       pa.array(["ifInOctets"] * rows),
-        "oid":            pa.array(["1.3.6.1.2.1.2.2.1.10.1"] * rows),
-        "value":          pa.array(["12345"] * rows),
-        "collected_at":   pa.array([datetime.now(timezone.utc)] * rows, type=pa.timestamp("us", tz="UTC")),
-    })
+    table = pa.table(
+        {
+            "agent_id": pa.array(["agent-01"] * rows),
+            "device_ip": pa.array(["192.168.1.1"] * rows),
+            "interface_name": pa.array(["GigabitEthernet0/0"] * rows),
+            "oid_name": pa.array(["ifInOctets"] * rows),
+            "oid": pa.array(["1.3.6.1.2.1.2.2.1.10.1"] * rows),
+            "value": pa.array(["12345"] * rows),
+            "collected_at": pa.array([datetime.now(timezone.utc)] * rows, type=pa.timestamp("us", tz="UTC")),
+        }
+    )
     path = tmp_path / "polls.parquet"
     pq.write_table(table, path)
     return path
 
+
 @pytest.fixture
 def sample_traps_parquet(tmp_path):
     rows = 3
-    table = pa.table({
-        "agent_id":   pa.array(["agent-01"] * rows),
-        "device_ip":  pa.array(["192.168.1.1"] * rows),
-        "trap_oid":   pa.array(["1.3.6.1.6.3.1.1.5.3"] * rows),
-        "varbinds":   pa.array(['{"ifIndex": "1"}'] * rows),
-        "received_at": pa.array([datetime.now(timezone.utc)] * rows, type=pa.timestamp("us", tz="UTC")),
-    })
+    table = pa.table(
+        {
+            "agent_id": pa.array(["agent-01"] * rows),
+            "device_ip": pa.array(["192.168.1.1"] * rows),
+            "trap_oid": pa.array(["1.3.6.1.6.3.1.1.5.3"] * rows),
+            "varbinds": pa.array(['{"ifIndex": "1"}'] * rows),
+            "received_at": pa.array([datetime.now(timezone.utc)] * rows, type=pa.timestamp("us", tz="UTC")),
+        }
+    )
     path = tmp_path / "traps.parquet"
     pq.write_table(table, path)
     return path

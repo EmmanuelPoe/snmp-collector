@@ -9,7 +9,7 @@ export default function Sidebar() {
   const [alertCount, setAlertCount] = useState(0);
   const [trapCount, setTrapCount] = useState(0);
   const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem('sidebar-collapsed') === 'true'
+    () => localStorage.getItem('sidebar-collapsed') === 'true',
   );
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function Sidebar() {
   }, []);
 
   function toggle() {
-    setCollapsed(prev => {
+    setCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem('sidebar-collapsed', next);
       return next;
@@ -55,12 +55,24 @@ export default function Sidebar() {
   }
 
   const MONITOR_ITEMS = [
-    { to: '/',        icon: '◈', label: 'Dashboard',     badge: alertCount > 0 ? alertCount : null, badgeClass: 'badge-danger' },
+    {
+      to: '/',
+      icon: '◈',
+      label: 'Dashboard',
+      badge: alertCount > 0 ? alertCount : null,
+      badgeClass: 'badge-danger',
+    },
     { to: '/devices', icon: '◻', label: 'Devices' },
     { to: '/metrics', icon: '▦', label: 'Metrics' },
-    { to: '/agents',  icon: '◎', label: 'Agents' },
+    { to: '/agents', icon: '◎', label: 'Agents' },
     { to: '/topology', icon: '⧉', label: 'Topology' },
-    { to: '/traps',   icon: '⊿', label: 'Traps',         badge: trapCount > 0 ? trapCount : null, badgeClass: 'badge-warning' },
+    {
+      to: '/traps',
+      icon: '⊿',
+      label: 'Traps',
+      badge: trapCount > 0 ? trapCount : null,
+      badgeClass: 'badge-warning',
+    },
   ];
 
   const MANAGE_ITEMS = [
@@ -77,7 +89,10 @@ export default function Sidebar() {
 
   const sections = [
     { label: 'Monitor', items: MONITOR_ITEMS },
-    { label: 'Manage', items: user?.role === 'admin' ? [...MANAGE_ITEMS, ...ADMIN_ITEMS] : MANAGE_ITEMS },
+    {
+      label: 'Manage',
+      items: user?.role === 'admin' ? [...MANAGE_ITEMS, ...ADMIN_ITEMS] : MANAGE_ITEMS,
+    },
   ];
 
   return (
@@ -91,18 +106,22 @@ export default function Sidebar() {
             </div>
           )}
           {collapsed && <div className="sidebar-brand-icon">⬡</div>}
-          <button className="sidebar-collapse-btn" onClick={toggle} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          <button
+            className="sidebar-collapse-btn"
+            onClick={toggle}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
             {collapsed ? '›' : '‹'}
           </button>
         </div>
       </div>
 
       <nav className="sidebar-nav">
-        {sections.map(section => (
+        {sections.map((section) => (
           <div key={section.label}>
             {!collapsed && <div className="sidebar-section-label">{section.label}</div>}
             {collapsed && <div className="sidebar-section-divider" />}
-            {section.items.map(item => (
+            {section.items.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -113,13 +132,9 @@ export default function Sidebar() {
                 <span className="nav-icon">{item.icon}</span>
                 {!collapsed && <span className="nav-label">{item.label}</span>}
                 {!collapsed && item.badge && (
-                  <span className={`nav-badge ${item.badgeClass}`}>
-                    {item.badge}
-                  </span>
+                  <span className={`nav-badge ${item.badgeClass}`}>{item.badge}</span>
                 )}
-                {collapsed && item.badge && (
-                  <span className="nav-badge-dot" />
-                )}
+                {collapsed && item.badge && <span className="nav-badge-dot" />}
               </NavLink>
             ))}
           </div>
@@ -147,7 +162,11 @@ export default function Sidebar() {
           </>
         )}
         {collapsed && (
-          <button className="sidebar-logout sidebar-logout-icon" onClick={handleLogout} title="Sign out">
+          <button
+            className="sidebar-logout sidebar-logout-icon"
+            onClick={handleLogout}
+            title="Sign out"
+          >
             ⏻
           </button>
         )}

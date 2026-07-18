@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
     manager_api_key: str
     db_path: str = "/data/db/metrics.db"
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
     agent_auth_enforce: bool = False
 
     model_config = {"env_file": ".env"}
+
 
 settings = Settings()
 

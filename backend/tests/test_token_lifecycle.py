@@ -1,6 +1,8 @@
 """Step 16 (roadmap 1.4): token revocation, logout, version-stale rejection."""
-import sys, os
+
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from datetime import datetime, timedelta, timezone

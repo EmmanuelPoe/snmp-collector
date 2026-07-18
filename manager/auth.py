@@ -2,8 +2,8 @@ import hmac
 import logging
 
 import config
-from fastapi import Security, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import HTTPException, Security, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from registry import registry
 
 logger = logging.getLogger(__name__)

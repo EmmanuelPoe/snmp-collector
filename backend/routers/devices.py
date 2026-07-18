@@ -1,19 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
-from sqlalchemy import cast
-from sqlalchemy.dialects.postgresql import JSONB
+import logging
 from typing import List, Optional
 
-import httpx
-
 import audit
+import httpx
 from auth import get_current_user, require_role
 from config import settings
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from models import Device, User
 from rate_limit import limiter, token_or_ip
-from schemas import DeviceCreate, DeviceUpdate, DeviceResponse, DeviceCredentialsResponse
-import logging
+from schemas import DeviceCreate, DeviceCredentialsResponse, DeviceResponse, DeviceUpdate
+from sqlalchemy import cast
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -53,7 +52,9 @@ def list_tags(
 
 @router.get("", response_model=List[DeviceResponse])
 def list_devices(
-    skip: int = 0, limit: int = 100, enabled_only: bool = False,
+    skip: int = 0,
+    limit: int = 100,
+    enabled_only: bool = False,
     tag: Optional[str] = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
@@ -79,9 +80,15 @@ def create_device(
     db_device = Device(**device.model_dump())
     db.add(db_device)
     db.flush()  # assign id for the audit row
-    audit.record(db, request, current_user, "device.create", target_type="device",
-                 target_id=db_device.id,
-                 summary=audit.redact(device.model_dump(mode="json", exclude_unset=True)))
+    audit.record(
+        db,
+        request,
+        current_user,
+        "device.create",
+        target_type="device",
+        target_id=db_device.id,
+        summary=audit.redact(device.model_dump(mode="json", exclude_unset=True)),
+    )
     db.commit()
     db.refresh(db_device)
     return db_device
@@ -112,9 +119,15 @@ def update_device(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Device {device_id} not found")
     for field, value in device_update.model_dump(exclude_unset=True).items():
         setattr(device, field, value)
-    audit.record(db, request, current_user, "device.update", target_type="device",
-                 target_id=device.id,
-                 summary=audit.redact(device_update.model_dump(mode="json", exclude_unset=True)))
+    audit.record(
+        db,
+        request,
+        current_user,
+        "device.update",
+        target_type="device",
+        target_id=device.id,
+        summary=audit.redact(device_update.model_dump(mode="json", exclude_unset=True)),
+    )
     db.commit()
     db.refresh(device)
     return device
@@ -148,7 +161,9 @@ def walk_device_oids(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Device {device_id} not found")
     agent_id = _resolve_agent_id(device)
     if not agent_id:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No online agent available to perform the walk")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No online agent available to perform the walk"
+        )
     params = {
         "device": {
             "id": str(device.id),
@@ -166,16 +181,25 @@ def walk_device_oids(
         "max_rows": 500,
     }
     try:
-        resp = httpx.post(f"{settings.manager_url}/agents/{agent_id}/commands",
-                          json={"type": "walk", "params": params},
-                          headers=_manager_headers(), timeout=10)
+        resp = httpx.post(
+            f"{settings.manager_url}/agents/{agent_id}/commands",
+            json={"type": "walk", "params": params},
+            headers=_manager_headers(),
+            timeout=10,
+        )
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Manager error: {exc}")
     result = resp.json()
-    audit.record(db, request, current_user, "device.walk", target_type="device",
-                 target_id=device.id,
-                 summary={"base_oid": base_oid, "command_id": result.get("command_id")})
+    audit.record(
+        db,
+        request,
+        current_user,
+        "device.walk",
+        target_type="device",
+        target_id=device.id,
+        summary={"base_oid": base_oid, "command_id": result.get("command_id")},
+    )
     db.commit()
     return result
 
@@ -186,8 +210,7 @@ def get_walk_result(
     _: User = Depends(get_current_user),
 ):
     try:
-        resp = httpx.get(f"{settings.manager_url}/commands/{command_id}",
-                         headers=_manager_headers(), timeout=10)
+        resp = httpx.get(f"{settings.manager_url}/commands/{command_id}", headers=_manager_headers(), timeout=10)
         if resp.status_code == 404:
             raise HTTPException(status_code=404, detail="Walk command not found or expired")
         resp.raise_for_status()
@@ -206,8 +229,14 @@ def delete_device(
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Device {device_id} not found")
-    audit.record(db, request, current_user, "device.delete", target_type="device",
-                 target_id=device.id,
-                 summary={"name": device.name, "ip_address": device.ip_address})
+    audit.record(
+        db,
+        request,
+        current_user,
+        "device.delete",
+        target_type="device",
+        target_id=device.id,
+        summary={"name": device.name, "ip_address": device.ip_address},
+    )
     db.delete(device)
     db.commit()

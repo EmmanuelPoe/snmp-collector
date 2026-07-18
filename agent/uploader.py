@@ -1,16 +1,14 @@
-import asyncio
 import hashlib
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
+import config
 import httpx
 import pyarrow as pa
 import pyarrow.parquet as pq
-
-import config
 
 log = logging.getLogger(__name__)
 
@@ -34,10 +32,7 @@ class UploadBuffer:
     async def add_and_maybe_flush(self, row: dict) -> None:
         self.add(row)
         age = time.monotonic() - (self._first_row_at or time.monotonic())
-        if (
-            len(self._rows) >= config.settings.upload_max_rows
-            or age >= config.settings.upload_max_age_seconds
-        ):
+        if len(self._rows) >= config.settings.upload_max_rows or age >= config.settings.upload_max_age_seconds:
             await self._flush()
 
     async def tick(self) -> None:
@@ -139,32 +134,36 @@ class TrapBuffer:
 
 
 def _write_parquet(rows: list[dict], path: Path) -> None:
-    table = pa.table({
-        "agent_id":       pa.array([r["agent_id"] for r in rows]),
-        "device_ip":      pa.array([r["device_ip"] for r in rows]),
-        "interface_name": pa.array([r["interface_name"] for r in rows]),
-        "oid_name":       pa.array([r["oid_name"] for r in rows]),
-        "oid":            pa.array([r["oid"] for r in rows]),
-        "value":          pa.array([r["value"] for r in rows]),
-        "collected_at":   pa.array(
-            [datetime.fromisoformat(r["collected_at"]) for r in rows],
-            type=pa.timestamp("us", tz="UTC"),
-        ),
-    })
+    table = pa.table(
+        {
+            "agent_id": pa.array([r["agent_id"] for r in rows]),
+            "device_ip": pa.array([r["device_ip"] for r in rows]),
+            "interface_name": pa.array([r["interface_name"] for r in rows]),
+            "oid_name": pa.array([r["oid_name"] for r in rows]),
+            "oid": pa.array([r["oid"] for r in rows]),
+            "value": pa.array([r["value"] for r in rows]),
+            "collected_at": pa.array(
+                [datetime.fromisoformat(r["collected_at"]) for r in rows],
+                type=pa.timestamp("us", tz="UTC"),
+            ),
+        }
+    )
     pq.write_table(table, path)
 
 
 def _write_traps_parquet(rows: list[dict], path: Path) -> None:
-    table = pa.table({
-        "agent_id":    pa.array([r["agent_id"] for r in rows]),
-        "device_ip":   pa.array([r["device_ip"] for r in rows]),
-        "trap_oid":    pa.array([r["trap_oid"] for r in rows]),
-        "varbinds":    pa.array([r["varbinds"] for r in rows]),
-        "received_at": pa.array(
-            [datetime.fromisoformat(r["received_at"]) for r in rows],
-            type=pa.timestamp("us", tz="UTC"),
-        ),
-    })
+    table = pa.table(
+        {
+            "agent_id": pa.array([r["agent_id"] for r in rows]),
+            "device_ip": pa.array([r["device_ip"] for r in rows]),
+            "trap_oid": pa.array([r["trap_oid"] for r in rows]),
+            "varbinds": pa.array([r["varbinds"] for r in rows]),
+            "received_at": pa.array(
+                [datetime.fromisoformat(r["received_at"]) for r in rows],
+                type=pa.timestamp("us", tz="UTC"),
+            ),
+        }
+    )
     pq.write_table(table, path)
 
 

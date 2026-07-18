@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { getAgents, createAgentSlot, deleteAgentSlot, clearOfflineAgents } from '../services/api';
 
 const STATUS_BADGE = {
-  online:   'badge-success',
+  online: 'badge-success',
   degraded: 'badge-warning',
-  offline:  'badge-danger',
-  pending:  'badge-warning',
+  offline: 'badge-danger',
+  pending: 'badge-warning',
 };
 
 export default function AgentsPage() {
@@ -88,9 +88,10 @@ export default function AgentsPage() {
   const STATUS_ORDER = { online: 0, degraded: 1, pending: 2, offline: 3 };
 
   const filtered = agents
-    .filter(a =>
-      (a.hostname || '').toLowerCase().includes(search.toLowerCase()) ||
-      (a.ip || '').includes(search)
+    .filter(
+      (a) =>
+        (a.hostname || '').toLowerCase().includes(search.toLowerCase()) ||
+        (a.ip || '').includes(search),
     )
     .sort((a, b) => {
       const statusDiff = (STATUS_ORDER[a.status] ?? 4) - (STATUS_ORDER[b.status] ?? 4);
@@ -101,14 +102,19 @@ export default function AgentsPage() {
     });
 
   function toggleSort(col) {
-    setSort(prev => ({ col, dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc' }));
+    setSort((prev) => ({ col, dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc' }));
   }
   function sortIndicator(col) {
     if (sort.col !== col) return '';
     return sort.dir === 'asc' ? ' ↑' : ' ↓';
   }
 
-  if (loading) return <div className="loading-center"><div className="spinner" /></div>;
+  if (loading)
+    return (
+      <div className="loading-center">
+        <div className="spinner" />
+      </div>
+    );
 
   return (
     <div className="fade-in">
@@ -123,7 +129,7 @@ export default function AgentsPage() {
             type="search"
             placeholder="Search by hostname or IP…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
           />
           <button className="btn btn-secondary" onClick={handleClearOffline}>
             Clear Offline
@@ -141,9 +147,15 @@ export default function AgentsPage() {
           <thead>
             <tr>
               <th>Agent ID</th>
-              <th className="sortable" onClick={() => toggleSort('hostname')}>Hostname{sortIndicator('hostname')}</th>
-              <th className="sortable" onClick={() => toggleSort('ip')}>IP{sortIndicator('ip')}</th>
-              <th className="sortable" onClick={() => toggleSort('status')}>Status{sortIndicator('status')}</th>
+              <th className="sortable" onClick={() => toggleSort('hostname')}>
+                Hostname{sortIndicator('hostname')}
+              </th>
+              <th className="sortable" onClick={() => toggleSort('ip')}>
+                IP{sortIndicator('ip')}
+              </th>
+              <th className="sortable" onClick={() => toggleSort('status')}>
+                Status{sortIndicator('status')}
+              </th>
               <th>Last Seen</th>
               <th>Pending Uploads</th>
               <th></th>
@@ -152,20 +164,36 @@ export default function AgentsPage() {
           <tbody>
             {agents.length === 0 && !search ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-text-faint)' }}>
+                <td
+                  colSpan="7"
+                  style={{
+                    textAlign: 'center',
+                    padding: '2.5rem',
+                    color: 'var(--color-text-faint)',
+                  }}
+                >
                   No agents. Click <strong>Deploy Agent</strong> to provision one.
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-text-faint)' }}>
+                <td
+                  colSpan="7"
+                  style={{
+                    textAlign: 'center',
+                    padding: '2.5rem',
+                    color: 'var(--color-text-faint)',
+                  }}
+                >
                   No agents match "{search}"
                 </td>
               </tr>
             ) : (
-              filtered.map(agent => (
+              filtered.map((agent) => (
                 <tr key={agent.agent_id}>
-                  <td><code className="font-mono text-xs">{agent.agent_id?.slice(0, 16)}…</code></td>
+                  <td>
+                    <code className="font-mono text-xs">{agent.agent_id?.slice(0, 16)}…</code>
+                  </td>
                   <td>{agent.hostname}</td>
                   <td className="font-mono text-sm">{agent.ip || '—'}</td>
                   <td>
@@ -198,10 +226,12 @@ export default function AgentsPage() {
 
       {modal === 'form' && (
         <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title">Deploy Agent</div>
-              <button className="modal-close" onClick={closeModal}>×</button>
+              <button className="modal-close" onClick={closeModal}>
+                ×
+              </button>
             </div>
             <form onSubmit={handleDeploy}>
               <div className="form-group">
@@ -211,14 +241,20 @@ export default function AgentsPage() {
                   type="text"
                   placeholder="e.g. NYC datacenter"
                   value={label}
-                  onChange={e => setLabel(e.target.value)}
+                  onChange={(e) => setLabel(e.target.value)}
                   autoFocus
                 />
                 <div className="form-hint">Used to identify this agent in the list.</div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={deploying || !label.trim()}>
+                <button type="button" className="btn btn-secondary" onClick={closeModal}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={deploying || !label.trim()}
+                >
                   {deploying ? 'Creating…' : 'Generate Install Command'}
                 </button>
               </div>
@@ -229,31 +265,37 @@ export default function AgentsPage() {
 
       {modal === 'command' && deployResult && (
         <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 600 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title">Install Command</div>
-              <button className="modal-close" onClick={closeModal}>×</button>
+              <button className="modal-close" onClick={closeModal}>
+                ×
+              </button>
             </div>
             <div style={{ padding: '0 1.5rem 1rem' }}>
               <p className="text-sm text-muted" style={{ marginBottom: 12 }}>
                 Run this command on the target machine. The token expires in 24 hours.
               </p>
-              <pre style={{
-                background: 'var(--color-bg)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 6,
-                padding: '12px 14px',
-                fontSize: 12,
-                fontFamily: "'IBM Plex Mono', monospace",
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-                color: 'var(--color-text)',
-              }}>
+              <pre
+                style={{
+                  background: 'var(--color-bg)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  padding: '12px 14px',
+                  fontSize: 12,
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  color: 'var(--color-text)',
+                }}
+              >
                 {deployResult.install_command}
               </pre>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={closeModal}>Close</button>
+              <button className="btn btn-secondary" onClick={closeModal}>
+                Close
+              </button>
               <button className="btn btn-primary" onClick={handleCopy}>
                 {copied ? 'Copied!' : 'Copy Command'}
               </button>

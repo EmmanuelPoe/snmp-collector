@@ -1,13 +1,12 @@
 from datetime import datetime
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-
 from auth import require_role
 from database import get_db
+from fastapi import APIRouter, Depends, Query
 from models import AuditLog, User
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -61,6 +60,5 @@ def list_audit_entries(
     if end:
         q = q.filter(AuditLog.created_at <= end)
     total = q.count()
-    items = (q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
-             .offset(offset).limit(limit).all())
+    items = q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).offset(offset).limit(limit).all()
     return {"total": total, "items": items}

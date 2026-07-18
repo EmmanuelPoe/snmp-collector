@@ -1,5 +1,6 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
 
 
 def _seed(conn, rows):
@@ -13,16 +14,20 @@ def _seed(conn, rows):
 
 def test_rates_basic_delta(client, auth_headers):
     from db import get_db
+
     t2 = datetime.now(timezone.utc)
     t1 = t2 - timedelta(seconds=60)
-    _seed(get_db(), [
-        ("ag1", "10.0.0.1", "Gi0/1", "ifInOctets",    ".1", "1000000",     t1),
-        ("ag1", "10.0.0.1", "Gi0/1", "ifInOctets",    ".1", "7000000",     t2),
-        ("ag1", "10.0.0.1", "Gi0/1", "ifOutOctets",   ".2", "500000",      t1),
-        ("ag1", "10.0.0.1", "Gi0/1", "ifOutOctets",   ".2", "2000000",     t2),
-        ("ag1", "10.0.0.1", "Gi0/1", "ifOperStatus",  ".3", "1",           t2),
-        ("ag1", "10.0.0.1", "Gi0/1", "ifSpeed",       ".4", "1000000000",  t2),
-    ])
+    _seed(
+        get_db(),
+        [
+            ("ag1", "10.0.0.1", "Gi0/1", "ifInOctets", ".1", "1000000", t1),
+            ("ag1", "10.0.0.1", "Gi0/1", "ifInOctets", ".1", "7000000", t2),
+            ("ag1", "10.0.0.1", "Gi0/1", "ifOutOctets", ".2", "500000", t1),
+            ("ag1", "10.0.0.1", "Gi0/1", "ifOutOctets", ".2", "2000000", t2),
+            ("ag1", "10.0.0.1", "Gi0/1", "ifOperStatus", ".3", "1", t2),
+            ("ag1", "10.0.0.1", "Gi0/1", "ifSpeed", ".4", "1000000000", t2),
+        ],
+    )
 
     resp = client.get("/internal/metrics/rates?device_ip=10.0.0.1", headers=auth_headers)
     assert resp.status_code == 200
@@ -39,12 +44,16 @@ def test_rates_basic_delta(client, auth_headers):
 
 def test_rates_counter_wrap_returns_zero(client, auth_headers):
     from db import get_db
+
     t2 = datetime.now(timezone.utc)
     t1 = t2 - timedelta(seconds=60)
-    _seed(get_db(), [
-        ("ag1", "10.0.0.2", "Gi0/1", "ifInOctets", ".1", "4294967295", t1),
-        ("ag1", "10.0.0.2", "Gi0/1", "ifInOctets", ".1", "1000",       t2),
-    ])
+    _seed(
+        get_db(),
+        [
+            ("ag1", "10.0.0.2", "Gi0/1", "ifInOctets", ".1", "4294967295", t1),
+            ("ag1", "10.0.0.2", "Gi0/1", "ifInOctets", ".1", "1000", t2),
+        ],
+    )
     resp = client.get("/internal/metrics/rates?device_ip=10.0.0.2", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["interfaces"]["Gi0/1"]["current_in_bps"] == 0.0
@@ -52,11 +61,15 @@ def test_rates_counter_wrap_returns_zero(client, auth_headers):
 
 def test_rates_ifhighspeed_preferred_over_ifspeed(client, auth_headers):
     from db import get_db
+
     t2 = datetime.now(timezone.utc)
-    _seed(get_db(), [
-        ("ag1", "10.0.0.3", "Gi0/1", "ifHighSpeed", ".1", "1000", t2),
-        ("ag1", "10.0.0.3", "Gi0/1", "ifSpeed",     ".2", "10000000", t2),
-    ])
+    _seed(
+        get_db(),
+        [
+            ("ag1", "10.0.0.3", "Gi0/1", "ifHighSpeed", ".1", "1000", t2),
+            ("ag1", "10.0.0.3", "Gi0/1", "ifSpeed", ".2", "10000000", t2),
+        ],
+    )
     resp = client.get("/internal/metrics/rates?device_ip=10.0.0.3", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["interfaces"]["Gi0/1"]["speed_bps"] == 1_000_000_000

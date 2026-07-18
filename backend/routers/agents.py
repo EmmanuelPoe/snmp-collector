@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
 import httpx
-
 from auth import get_current_user
 from config import settings
+from fastapi import APIRouter, Depends, HTTPException
 from models import User, UserRole
 
 router = APIRouter(prefix="/agents", tags=["agents"])

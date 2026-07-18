@@ -1,10 +1,9 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
-
 from auth import require_manager_key
 from database import get_db
+from fastapi import APIRouter, Depends
 from models import CollectionConfig, Device
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -15,12 +14,18 @@ def get_devices_for_agent(
     db: Session = Depends(get_db),
     _: bool = Depends(require_manager_key),
 ):
-    devices = db.query(Device).filter(
-        or_(Device.assigned_agent_id == agent_id, Device.assigned_agent_id == None),
-        Device.enabled == True,
-    ).all()
-    oids = [{"oid": c.oid, "oid_name": c.oid_name}
-            for c in db.query(CollectionConfig).filter(CollectionConfig.enabled == True).all()]
+    devices = (
+        db.query(Device)
+        .filter(
+            or_(Device.assigned_agent_id == agent_id, Device.assigned_agent_id == None),
+            Device.enabled == True,
+        )
+        .all()
+    )
+    oids = [
+        {"oid": c.oid, "oid_name": c.oid_name}
+        for c in db.query(CollectionConfig).filter(CollectionConfig.enabled == True).all()
+    ]
     return [_to_device_config(d, oids) for d in devices]
 
 

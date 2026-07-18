@@ -17,7 +17,9 @@ export default function AuditPage() {
     setLoading(true);
     try {
       const params = { limit: PAGE_SIZE, offset: page * PAGE_SIZE };
-      Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v) params[k] = v;
+      });
       const data = await getAuditLog(params);
       setEntries(data.items);
       setTotal(data.total);
@@ -28,11 +30,13 @@ export default function AuditPage() {
     }
   }, [page, filters, showToast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const setFilter = (key) => (e) => {
     setPage(0);
-    setFilters(f => ({ ...f, [key]: e.target.value }));
+    setFilters((f) => ({ ...f, [key]: e.target.value }));
   };
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -89,16 +93,31 @@ export default function AuditPage() {
             </thead>
             <tbody>
               {entries.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', opacity: 0.7 }}>No audit entries match</td></tr>
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', opacity: 0.7 }}>
+                    No audit entries match
+                  </td>
+                </tr>
               )}
-              {entries.map(e => (
+              {entries.map((e) => (
                 <tr key={e.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}>{e.created_at ? new Date(e.created_at).toLocaleString() : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {e.created_at ? new Date(e.created_at).toLocaleString() : '—'}
+                  </td>
                   <td>{e.actor_email || '—'}</td>
-                  <td><code>{e.action}</code></td>
+                  <td>
+                    <code>{e.action}</code>
+                  </td>
                   <td>{e.target_type ? `${e.target_type} #${e.target_id}` : '—'}</td>
-                  <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                      title={e.summary ? JSON.stringify(e.summary) : undefined}>
+                  <td
+                    style={{
+                      maxWidth: 320,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={e.summary ? JSON.stringify(e.summary) : undefined}
+                  >
                     {e.summary ? JSON.stringify(e.summary) : '—'}
                   </td>
                   <td>{e.source_ip || '—'}</td>
@@ -106,14 +125,31 @@ export default function AuditPage() {
               ))}
             </tbody>
           </table>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: 12,
+            }}
+          >
             <span style={{ opacity: 0.7 }}>{total} entries</span>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button className="btn btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+              <button
+                className="btn btn-secondary"
+                disabled={page === 0}
+                onClick={() => setPage((p) => p - 1)}
+              >
                 ‹ Prev
               </button>
-              <span>Page {page + 1} of {pageCount}</span>
-              <button className="btn btn-secondary" disabled={page + 1 >= pageCount} onClick={() => setPage(p => p + 1)}>
+              <span>
+                Page {page + 1} of {pageCount}
+              </span>
+              <button
+                className="btn btn-secondary"
+                disabled={page + 1 >= pageCount}
+                onClick={() => setPage((p) => p + 1)}
+              >
                 Next ›
               </button>
             </div>

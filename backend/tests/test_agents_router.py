@@ -21,11 +21,21 @@ def viewer_headers(client, db_session):
 
 def test_agents_returns_manager_response(client, admin_headers, respx_mock):
     import httpx
+
     respx_mock.get("http://manager:8000/internal/agents").mock(
-        return_value=httpx.Response(200, json=[
-            {"agent_id": "ag-01", "hostname": "nyc-01", "ip": "10.0.0.1",
-             "status": "online", "last_seen": "2026-05-03T00:00:00+00:00", "pending_uploads": 0}
-        ])
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "agent_id": "ag-01",
+                    "hostname": "nyc-01",
+                    "ip": "10.0.0.1",
+                    "status": "online",
+                    "last_seen": "2026-05-03T00:00:00+00:00",
+                    "pending_uploads": 0,
+                }
+            ],
+        )
     )
     resp = client.get("/agents", headers=admin_headers)
     assert resp.status_code == 200
@@ -36,23 +46,26 @@ def test_agents_returns_manager_response(client, admin_headers, respx_mock):
 
 def test_agents_returns_503_when_manager_down(client, admin_headers, respx_mock):
     import httpx
-    respx_mock.get("http://manager:8000/internal/agents").mock(
-        side_effect=httpx.ConnectError("refused")
-    )
+
+    respx_mock.get("http://manager:8000/internal/agents").mock(side_effect=httpx.ConnectError("refused"))
     resp = client.get("/agents", headers=admin_headers)
     assert resp.status_code == 503
 
 
 def test_create_slot_proxies_to_manager(client, admin_headers, respx_mock):
     import httpx
+
     respx_mock.post("http://manager:8000/slots").mock(
-        return_value=httpx.Response(200, json={
-            "slot_id": "abc-123",
-            "label": "NYC agent",
-            "token": "a" * 32,
-            "expires_at": "2026-05-20T12:00:00+00:00",
-            "install_command": "docker run ...",
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "slot_id": "abc-123",
+                "label": "NYC agent",
+                "token": "a" * 32,
+                "expires_at": "2026-05-20T12:00:00+00:00",
+                "install_command": "docker run ...",
+            },
+        )
     )
     resp = client.post("/agents/slots", json={"label": "NYC agent"}, headers=admin_headers)
     assert resp.status_code == 200
@@ -66,15 +79,15 @@ def test_create_slot_viewer_forbidden(client, viewer_headers):
 
 def test_delete_slot_proxies_to_manager(client, admin_headers, respx_mock):
     import httpx
-    respx_mock.delete("http://manager:8000/slots/abc-123").mock(
-        return_value=httpx.Response(204)
-    )
+
+    respx_mock.delete("http://manager:8000/slots/abc-123").mock(return_value=httpx.Response(204))
     resp = client.delete("/agents/slots/abc-123", headers=admin_headers)
     assert resp.status_code == 204
 
 
 def test_create_slot_manager_down_returns_503(client, admin_headers, respx_mock):
     import httpx
+
     respx_mock.post("http://manager:8000/slots").mock(side_effect=httpx.RequestError("down"))
     resp = client.post("/agents/slots", json={"label": "test"}, headers=admin_headers)
     assert resp.status_code == 503
@@ -82,6 +95,7 @@ def test_create_slot_manager_down_returns_503(client, admin_headers, respx_mock)
 
 def test_delete_slot_manager_down_returns_503(client, admin_headers, respx_mock):
     import httpx
+
     respx_mock.delete("http://manager:8000/slots/abc").mock(side_effect=httpx.RequestError("down"))
     resp = client.delete("/agents/slots/abc", headers=admin_headers)
     assert resp.status_code == 503

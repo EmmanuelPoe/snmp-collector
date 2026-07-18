@@ -10,14 +10,14 @@ export function ToastProvider({ children }) {
 
   const showToast = useCallback((message, type = 'info') => {
     const id = ++idCounter;
-    setToasts(prev => [...prev.slice(-3), { id, message, type }]);
+    setToasts((prev) => [...prev.slice(-3), { id, message, type }]);
     setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
+      setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4000);
   }, []);
 
   const dismiss = useCallback((id) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   return (

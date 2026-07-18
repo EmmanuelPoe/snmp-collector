@@ -25,7 +25,9 @@ export default function LoginPage() {
       });
       if (!resp.ok) {
         if (resp.status === 423) {
-          setError('Account temporarily locked after too many failed sign-in attempts. Try again in a few minutes.');
+          setError(
+            'Account temporarily locked after too many failed sign-in attempts. Try again in a few minutes.',
+          );
         } else if (resp.status === 429) {
           setError('Too many sign-in attempts. Please wait a moment and try again.');
         } else {
@@ -74,7 +76,7 @@ export default function LoginPage() {
                 className="input"
                 type="email"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="admin@localhost"
                 autoComplete="email"
@@ -88,18 +90,14 @@ export default function LoginPage() {
                 className="input"
                 type="password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="••••••••"
                 autoComplete="current-password"
               />
             </div>
 
-            <button
-              type="submit"
-              className="btn btn-primary login-submit"
-              disabled={loading}
-            >
+            <button type="submit" className="btn btn-primary login-submit" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>

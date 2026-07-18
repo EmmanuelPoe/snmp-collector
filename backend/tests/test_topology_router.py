@@ -1,4 +1,5 @@
 """Tests for the Step 13 topology router: graph read + LLDP discovery."""
+
 from models import Alert, AlertStatus, AlertType, Device, TopologyEdge
 
 
@@ -19,13 +20,14 @@ def test_graph_reports_nodes_edges_and_status(client, db_session, admin_headers)
     d2 = Device(name="sw2", ip_address="10.0.0.2", enabled=True)
     db_session.add_all([d1, d2])
     db_session.commit()
-    db_session.add(TopologyEdge(local_device_id=d1.id, remote_device_id=d2.id,
-                                local_port="Gi0/0", remote_port_desc="Gi0/1"))
-    db_session.add(TopologyEdge(local_device_id=d1.id, remote_sysname="external-router",
-                                remote_chassis_id="aa:bb:cc"))
+    db_session.add(
+        TopologyEdge(local_device_id=d1.id, remote_device_id=d2.id, local_port="Gi0/0", remote_port_desc="Gi0/1")
+    )
+    db_session.add(TopologyEdge(local_device_id=d1.id, remote_sysname="external-router", remote_chassis_id="aa:bb:cc"))
     # d2 has an open unreachable alert -> should render as "down"
-    db_session.add(Alert(alert_type=AlertType.device_unreachable, message="x",
-                         device_id=d2.id, status=AlertStatus.open))
+    db_session.add(
+        Alert(alert_type=AlertType.device_unreachable, message="x", device_id=d2.id, status=AlertStatus.open)
+    )
     db_session.commit()
 
     r = client.get("/topology/graph", headers=admin_headers)
@@ -46,6 +48,7 @@ def test_graph_reports_nodes_edges_and_status(client, db_session, admin_headers)
 
 def test_discover_walks_lldp_and_resolves_neighbours(client, db_session, admin_headers, monkeypatch):
     import routers.topology as topology
+
     d1 = Device(name="sw1", ip_address="10.0.0.1", enabled=True)
     d2 = Device(name="sw2", ip_address="10.0.0.2", enabled=True)
     db_session.add_all([d1, d2])
@@ -63,10 +66,18 @@ def test_discover_walks_lldp_and_resolves_neighbours(client, db_session, admin_h
         if cid == f"cmd{d1.id}":
             # sw1 sees sw2 (resolvable) and an unknown neighbour
             result = [
-                {"remote_sysname": "sw2", "remote_port_id": "Gi0/1",
-                 "remote_chassis_id": "de:ad", "local_port_desc": "Gi0/0"},
-                {"remote_sysname": "unknown-host", "remote_port_id": "Gi9",
-                 "remote_chassis_id": "be:ef", "local_port_desc": "Gi0/9"},
+                {
+                    "remote_sysname": "sw2",
+                    "remote_port_id": "Gi0/1",
+                    "remote_chassis_id": "de:ad",
+                    "local_port_desc": "Gi0/0",
+                },
+                {
+                    "remote_sysname": "unknown-host",
+                    "remote_port_id": "Gi9",
+                    "remote_chassis_id": "be:ef",
+                    "local_port_desc": "Gi0/9",
+                },
             ]
         else:
             result = []

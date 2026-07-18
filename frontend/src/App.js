@@ -26,18 +26,102 @@ function AppShell() {
       <div className="app-main">
         <div className="page-content">
           <Routes>
-            <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-            <Route path="/devices" element={<PrivateRoute><DeviceManagement /></PrivateRoute>} />
-            <Route path="/metrics" element={<PrivateRoute><DeviceMetrics /></PrivateRoute>} />
-            <Route path="/agents" element={<PrivateRoute><AgentsPage /></PrivateRoute>} />
-            <Route path="/traps" element={<PrivateRoute><TrapsPage /></PrivateRoute>} />
-            <Route path="/config" element={<PrivateRoute><ConfigurationManager /></PrivateRoute>} />
-            <Route path="/notifications" element={<PrivateRoute><NotificationSettings /></PrivateRoute>} />
-            <Route path="/maintenance" element={<PrivateRoute><MaintenanceWindows /></PrivateRoute>} />
-            <Route path="/mib-browser" element={<PrivateRoute><MibBrowser /></PrivateRoute>} />
-            <Route path="/topology" element={<PrivateRoute><TopologyMap /></PrivateRoute>} />
-            <Route path="/users" element={<PrivateRoute><UserManagementPage /></PrivateRoute>} />
-            <Route path="/audit" element={<PrivateRoute><AuditPage /></PrivateRoute>} />
+            <Route
+              path="/"
+              element={
+                <PrivateRoute>
+                  <Dashboard />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/devices"
+              element={
+                <PrivateRoute>
+                  <DeviceManagement />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/metrics"
+              element={
+                <PrivateRoute>
+                  <DeviceMetrics />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/agents"
+              element={
+                <PrivateRoute>
+                  <AgentsPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/traps"
+              element={
+                <PrivateRoute>
+                  <TrapsPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/config"
+              element={
+                <PrivateRoute>
+                  <ConfigurationManager />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <PrivateRoute>
+                  <NotificationSettings />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/maintenance"
+              element={
+                <PrivateRoute>
+                  <MaintenanceWindows />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/mib-browser"
+              element={
+                <PrivateRoute>
+                  <MibBrowser />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/topology"
+              element={
+                <PrivateRoute>
+                  <TopologyMap />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <PrivateRoute>
+                  <UserManagementPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/audit"
+              element={
+                <PrivateRoute>
+                  <AuditPage />
+                </PrivateRoute>
+              }
+            />
           </Routes>
         </div>
       </div>

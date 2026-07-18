@@ -2,16 +2,21 @@ from models import CollectionConfig, Device
 
 
 def test_internal_devices_includes_enabled_oids(client, db_session):
-    db_session.add(Device(name="sw", ip_address="10.1.1.9", snmp_version="2c",
-                          snmp_community="public", assigned_agent_id="agent-abc", enabled=True))
-    db_session.add(CollectionConfig(oid="1.3.6.1.2.1.2.2.1.14", oid_name="ifInErrors",
-                                    enabled=True, required=True))
-    db_session.add(CollectionConfig(oid="1.3.6.1.2.1.2.2.1.99", oid_name="ifDisabled",
-                                    enabled=False, required=False))
+    db_session.add(
+        Device(
+            name="sw",
+            ip_address="10.1.1.9",
+            snmp_version="2c",
+            snmp_community="public",
+            assigned_agent_id="agent-abc",
+            enabled=True,
+        )
+    )
+    db_session.add(CollectionConfig(oid="1.3.6.1.2.1.2.2.1.14", oid_name="ifInErrors", enabled=True, required=True))
+    db_session.add(CollectionConfig(oid="1.3.6.1.2.1.2.2.1.99", oid_name="ifDisabled", enabled=False, required=False))
     db_session.commit()
 
-    resp = client.get("/internal/devices?agent_id=agent-abc",
-                      headers={"Authorization": "Bearer test-manager-api-key"})
+    resp = client.get("/internal/devices?agent_id=agent-abc", headers={"Authorization": "Bearer test-manager-api-key"})
     assert resp.status_code == 200
     oids = resp.json()[0]["oids"]
     names = {o["oid_name"] for o in oids}
@@ -122,6 +127,7 @@ def test_get_devices_requires_manager_key(client):
 
 def test_get_devices_rejects_wrong_key(client, monkeypatch):
     import config
+
     monkeypatch.setattr(config.settings, "manager_api_key", "real-test-key-123456")
     resp = client.get(
         "/internal/devices?agent_id=agent-1",
@@ -132,6 +138,7 @@ def test_get_devices_rejects_wrong_key(client, monkeypatch):
 
 def test_get_devices_accepts_correct_key(client, monkeypatch):
     import config
+
     monkeypatch.setattr(config.settings, "manager_api_key", "real-test-key-123456")
     resp = client.get(
         "/internal/devices?agent_id=agent-1",

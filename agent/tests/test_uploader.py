@@ -1,9 +1,11 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 
 
 def make_row(agent_id="ag-01", device_ip="10.0.0.1", iface="eth0", oid_name="ifInOctets"):
@@ -28,9 +30,11 @@ async def test_flush_when_max_rows_reached(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_ID_PATH", str(tmp_path / "agent_id"))
 
     import config
+
     config.settings = config.Settings()
 
     from uploader import UploadBuffer
+
     buf = UploadBuffer(agent_id="ag-01")
 
     upload_called = []
@@ -57,9 +61,11 @@ async def test_flush_when_max_age_reached(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_ID_PATH", str(tmp_path / "agent_id"))
 
     import config
+
     config.settings = config.Settings()
 
     from uploader import UploadBuffer
+
     buf = UploadBuffer(agent_id="ag-01")
 
     upload_called = []
@@ -83,6 +89,7 @@ async def test_retry_queue_files_uploaded(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_ID_PATH", str(tmp_path / "agent_id"))
 
     import config
+
     config.settings = config.Settings()
 
     queue_dir = tmp_path / "queue"
@@ -90,19 +97,23 @@ async def test_retry_queue_files_uploaded(tmp_path, monkeypatch):
 
     import pyarrow as pa
     import pyarrow.parquet as pq
-    rows = pa.table({
-        "agent_id":       pa.array(["ag-01"]),
-        "device_ip":      pa.array(["10.0.0.1"]),
-        "interface_name": pa.array(["eth0"]),
-        "oid_name":       pa.array(["ifInOctets"]),
-        "oid":            pa.array(["1.3.6.1.2.1.2.2.1.10.1"]),
-        "value":          pa.array(["12345"]),
-        "collected_at":   pa.array([datetime.now(timezone.utc)], type=pa.timestamp("us", tz="UTC")),
-    })
+
+    rows = pa.table(
+        {
+            "agent_id": pa.array(["ag-01"]),
+            "device_ip": pa.array(["10.0.0.1"]),
+            "interface_name": pa.array(["eth0"]),
+            "oid_name": pa.array(["ifInOctets"]),
+            "oid": pa.array(["1.3.6.1.2.1.2.2.1.10.1"]),
+            "value": pa.array(["12345"]),
+            "collected_at": pa.array([datetime.now(timezone.utc)], type=pa.timestamp("us", tz="UTC")),
+        }
+    )
     file_id = "test-file_polls"
     pq.write_table(rows, queue_dir / f"{file_id}.parquet")
 
     from uploader import UploadBuffer
+
     buf = UploadBuffer(agent_id="ag-01")
 
     upload_called = []

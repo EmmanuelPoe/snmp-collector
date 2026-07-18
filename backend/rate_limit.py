@@ -6,12 +6,12 @@ brute-force brake, not an exact quota — the persistent per-account lockout in
 routers/auth.py is the authoritative control and is enforced in the database
 regardless of worker count.
 """
+
 import hashlib
 
+from config import settings
 from fastapi import Request
 from slowapi import Limiter
-
-from config import settings
 
 
 def client_ip(request: Request) -> str:

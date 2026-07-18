@@ -6,6 +6,7 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
 import config
 
 
@@ -62,9 +63,7 @@ class AgentInfo:
         if d.get("last_seen"):
             agent.last_seen = datetime.fromisoformat(d["last_seen"])
         agent.pending_uploads = d.get("pending_uploads", 0)
-        agent.registered_at = datetime.fromisoformat(
-            d.get("registered_at", datetime.now(timezone.utc).isoformat())
-        )
+        agent.registered_at = datetime.fromisoformat(d.get("registered_at", datetime.now(timezone.utc).isoformat()))
         return agent
 
 

@@ -1,6 +1,7 @@
 import hashlib
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 def _sha256(path: Path) -> str:
@@ -22,6 +23,7 @@ def test_ingest_polls_success(client, auth_headers, sample_polls_parquet):
     assert resp.status_code == 200
     assert resp.json()["rows_ingested"] == 5
 
+
 def test_ingest_traps_success(client, auth_headers, sample_traps_parquet):
     sha = _sha256(sample_traps_parquet)
     with open(sample_traps_parquet, "rb") as f:
@@ -33,6 +35,7 @@ def test_ingest_traps_success(client, auth_headers, sample_traps_parquet):
     assert resp.status_code == 200
     assert resp.json()["rows_ingested"] == 3
 
+
 def test_ingest_wrong_checksum_returns_400(client, auth_headers, sample_polls_parquet):
     with open(sample_polls_parquet, "rb") as f:
         resp = client.post(
@@ -41,6 +44,7 @@ def test_ingest_wrong_checksum_returns_400(client, auth_headers, sample_polls_pa
             files={"file": ("polls.parquet", f, "application/octet-stream")},
         )
     assert resp.status_code == 400
+
 
 @pytest.mark.asyncio
 async def test_ingest_duplicate_is_idempotent(client, auth_headers, sample_polls_parquet):
@@ -55,8 +59,10 @@ async def test_ingest_duplicate_is_idempotent(client, auth_headers, sample_polls
         assert resp.status_code == 200
     # Only 5 rows total, not 10
     from db import query
+
     count = (await query("SELECT COUNT(*) FROM snmp_polls"))[0][0]
     assert count == 5
+
 
 def test_ingest_invalid_file_id_format_returns_400(client, auth_headers, sample_polls_parquet):
     sha = _sha256(sample_polls_parquet)
@@ -67,6 +73,7 @@ def test_ingest_invalid_file_id_format_returns_400(client, auth_headers, sample_
             files={"file": ("polls.parquet", f, "application/octet-stream")},
         )
     assert resp.status_code == 400
+
 
 def test_ingest_no_auth_returns_403(client, sample_polls_parquet):
     sha = _sha256(sample_polls_parquet)

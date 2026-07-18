@@ -4,14 +4,14 @@ record() queues an AuditLog row in the caller's session so it commits
 atomically with the change being audited. Every mutating router calls it;
 GET endpoints are not audited (exports will be, in plan Step 40).
 """
+
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Request
-from sqlalchemy.orm import Session
-
 from models import AuditLog, User
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,13 @@ logger = logging.getLogger(__name__)
 # still shows up, so "a credential was changed" stays visible without leaking
 # the value. "url" covers notification webhook URLs, which embed secrets.
 REDACTED_FIELDS = {
-    "snmp_community", "auth_password", "priv_password",
-    "password", "current_password", "new_password", "hashed_password",
+    "snmp_community",
+    "auth_password",
+    "priv_password",
+    "password",
+    "current_password",
+    "new_password",
+    "hashed_password",
     "url",
 }
 REDACTED = "[REDACTED]"
@@ -51,15 +56,17 @@ def record(
     """Add an audit row to the caller's transaction; the caller's commit
     persists it. actor=None with actor_email set records an unauthenticated
     attempt (e.g. failed login)."""
-    db.add(AuditLog(
-        actor_user_id=actor.id if actor else None,
-        actor_email=actor.email if actor else actor_email,
-        action=action,
-        target_type=target_type,
-        target_id=str(target_id) if target_id is not None else None,
-        summary=summary,
-        source_ip=_source_ip(request),
-    ))
+    db.add(
+        AuditLog(
+            actor_user_id=actor.id if actor else None,
+            actor_email=actor.email if actor else actor_email,
+            action=action,
+            target_type=target_type,
+            target_id=str(target_id) if target_id is not None else None,
+            summary=summary,
+            source_ip=_source_ip(request),
+        )
+    )
 
 
 def prune_old_entries(db: Session, retention_days: int) -> int:

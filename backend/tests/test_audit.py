@@ -1,5 +1,7 @@
-import sys, os
+import os
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("POSTGRES_USER", "test")
 os.environ.setdefault("POSTGRES_PASSWORD", "test")
@@ -8,18 +10,19 @@ os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
 import config
+import pytest
+
 config.settings.database_url = "sqlite:///:memory:"
 config.settings.jwt_secret = "test-secret-for-unit-tests"
 
+from audit import REDACTED, prune_old_entries
+from auth import hash_password
+from database import Base, get_db
+from fastapi.testclient import TestClient
+from models import Alert, AlertStatus, AlertType, AuditLog, User, UserRole
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from fastapi.testclient import TestClient
-from database import Base, get_db
-from auth import hash_password
-from models import Alert, AlertStatus, AlertType, AuditLog, Device, User, UserRole
-from audit import REDACTED, prune_old_entries
 
 
 @pytest.fixture(scope="function")
@@ -28,10 +31,20 @@ def session(tmp_path):
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
     session = Session()
-    admin = User(email="admin@test.com", hashed_password=hash_password("pw"),
-                 role=UserRole.admin, is_active=True, force_password_change=False)
-    viewer = User(email="viewer@test.com", hashed_password=hash_password("pw"),
-                  role=UserRole.viewer, is_active=True, force_password_change=False)
+    admin = User(
+        email="admin@test.com",
+        hashed_password=hash_password("pw"),
+        role=UserRole.admin,
+        is_active=True,
+        force_password_change=False,
+    )
+    viewer = User(
+        email="viewer@test.com",
+        hashed_password=hash_password("pw"),
+        role=UserRole.viewer,
+        is_active=True,
+        force_password_change=False,
+    )
     session.add_all([admin, viewer])
     session.commit()
     yield session
@@ -43,6 +56,7 @@ def client(session, monkeypatch):
     monkeypatch.setattr(config.settings, "jwt_secret", "test-secret-for-unit-tests")
     monkeypatch.setattr(config.settings, "manager_api_key", "mgr-test-key-1234567")
     from main import app
+
     app.dependency_overrides[get_db] = lambda: session
     with TestClient(app) as c:
         yield c
@@ -67,6 +81,7 @@ def _entries(session, action):
 
 # ---- auth events ----
 
+
 def test_login_success_recorded(client, session, auth):
     rows = _entries(session, "auth.login")
     assert len(rows) == 1
@@ -76,9 +91,9 @@ def test_login_success_recorded(client, session, auth):
 
 
 def test_login_failure_recorded_with_null_actor_and_source_ip(client, session):
-    resp = client.post("/auth/login",
-                       data={"username": "nobody@test.com", "password": "wrong"},
-                       headers={"X-Real-IP": "203.0.113.9"})
+    resp = client.post(
+        "/auth/login", data={"username": "nobody@test.com", "password": "wrong"}, headers={"X-Real-IP": "203.0.113.9"}
+    )
     assert resp.status_code == 401
     rows = _entries(session, "auth.login_failed")
     assert len(rows) == 1
@@ -102,9 +117,9 @@ def test_logout_recorded(client, session, auth):
 
 
 def test_change_password_recorded(client, session, auth):
-    resp = client.post("/auth/change-password",
-                       json={"current_password": "pw", "new_password": "newpassword1"},
-                       headers=auth)
+    resp = client.post(
+        "/auth/change-password", json={"current_password": "pw", "new_password": "newpassword1"}, headers=auth
+    )
     assert resp.status_code == 200
     rows = _entries(session, "auth.password_changed")
     assert len(rows) == 1
@@ -113,9 +128,9 @@ def test_change_password_recorded(client, session, auth):
 
 
 def test_register_user_recorded(client, session, auth):
-    resp = client.post("/auth/register",
-                       json={"email": "new@test.com", "password": "password1", "role": "viewer"},
-                       headers=auth)
+    resp = client.post(
+        "/auth/register", json={"email": "new@test.com", "password": "password1", "role": "viewer"}, headers=auth
+    )
     assert resp.status_code == 201
     rows = _entries(session, "user.create")
     assert len(rows) == 1
@@ -126,10 +141,17 @@ def test_register_user_recorded(client, session, auth):
 
 # ---- device events + credential redaction ----
 
+
 def test_device_create_redacts_credentials(client, session, auth):
-    resp = client.post("/devices", json={
-        "name": "sw1", "ip_address": "10.0.0.1", "snmp_community": "s3cret",
-    }, headers=auth)
+    resp = client.post(
+        "/devices",
+        json={
+            "name": "sw1",
+            "ip_address": "10.0.0.1",
+            "snmp_community": "s3cret",
+        },
+        headers=auth,
+    )
     assert resp.status_code == 201
     rows = _entries(session, "device.create")
     assert len(rows) == 1
@@ -139,14 +161,17 @@ def test_device_create_redacts_credentials(client, session, auth):
 
 
 def test_device_update_summary_has_field_names_never_credential_values(client, session, auth):
-    device_id = client.post("/devices", json={"name": "sw2", "ip_address": "10.0.0.2"},
-                            headers=auth).json()["id"]
-    resp = client.put(f"/devices/{device_id}", json={
-        "description": "core switch",
-        "snmp_community": "supersecret",
-        "auth_password": "authsecret",
-        "priv_password": "privsecret",
-    }, headers=auth)
+    device_id = client.post("/devices", json={"name": "sw2", "ip_address": "10.0.0.2"}, headers=auth).json()["id"]
+    resp = client.put(
+        f"/devices/{device_id}",
+        json={
+            "description": "core switch",
+            "snmp_community": "supersecret",
+            "auth_password": "authsecret",
+            "priv_password": "privsecret",
+        },
+        headers=auth,
+    )
     assert resp.status_code == 200
     rows = _entries(session, "device.update")
     assert len(rows) == 1
@@ -161,8 +186,7 @@ def test_device_update_summary_has_field_names_never_credential_values(client, s
 
 
 def test_device_delete_recorded(client, session, auth):
-    device_id = client.post("/devices", json={"name": "sw3", "ip_address": "10.0.0.3"},
-                            headers=auth).json()["id"]
+    device_id = client.post("/devices", json={"name": "sw3", "ip_address": "10.0.0.3"}, headers=auth).json()["id"]
     assert client.delete(f"/devices/{device_id}", headers=auth).status_code == 204
     rows = _entries(session, "device.delete")
     assert len(rows) == 1
@@ -172,10 +196,16 @@ def test_device_delete_recorded(client, session, auth):
 
 # ---- config events ----
 
+
 def test_config_crud_recorded(client, session, auth):
-    config_id = client.post("/config/configs", json={
-        "oid": "1.3.6.1.2.1.1.1.0", "oid_name": "sysDescr",
-    }, headers=auth).json()["id"]
+    config_id = client.post(
+        "/config/configs",
+        json={
+            "oid": "1.3.6.1.2.1.1.1.0",
+            "oid_name": "sysDescr",
+        },
+        headers=auth,
+    ).json()["id"]
     client.put(f"/config/configs/{config_id}", json={"enabled": False}, headers=auth)
     client.delete(f"/config/configs/{config_id}", headers=auth)
     assert len(_entries(session, "config.create")) == 1
@@ -186,6 +216,7 @@ def test_config_crud_recorded(client, session, auth):
 
 
 # ---- alert events ----
+
 
 def test_alert_actions_recorded(client, session, auth):
     alert = Alert(alert_type=AlertType.device_unreachable, message="down", status=AlertStatus.open)
@@ -204,8 +235,7 @@ def test_alert_actions_recorded(client, session, auth):
 
 
 def test_alert_rule_upsert_recorded(client, session, auth):
-    device_id = client.post("/devices", json={"name": "sw4", "ip_address": "10.0.0.4"},
-                            headers=auth).json()["id"]
+    device_id = client.post("/devices", json={"name": "sw4", "ip_address": "10.0.0.4"}, headers=auth).json()["id"]
     resp = client.post(f"/alert-rules/{device_id}", json={"bandwidth_in_pct": 80}, headers=auth)
     assert resp.status_code == 200
     rows = _entries(session, "alert_rule.upsert")
@@ -215,10 +245,17 @@ def test_alert_rule_upsert_recorded(client, session, auth):
 
 # ---- notification channels (webhook URL is a secret) ----
 
+
 def test_notification_channel_create_redacts_url(client, session, auth):
-    resp = client.post("/notification-channels", json={
-        "name": "ops", "type": "slack", "url": "https://hooks.slack.com/services/T0/B0/secret",
-    }, headers=auth)
+    resp = client.post(
+        "/notification-channels",
+        json={
+            "name": "ops",
+            "type": "slack",
+            "url": "https://hooks.slack.com/services/T0/B0/secret",
+        },
+        headers=auth,
+    )
     assert resp.status_code == 201
     rows = _entries(session, "notification_channel.create")
     assert len(rows) == 1
@@ -228,12 +265,19 @@ def test_notification_channel_create_redacts_url(client, session, auth):
 
 # ---- maintenance windows ----
 
+
 def test_maintenance_window_create_and_delete_recorded(client, session, auth):
     start = datetime.now(timezone.utc)
     end = start + timedelta(hours=1)
-    window_id = client.post("/maintenance-windows", json={
-        "start_at": start.isoformat(), "end_at": end.isoformat(), "reason": "patching",
-    }, headers=auth).json()["id"]
+    window_id = client.post(
+        "/maintenance-windows",
+        json={
+            "start_at": start.isoformat(),
+            "end_at": end.isoformat(),
+            "reason": "patching",
+        },
+        headers=auth,
+    ).json()["id"]
     assert client.delete(f"/maintenance-windows/{window_id}", headers=auth).status_code == 204
     assert len(_entries(session, "maintenance_window.create")) == 1
     delete_rows = _entries(session, "maintenance_window.delete")
@@ -242,6 +286,7 @@ def test_maintenance_window_create_and_delete_recorded(client, session, auth):
 
 
 # ---- GET /audit ----
+
 
 def test_audit_endpoint_admin_only(client, viewer_auth):
     resp = client.get("/audit", headers=viewer_auth)
@@ -282,6 +327,7 @@ def test_audit_endpoint_lists_filters_and_paginates(client, session, auth):
 
 
 # ---- retention ----
+
 
 def test_prune_old_entries(session):
     old = AuditLog(action="auth.login", created_at=datetime.now(timezone.utc) - timedelta(days=500))

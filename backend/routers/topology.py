@@ -1,16 +1,16 @@
-import time
 import logging
-
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+import time
 
 import audit
+import httpx
 from auth import get_current_user, require_role
 from config import settings
 from database import get_db
-from models import Device, TopologyEdge, Alert, AlertType, AlertStatus, User
-from routers.devices import _resolve_agent_id, _manager_headers
+from fastapi import APIRouter, Depends, Request
+from models import Alert, AlertStatus, AlertType, Device, TopologyEdge, User
+from sqlalchemy.orm import Session
+
+from routers.devices import _manager_headers, _resolve_agent_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/topology", tags=["topology"])
@@ -82,7 +82,8 @@ def discover_topology(
             resp = httpx.post(
                 f"{settings.manager_url}/agents/{agent_id}/commands",
                 json={"type": "lldp", "params": {"device": _device_creds(d)}},
-                headers=_manager_headers(), timeout=10,
+                headers=_manager_headers(),
+                timeout=10,
             )
             resp.raise_for_status()
             pending[resp.json()["command_id"]] = d
@@ -95,8 +96,7 @@ def discover_topology(
         time.sleep(_POLL_INTERVAL_S)
         for cid in list(pending):
             try:
-                r = httpx.get(f"{settings.manager_url}/commands/{cid}",
-                              headers=_manager_headers(), timeout=10).json()
+                r = httpx.get(f"{settings.manager_url}/commands/{cid}", headers=_manager_headers(), timeout=10).json()
             except httpx.HTTPError:
                 continue
             if r.get("status") in ("done", "error"):
@@ -109,15 +109,17 @@ def discover_topology(
         # Full re-walk replaces this device's adjacency.
         db.query(TopologyEdge).filter(TopologyEdge.local_device_id == device_id).delete()
         for n in neighbours:
-            db.add(TopologyEdge(
-                local_device_id=device_id,
-                local_port=n.get("local_port_desc") or n.get("local_port_num"),
-                remote_chassis_id=n.get("remote_chassis_id"),
-                remote_sysname=n.get("remote_sysname"),
-                remote_port_id=n.get("remote_port_id"),
-                remote_port_desc=n.get("remote_port_desc"),
-                remote_device_id=_resolve_neighbour(n, resolver),
-            ))
+            db.add(
+                TopologyEdge(
+                    local_device_id=device_id,
+                    local_port=n.get("local_port_desc") or n.get("local_port_num"),
+                    remote_chassis_id=n.get("remote_chassis_id"),
+                    remote_sysname=n.get("remote_sysname"),
+                    remote_port_id=n.get("remote_port_id"),
+                    remote_port_desc=n.get("remote_port_desc"),
+                    remote_device_id=_resolve_neighbour(n, resolver),
+                )
+            )
             edge_count += 1
 
     result = {
@@ -141,39 +143,49 @@ def topology_graph(
     topology map. Node status is derived from open device_unreachable alerts."""
     devices = db.query(Device).all()
     down_ids = {
-        a.device_id for a in db.query(Alert).filter(
+        a.device_id
+        for a in db.query(Alert)
+        .filter(
             Alert.alert_type == AlertType.device_unreachable,
             Alert.status == AlertStatus.open,
             Alert.device_id.isnot(None),
-        ).all()
+        )
+        .all()
     }
-    nodes = [{
-        "id": d.id,
-        "name": d.name,
-        "ip": d.ip_address,
-        "type": d.device_type,
-        "tags": d.tags or [],
-        "status": "down" if d.id in down_ids else "up",
-    } for d in devices]
+    nodes = [
+        {
+            "id": d.id,
+            "name": d.name,
+            "ip": d.ip_address,
+            "type": d.device_type,
+            "tags": d.tags or [],
+            "status": "down" if d.id in down_ids else "up",
+        }
+        for d in devices
+    ]
 
     edges, unresolved = [], []
     for e in db.query(TopologyEdge).all():
         if e.remote_device_id is not None:
-            edges.append({
-                "id": e.id,
-                "source": e.local_device_id,
-                "target": e.remote_device_id,
-                "local_port": e.local_port,
-                "remote_port": e.remote_port_desc or e.remote_port_id,
-            })
+            edges.append(
+                {
+                    "id": e.id,
+                    "source": e.local_device_id,
+                    "target": e.remote_device_id,
+                    "local_port": e.local_port,
+                    "remote_port": e.remote_port_desc or e.remote_port_id,
+                }
+            )
         else:
-            unresolved.append({
-                "id": e.id,
-                "local_device_id": e.local_device_id,
-                "local_port": e.local_port,
-                "remote_sysname": e.remote_sysname,
-                "remote_chassis_id": e.remote_chassis_id,
-                "remote_port": e.remote_port_desc or e.remote_port_id,
-            })
+            unresolved.append(
+                {
+                    "id": e.id,
+                    "local_device_id": e.local_device_id,
+                    "local_port": e.local_port,
+                    "remote_sysname": e.remote_sysname,
+                    "remote_chassis_id": e.remote_chassis_id,
+                    "remote_port": e.remote_port_desc or e.remote_port_id,
+                }
+            )
 
     return {"nodes": nodes, "edges": edges, "unresolved": unresolved}

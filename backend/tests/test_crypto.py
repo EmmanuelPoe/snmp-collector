@@ -1,7 +1,6 @@
-from sqlalchemy import text
-
-from crypto import encrypt_value, decrypt_value
+from crypto import decrypt_value, encrypt_value
 from models import Device
+from sqlalchemy import text
 
 
 def test_encrypt_decrypt_roundtrip():

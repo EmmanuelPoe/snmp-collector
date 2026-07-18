@@ -4,25 +4,27 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-import httpx
-
 import config
 import credentials
+import httpx
 from models import DeviceConfig
-from snmp import walk_device, walk_oid, walk_lldp
+from snmp import walk_device, walk_lldp, walk_oid
 from trap_receiver import run_trap_listener
 from uploader import TrapBuffer, UploadBuffer
 
 
 class _JsonFormatter(logging.Formatter):
     def format(self, record):
-        return json.dumps({
-            "time": self.formatTime(record),
-            "level": record.levelname,
-            "service": "agent",
-            "logger": record.name,
-            "message": record.getMessage(),
-        })
+        return json.dumps(
+            {
+                "time": self.formatTime(record),
+                "level": record.levelname,
+                "service": "agent",
+                "logger": record.name,
+                "message": record.getMessage(),
+            }
+        )
+
 
 _handler = logging.StreamHandler()
 _handler.setFormatter(_JsonFormatter())
@@ -50,8 +52,9 @@ async def _register() -> tuple[str, str | None]:
         stored = id_file.read_text().strip()
         secret = credentials.load_secret()
         if secret is None:
-            log.warning("No stored agent secret — falling back to the shared key "
-                        "(re-enroll for a per-agent credential)")
+            log.warning(
+                "No stored agent secret — falling back to the shared key (re-enroll for a per-agent credential)"
+            )
         log.info("Reusing stored agent_id: %s", stored)
         return stored, secret
 

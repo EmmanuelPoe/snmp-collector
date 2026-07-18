@@ -1,13 +1,14 @@
 """Step 15 (roadmap 1.3): rate limiting + login lockout."""
-import sys, os
+
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 import config
+import pytest
 from auth import hash_password
 from models import User, UserRole
 from rate_limit import limiter
@@ -39,6 +40,7 @@ def low_lockout_threshold(monkeypatch):
 
 
 # ---------------------------------------------------------------- lockout
+
 
 def test_lockout_after_repeated_failures(client, db_session, low_lockout_threshold):
     _make_user(db_session)
@@ -94,6 +96,7 @@ def test_unknown_email_is_plain_401(client, db_session):
 
 # ---------------------------------------------------------------- rate limit
 
+
 @pytest.fixture
 def rate_limiter_on():
     limiter.reset()
@@ -115,23 +118,21 @@ def test_login_rate_limited_per_ip(client, db_session, rate_limiter_on, monkeypa
 def test_rate_limit_keys_on_x_real_ip(client, db_session, rate_limiter_on, monkeypatch):
     monkeypatch.setattr(config.settings, "login_rate_limit", "3/minute")
     for _ in range(3):
-        client.post("/auth/login", data={"username": "a@test.com", "password": "x"},
-                    headers={"X-Real-IP": "10.0.0.1"})
-    blocked = client.post("/auth/login", data={"username": "a@test.com", "password": "x"},
-                          headers={"X-Real-IP": "10.0.0.1"})
+        client.post("/auth/login", data={"username": "a@test.com", "password": "x"}, headers={"X-Real-IP": "10.0.0.1"})
+    blocked = client.post(
+        "/auth/login", data={"username": "a@test.com", "password": "x"}, headers={"X-Real-IP": "10.0.0.1"}
+    )
     assert blocked.status_code == 429
     # A different client IP is unaffected.
-    other = client.post("/auth/login", data={"username": "a@test.com", "password": "x"},
-                        headers={"X-Real-IP": "10.0.0.2"})
+    other = client.post(
+        "/auth/login", data={"username": "a@test.com", "password": "x"}, headers={"X-Real-IP": "10.0.0.2"}
+    )
     assert other.status_code == 401
 
 
 def test_walk_rate_limited_per_token(client, db_session, admin_headers, rate_limiter_on, monkeypatch):
     monkeypatch.setattr(config.settings, "walk_rate_limit", "2/minute")
     # Nonexistent device → cheap 404s, but the limiter still counts them.
-    statuses = [
-        client.post("/devices/9999/walk", headers=admin_headers).status_code
-        for _ in range(4)
-    ]
+    statuses = [client.post("/devices/9999/walk", headers=admin_headers).status_code for _ in range(4)]
     assert statuses[:2] == [404, 404]
     assert 429 in statuses[2:]

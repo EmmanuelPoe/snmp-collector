@@ -1,22 +1,25 @@
-import sys, os
+import os
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("POSTGRES_USER", "test")
 os.environ.setdefault("POSTGRES_PASSWORD", "test")
 os.environ.setdefault("POSTGRES_DB", "test")
 os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
-import pytest
 import config
+import pytest
+
 config.settings.database_url = "sqlite:///:memory:"
 config.settings.jwt_secret = "test-secret-for-unit-tests"
 
+from auth import hash_password
+from database import Base, get_db
+from fastapi.testclient import TestClient
+from models import Alert, AlertRule, AlertStatus, AlertType, Device, User, UserRole
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from fastapi.testclient import TestClient
-from database import Base, get_db
-from auth import hash_password
-from models import User, UserRole, Alert, AlertRule, AlertType, AlertStatus, Device
 
 
 @pytest.fixture(scope="function")
@@ -28,13 +31,24 @@ def client(tmp_path, monkeypatch):
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
     session = Session()
-    admin = User(email="admin@test.com", hashed_password=hash_password("pw"),
-                 role=UserRole.admin, is_active=True, force_password_change=False)
-    viewer = User(email="viewer@test.com", hashed_password=hash_password("pw"),
-                  role=UserRole.viewer, is_active=True, force_password_change=False)
+    admin = User(
+        email="admin@test.com",
+        hashed_password=hash_password("pw"),
+        role=UserRole.admin,
+        is_active=True,
+        force_password_change=False,
+    )
+    viewer = User(
+        email="viewer@test.com",
+        hashed_password=hash_password("pw"),
+        role=UserRole.viewer,
+        is_active=True,
+        force_password_change=False,
+    )
     session.add_all([admin, viewer])
     session.commit()
     from main import app
+
     app.dependency_overrides[get_db] = lambda: session
     with TestClient(app) as c:
         yield c
@@ -47,14 +61,17 @@ def admin_token(client):
     resp = client.post("/auth/login", data={"username": "admin@test.com", "password": "pw"})
     return resp.json()["access_token"]
 
+
 @pytest.fixture
 def viewer_token(client):
     resp = client.post("/auth/login", data={"username": "viewer@test.com", "password": "pw"})
     return resp.json()["access_token"]
 
+
 @pytest.fixture
 def auth(admin_token):
     return {"Authorization": f"Bearer {admin_token}"}
+
 
 @pytest.fixture
 def viewer_auth(viewer_token):
@@ -88,10 +105,12 @@ def test_list_alerts_returns_open_only(client, auth):
 
 def test_list_alerts_include_resolved(client, auth):
     db = client.app.dependency_overrides[get_db]()
-    db.add_all([
-        Alert(alert_type=AlertType.agent_offline, message="a", status=AlertStatus.open),
-        Alert(alert_type=AlertType.agent_offline, message="b", status=AlertStatus.resolved),
-    ])
+    db.add_all(
+        [
+            Alert(alert_type=AlertType.agent_offline, message="a", status=AlertStatus.open),
+            Alert(alert_type=AlertType.agent_offline, message="b", status=AlertStatus.resolved),
+        ]
+    )
     db.commit()
     resp = client.get("/alerts", params={"include_resolved": "true"}, headers=auth)
     assert resp.status_code == 200
@@ -100,11 +119,13 @@ def test_list_alerts_include_resolved(client, auth):
 
 def test_alert_count(client, auth):
     db = client.app.dependency_overrides[get_db]()
-    db.add_all([
-        Alert(alert_type=AlertType.agent_offline, message="a", status=AlertStatus.open),
-        Alert(alert_type=AlertType.agent_offline, message="b", status=AlertStatus.open),
-        Alert(alert_type=AlertType.agent_offline, message="c", status=AlertStatus.resolved),
-    ])
+    db.add_all(
+        [
+            Alert(alert_type=AlertType.agent_offline, message="a", status=AlertStatus.open),
+            Alert(alert_type=AlertType.agent_offline, message="b", status=AlertStatus.open),
+            Alert(alert_type=AlertType.agent_offline, message="c", status=AlertStatus.resolved),
+        ]
+    )
     db.commit()
     resp = client.get("/alerts/count", headers=auth)
     assert resp.json() == {"open": 2}
@@ -149,9 +170,11 @@ def test_create_alert_rules(client, auth):
     device = Device(name="d1", ip_address="10.0.0.1")
     db.add(device)
     db.commit()
-    resp = client.post(f"/alert-rules/{device.id}",
-                       json={"bandwidth_in_pct": 80.0, "bandwidth_out_pct": 90.0, "enabled": True},
-                       headers=auth)
+    resp = client.post(
+        f"/alert-rules/{device.id}",
+        json={"bandwidth_in_pct": 80.0, "bandwidth_out_pct": 90.0, "enabled": True},
+        headers=auth,
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["bandwidth_in_pct"] == 80.0
@@ -175,8 +198,9 @@ def test_viewer_cannot_save_rules(client, viewer_auth):
     device = Device(name="d1", ip_address="10.0.0.1")
     db.add(device)
     db.commit()
-    resp = client.post(f"/alert-rules/{device.id}", json={"bandwidth_in_pct": 80.0, "enabled": True},
-                       headers=viewer_auth)
+    resp = client.post(
+        f"/alert-rules/{device.id}", json={"bandwidth_in_pct": 80.0, "enabled": True}, headers=viewer_auth
+    )
     assert resp.status_code == 403
 
 

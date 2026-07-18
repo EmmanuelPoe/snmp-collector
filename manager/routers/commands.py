@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from typing import Optional, Union
 
 from auth import SHARED_KEY_IDENTITY, ensure_same_agent, require_agent_auth, require_api_key
 from commands import command_store
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 router = APIRouter(tags=["commands"])
 
@@ -52,5 +52,4 @@ def get_command(command_id: str, _: str = Depends(require_api_key)):
     c = command_store.get(command_id)
     if not c:
         raise HTTPException(status_code=404, detail="Command not found")
-    return {"command_id": c["command_id"], "status": c["status"],
-            "result": c["result"], "error": c["error"]}
+    return {"command_id": c["command_id"], "status": c["status"], "result": c["result"], "error": c["error"]}

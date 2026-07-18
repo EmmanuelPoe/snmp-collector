@@ -1,17 +1,16 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
-
 import audit
 from auth import get_current_user, require_role
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from models import NotificationChannel, User
 from schemas import (
     NotificationChannelCreate,
     NotificationChannelResponse,
     NotificationChannelUpdate,
 )
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/notification-channels", tags=["notifications"])
 
@@ -31,9 +30,15 @@ def create_channel(
     channel = NotificationChannel(**body.model_dump())
     db.add(channel)
     db.flush()  # assign id for the audit row
-    audit.record(db, request, current_user, "notification_channel.create",
-                 target_type="notification_channel", target_id=channel.id,
-                 summary=audit.redact(body.model_dump(mode="json", exclude_unset=True)))
+    audit.record(
+        db,
+        request,
+        current_user,
+        "notification_channel.create",
+        target_type="notification_channel",
+        target_id=channel.id,
+        summary=audit.redact(body.model_dump(mode="json", exclude_unset=True)),
+    )
     db.commit()
     db.refresh(channel)
     return channel
@@ -52,9 +57,15 @@ def update_channel(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found")
     for field, value in updates.model_dump(exclude_unset=True).items():
         setattr(channel, field, value)
-    audit.record(db, request, current_user, "notification_channel.update",
-                 target_type="notification_channel", target_id=channel.id,
-                 summary=audit.redact(updates.model_dump(mode="json", exclude_unset=True)))
+    audit.record(
+        db,
+        request,
+        current_user,
+        "notification_channel.update",
+        target_type="notification_channel",
+        target_id=channel.id,
+        summary=audit.redact(updates.model_dump(mode="json", exclude_unset=True)),
+    )
     db.commit()
     db.refresh(channel)
     return channel
@@ -70,8 +81,14 @@ def delete_channel(
     channel = db.query(NotificationChannel).filter(NotificationChannel.id == channel_id).first()
     if not channel:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found")
-    audit.record(db, request, current_user, "notification_channel.delete",
-                 target_type="notification_channel", target_id=channel.id,
-                 summary={"name": channel.name, "type": channel.type.value})
+    audit.record(
+        db,
+        request,
+        current_user,
+        "notification_channel.delete",
+        target_type="notification_channel",
+        target_id=channel.id,
+        summary={"name": channel.name, "type": channel.type.value},
+    )
     db.delete(channel)
     db.commit()

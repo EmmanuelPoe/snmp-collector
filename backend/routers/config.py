@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+import logging
 from typing import List
 
 import audit
 from auth import get_current_user, require_role
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from models import CollectionConfig, User
 from schemas import CollectionConfigCreate, CollectionConfigResponse, CollectionConfigUpdate
-import logging
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/config", tags=["configuration"])
@@ -38,9 +38,15 @@ def create_config(
     db_config = CollectionConfig(**config.model_dump())
     db.add(db_config)
     db.flush()  # assign id for the audit row
-    audit.record(db, request, current_user, "config.create", target_type="collection_config",
-                 target_id=db_config.id,
-                 summary=config.model_dump(mode="json", exclude_unset=True))
+    audit.record(
+        db,
+        request,
+        current_user,
+        "config.create",
+        target_type="collection_config",
+        target_id=db_config.id,
+        summary=config.model_dump(mode="json", exclude_unset=True),
+    )
     db.commit()
     db.refresh(db_config)
     return db_config
@@ -59,13 +65,21 @@ def update_config(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
     changes = updates.model_dump(exclude_unset=True)
     if db_config.required and changes.get("enabled") is False:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                            detail=f"OID {db_config.oid_name} is required by the metrics pipeline and cannot be disabled")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"OID {db_config.oid_name} is required by the metrics pipeline and cannot be disabled",
+        )
     for field, value in changes.items():
         setattr(db_config, field, value)
-    audit.record(db, request, current_user, "config.update", target_type="collection_config",
-                 target_id=db_config.id,
-                 summary=updates.model_dump(mode="json", exclude_unset=True))
+    audit.record(
+        db,
+        request,
+        current_user,
+        "config.update",
+        target_type="collection_config",
+        target_id=db_config.id,
+        summary=updates.model_dump(mode="json", exclude_unset=True),
+    )
     db.commit()
     db.refresh(db_config)
     return db_config
@@ -82,10 +96,18 @@ def delete_config(
     if not db_config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
     if db_config.required:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                            detail=f"OID {db_config.oid_name} is required by the metrics pipeline and cannot be deleted")
-    audit.record(db, request, current_user, "config.delete", target_type="collection_config",
-                 target_id=db_config.id,
-                 summary={"oid": db_config.oid, "oid_name": db_config.oid_name})
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"OID {db_config.oid_name} is required by the metrics pipeline and cannot be deleted",
+        )
+    audit.record(
+        db,
+        request,
+        current_user,
+        "config.delete",
+        target_type="collection_config",
+        target_id=db_config.id,
+        summary={"oid": db_config.oid, "oid_name": db_config.oid_name},
+    )
     db.delete(db_config)
     db.commit()

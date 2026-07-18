@@ -1,11 +1,20 @@
-from pysnmp.hlapi import (
-    SnmpEngine, CommunityData, UsmUserData, UdpTransportTarget,
-    ContextData, ObjectType, ObjectIdentity, nextCmd,
-    usmHMACSHAAuthProtocol, usmHMACMD5AuthProtocol,
-    usmHMAC256SHA384AuthProtocol,
-    usmAesCfb128Protocol, usmAesCfb256Protocol, usmDESPrivProtocol,
-)
 from models import DeviceConfig
+from pysnmp.hlapi import (
+    CommunityData,
+    ContextData,
+    ObjectIdentity,
+    ObjectType,
+    SnmpEngine,
+    UdpTransportTarget,
+    UsmUserData,
+    nextCmd,
+    usmAesCfb128Protocol,
+    usmAesCfb256Protocol,
+    usmDESPrivProtocol,
+    usmHMAC256SHA384AuthProtocol,
+    usmHMACMD5AuthProtocol,
+    usmHMACSHAAuthProtocol,
+)
 
 _AUTH = {
     "SHA": usmHMACSHAAuthProtocol,
@@ -22,14 +31,14 @@ _PRIV = {
 # (e.g. older backend or empty collection_configs). When device.oids is present
 # it governs collection instead.
 _IF_OIDS = {
-    "1.3.6.1.2.1.2.2.1.2":   "ifDescr",
-    "1.3.6.1.2.1.2.2.1.7":   "ifAdminStatus",
-    "1.3.6.1.2.1.2.2.1.8":   "ifOperStatus",
-    "1.3.6.1.2.1.2.2.1.10":  "ifInOctets",
-    "1.3.6.1.2.1.2.2.1.16":  "ifOutOctets",
-    "1.3.6.1.2.1.2.2.1.14":  "ifInErrors",
-    "1.3.6.1.2.1.2.2.1.20":  "ifOutErrors",
-    "1.3.6.1.2.1.31.1.1.1.6":  "ifHCInOctets",
+    "1.3.6.1.2.1.2.2.1.2": "ifDescr",
+    "1.3.6.1.2.1.2.2.1.7": "ifAdminStatus",
+    "1.3.6.1.2.1.2.2.1.8": "ifOperStatus",
+    "1.3.6.1.2.1.2.2.1.10": "ifInOctets",
+    "1.3.6.1.2.1.2.2.1.16": "ifOutOctets",
+    "1.3.6.1.2.1.2.2.1.14": "ifInErrors",
+    "1.3.6.1.2.1.2.2.1.20": "ifOutErrors",
+    "1.3.6.1.2.1.31.1.1.1.6": "ifHCInOctets",
     "1.3.6.1.2.1.31.1.1.1.10": "ifHCOutOctets",
 }
 
@@ -58,7 +67,10 @@ def walk_oid(device: DeviceConfig, base_oid: str, max_rows: int = 500) -> list[d
     engine = SnmpEngine()
     rows = []
     for err_ind, err_stat, _, var_binds in nextCmd(
-        engine, auth, transport, ContextData(),
+        engine,
+        auth,
+        transport,
+        ContextData(),
         ObjectType(ObjectIdentity(base_oid)),
         lexicographicMode=False,
     ):
@@ -76,9 +88,9 @@ def walk_oid(device: DeviceConfig, base_oid: str, max_rows: int = 500) -> list[d
 # LLDP-MIB (1.0.8802.1.1.2) remote-systems table columns, for topology discovery.
 _LLDP_REM_COLUMNS = {
     "remote_chassis_id": "1.0.8802.1.1.2.1.4.1.1.5",
-    "remote_port_id":    "1.0.8802.1.1.2.1.4.1.1.7",
-    "remote_port_desc":  "1.0.8802.1.1.2.1.4.1.1.8",
-    "remote_sysname":    "1.0.8802.1.1.2.1.4.1.1.9",
+    "remote_port_id": "1.0.8802.1.1.2.1.4.1.1.7",
+    "remote_port_desc": "1.0.8802.1.1.2.1.4.1.1.8",
+    "remote_sysname": "1.0.8802.1.1.2.1.4.1.1.9",
 }
 # lldpLocPortDesc, indexed by local port number — maps a neighbour to our port.
 _LLDP_LOC_PORTDESC = "1.0.8802.1.1.2.1.3.7.1.4"
@@ -95,14 +107,17 @@ def walk_lldp(device: DeviceConfig, max_rows: int = 1000) -> list[dict]:
     neighbours: dict[str, dict] = {}
     for field, base_oid in _LLDP_REM_COLUMNS.items():
         for err_ind, err_stat, _, var_binds in nextCmd(
-            engine, auth, transport, ContextData(),
+            engine,
+            auth,
+            transport,
+            ContextData(),
             ObjectType(ObjectIdentity(base_oid)),
             lexicographicMode=False,
         ):
             if err_ind or err_stat:
                 break
             for oid, val in var_binds:
-                index = str(oid)[len(base_oid) + 1:]
+                index = str(oid)[len(base_oid) + 1 :]
                 parts = index.split(".")
                 if len(parts) < 2:
                     continue
@@ -114,7 +129,10 @@ def walk_lldp(device: DeviceConfig, max_rows: int = 1000) -> list[dict]:
     # Map local port numbers to human-readable local port descriptions.
     local_ports: dict[str, str] = {}
     for err_ind, err_stat, _, var_binds in nextCmd(
-        engine, auth, transport, ContextData(),
+        engine,
+        auth,
+        transport,
+        ContextData(),
         ObjectType(ObjectIdentity(_LLDP_LOC_PORTDESC)),
         lexicographicMode=False,
     ):
@@ -138,7 +156,10 @@ def walk_device(device: DeviceConfig) -> list[dict]:
 
     interface_names: dict[str, str] = {}
     for err_ind, err_stat, _, var_binds in nextCmd(
-        engine, auth, transport, ContextData(),
+        engine,
+        auth,
+        transport,
+        ContextData(),
         ObjectType(ObjectIdentity(_IFDESCR_OID)),
         lexicographicMode=False,
     ):
@@ -156,7 +177,10 @@ def walk_device(device: DeviceConfig) -> list[dict]:
         if base_oid == _IFDESCR_OID:
             continue
         for err_ind, err_stat, _, var_binds in nextCmd(
-            engine, auth, transport, ContextData(),
+            engine,
+            auth,
+            transport,
+            ContextData(),
             ObjectType(ObjectIdentity(base_oid)),
             lexicographicMode=False,
         ):
@@ -164,10 +188,12 @@ def walk_device(device: DeviceConfig) -> list[dict]:
                 break
             for oid, val in var_binds:
                 idx = str(oid).rsplit(".", 1)[-1]
-                rows.append({
-                    "interface_name": interface_names.get(idx),
-                    "oid_name": oid_name,
-                    "oid": str(oid),
-                    "value": str(val),
-                })
+                rows.append(
+                    {
+                        "interface_name": interface_names.get(idx),
+                        "oid_name": oid_name,
+                        "oid": str(oid),
+                        "value": str(val),
+                    }
+                )
     return rows

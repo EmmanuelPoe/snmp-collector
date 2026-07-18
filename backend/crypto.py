@@ -9,15 +9,15 @@ stable key derived from ``JWT_SECRET`` so data is always decryptable and tests
 need no extra config. Production should set a dedicated ``ENCRYPTION_KEY`` from a
 secrets manager and must not rotate ``JWT_SECRET`` while relying on the derived key.
 """
+
 import base64
 import hashlib
 import logging
 
+from config import settings
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import Text
 from sqlalchemy.types import TypeDecorator
-
-from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _fernet() -> Fernet:
         except (ValueError, TypeError) as exc:
             raise RuntimeError(
                 "ENCRYPTION_KEY is set but is not a valid Fernet key. Generate one with: "
-                "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
             ) from exc
     else:
         if not _warned:

@@ -1,16 +1,16 @@
 """Unit tests for Step 13 gateway-rooted BFS dependency suppression."""
+
 import alert_evaluator
 from models import Alert, AlertStatus, AlertType, Device, TopologyEdge
 
 
 def _open_count(db, alert_type):
-    return db.query(Alert).filter(
-        Alert.alert_type == alert_type, Alert.status == AlertStatus.open
-    ).count()
+    return db.query(Alert).filter(Alert.alert_type == alert_type, Alert.status == AlertStatus.open).count()
 
 
 def _enable(monkeypatch):
     import config
+
     monkeypatch.setattr(config.settings, "topology_suppression_enabled", True)
     # Suppression state is module-level and mutated per pass; reset it.
     alert_evaluator._suppressed_devices = set()
@@ -85,15 +85,19 @@ def test_check_device_unreachable_suppresses_collateral_alert(db_session, monkey
         if ip == root.ip_address:
             return {"interfaces": {"eth0": {"status": "up"}}}
         return {"interfaces": {}}
+
     monkeypatch.setattr(alert_evaluator, "_fetch_rates", _rates)
 
     alert_evaluator._check_device_unreachable(db_session, [root, a, b])
     db_session.commit()
 
     # Only 'a' (root cause) alerts; 'b' is suppressed as collateral.
-    open_devs = {al.device_id for al in db_session.query(Alert).filter(
-        Alert.alert_type == AlertType.device_unreachable,
-        Alert.status == AlertStatus.open).all()}
+    open_devs = {
+        al.device_id
+        for al in db_session.query(Alert)
+        .filter(Alert.alert_type == AlertType.device_unreachable, Alert.status == AlertStatus.open)
+        .all()
+    }
     assert a.id in open_devs
     assert b.id not in open_devs
     assert _open_count(db_session, AlertType.device_unreachable) == 1

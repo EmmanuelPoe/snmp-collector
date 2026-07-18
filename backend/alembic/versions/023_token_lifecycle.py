@@ -9,24 +9,25 @@ Revises: 022_login_lockout
 Create Date: 2026-07-09
 
 """
-from alembic import op
-import sqlalchemy as sa
 
-revision = '023_token_lifecycle'
-down_revision = '022_login_lockout'
+import sqlalchemy as sa
+from alembic import op
+
+revision = "023_token_lifecycle"
+down_revision = "022_login_lockout"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column('users', sa.Column('token_version', sa.Integer(), nullable=False, server_default='0'))
+    op.add_column("users", sa.Column("token_version", sa.Integer(), nullable=False, server_default="0"))
     op.create_table(
-        'revoked_tokens',
-        sa.Column('jti', sa.String(length=64), primary_key=True),
-        sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
+        "revoked_tokens",
+        sa.Column("jti", sa.String(length=64), primary_key=True),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
     )
 
 
 def downgrade() -> None:
-    op.drop_table('revoked_tokens')
-    op.drop_column('users', 'token_version')
+    op.drop_table("revoked_tokens")
+    op.drop_column("users", "token_version")

@@ -11,33 +11,28 @@ Revises: 020_add_topology
 Create Date: 2026-06-30
 
 """
-from alembic import op
+
 import sqlalchemy as sa
+from alembic import op
+from crypto import decrypt_value, encrypt_value
 
-from crypto import encrypt_value, decrypt_value
-
-revision = '021_encrypt_device_credentials'
-down_revision = '020_add_topology'
+revision = "021_encrypt_device_credentials"
+down_revision = "020_add_topology"
 branch_labels = None
 depends_on = None
 
-_SECRET_COLS = ('snmp_community', 'auth_password', 'priv_password')
+_SECRET_COLS = ("snmp_community", "auth_password", "priv_password")
 
 
 def upgrade() -> None:
     for col in _SECRET_COLS:
-        op.alter_column('devices', col, type_=sa.Text(), existing_nullable=True)
+        op.alter_column("devices", col, type_=sa.Text(), existing_nullable=True)
 
     bind = op.get_bind()
-    rows = bind.execute(sa.text(
-        "SELECT id, snmp_community, auth_password, priv_password FROM devices"
-    )).fetchall()
+    rows = bind.execute(sa.text("SELECT id, snmp_community, auth_password, priv_password FROM devices")).fetchall()
     for row in rows:
         bind.execute(
-            sa.text(
-                "UPDATE devices SET snmp_community=:c, auth_password=:a, "
-                "priv_password=:p WHERE id=:id"
-            ),
+            sa.text("UPDATE devices SET snmp_community=:c, auth_password=:a, priv_password=:p WHERE id=:id"),
             {
                 "c": encrypt_value(row.snmp_community),
                 "a": encrypt_value(row.auth_password),
@@ -49,15 +44,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    rows = bind.execute(sa.text(
-        "SELECT id, snmp_community, auth_password, priv_password FROM devices"
-    )).fetchall()
+    rows = bind.execute(sa.text("SELECT id, snmp_community, auth_password, priv_password FROM devices")).fetchall()
     for row in rows:
         bind.execute(
-            sa.text(
-                "UPDATE devices SET snmp_community=:c, auth_password=:a, "
-                "priv_password=:p WHERE id=:id"
-            ),
+            sa.text("UPDATE devices SET snmp_community=:c, auth_password=:a, priv_password=:p WHERE id=:id"),
             {
                 "c": decrypt_value(row.snmp_community),
                 "a": decrypt_value(row.auth_password),
@@ -66,4 +56,4 @@ def downgrade() -> None:
             },
         )
     for col in _SECRET_COLS:
-        op.alter_column('devices', col, type_=sa.String(255), existing_nullable=True)
+        op.alter_column("devices", col, type_=sa.String(255), existing_nullable=True)

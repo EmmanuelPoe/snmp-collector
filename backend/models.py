@@ -1,9 +1,10 @@
 import enum
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, Enum, Float, ForeignKey, Index
+
+from crypto import EncryptedString
+from database import Base
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from database import Base
-from crypto import EncryptedString
 
 
 class Device(Base):
@@ -72,6 +73,7 @@ class User(Base):
 class RevokedToken(Base):
     """Denylist of logged-out JWTs (by jti), pruned opportunistically at logout
     once past their natural expiry (Step 1.4)."""
+
     __tablename__ = "revoked_tokens"
 
     jti = Column(String(64), primary_key=True)
@@ -81,12 +83,12 @@ class RevokedToken(Base):
 class AuditLog(Base):
     """Append-only audit trail (Step 1.5): who did what, when, from where.
     No update/delete route exists for it; rows leave only via retention pruning."""
+
     __tablename__ = "audit_log"
 
     id = Column(Integer, primary_key=True, index=True)
     # Null actor = unauthenticated action (e.g. failed login attempt).
-    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"),
-                           nullable=True, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     actor_email = Column(String(255), nullable=True)
     action = Column(String(100), nullable=False)
     target_type = Column(String(50), nullable=True)
@@ -126,8 +128,7 @@ class Alert(Base):
     device_id = Column(Integer, nullable=True)
     agent_id = Column(String(255), nullable=True)
     alert_type = Column(Enum(AlertType), nullable=False)
-    severity = Column(Enum(AlertSeverity), nullable=False,
-                      default=AlertSeverity.warning, server_default="warning")
+    severity = Column(Enum(AlertSeverity), nullable=False, default=AlertSeverity.warning, server_default="warning")
     message = Column(Text, nullable=False)
     triggered_at = Column(DateTime(timezone=True), server_default=func.now())
     resolved_at = Column(DateTime(timezone=True), nullable=True)
@@ -182,16 +183,14 @@ class TopologyEdge(Base):
     __tablename__ = "topology_edges"
 
     id = Column(Integer, primary_key=True, index=True)
-    local_device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"),
-                             nullable=False, index=True)
+    local_device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
     local_port = Column(String(255), nullable=True)
     remote_chassis_id = Column(String(255), nullable=True)
     remote_sysname = Column(String(255), nullable=True)
     remote_port_id = Column(String(255), nullable=True)
     remote_port_desc = Column(String(255), nullable=True)
     # Set when the LLDP neighbour resolves to a known device (by sysname/IP).
-    remote_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"),
-                              nullable=True, index=True)
+    remote_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True, index=True)
     last_seen = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

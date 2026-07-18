@@ -4,34 +4,46 @@ import logging
 import secrets
 from contextlib import asynccontextmanager
 
+from alert_evaluator import evaluation_loop
+from audit import prune_old_entries
+from auth import hash_password
+from config import check_required_secrets, settings
+from database import SessionLocal
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from models import User, UserRole
 from prometheus_fastapi_instrumentator import Instrumentator
+from rate_limit import limiter
+from routers import (
+    agents,
+    audit_log,
+    config,
+    devices,
+    internal,
+    maintenance,
+    metrics,
+    notifications,
+    prometheus,
+    topology,
+)
+from routers.alerts import alerts_router, rules_router
+from routers.auth import router as auth_router
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import OperationalError
 
-from alert_evaluator import evaluation_loop
-from audit import prune_old_entries
-from auth import hash_password
-from config import settings, check_required_secrets
-from database import SessionLocal
-from models import User, UserRole
-from rate_limit import limiter
-from routers import agents, audit_log, config, devices, internal, maintenance, metrics, notifications, prometheus, topology
-from routers.alerts import alerts_router, rules_router
-from routers.auth import router as auth_router
-
 
 class _JsonFormatter(logging.Formatter):
     def format(self, record):
-        return json.dumps({
-            "time": self.formatTime(record),
-            "level": record.levelname,
-            "service": "backend",
-            "logger": record.name,
-            "message": record.getMessage(),
-        })
+        return json.dumps(
+            {
+                "time": self.formatTime(record),
+                "level": record.levelname,
+                "service": "backend",
+                "logger": record.name,
+                "message": record.getMessage(),
+            }
+        )
 
 
 def _setup_logging():
@@ -87,8 +99,7 @@ async def lifespan(app: FastAPI):
         pass
     finally:
         db.close()
-    tasks = [asyncio.create_task(evaluation_loop()),
-             asyncio.create_task(audit_retention_loop())]
+    tasks = [asyncio.create_task(evaluation_loop()), asyncio.create_task(audit_retention_loop())]
     yield
     for task in tasks:
         task.cancel()

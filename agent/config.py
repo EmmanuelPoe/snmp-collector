@@ -1,5 +1,6 @@
-from pydantic_settings import BaseSettings
 import socket
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):

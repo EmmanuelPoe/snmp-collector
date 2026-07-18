@@ -1,6 +1,7 @@
-import sys
 import os
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Set env vars before any app modules are imported so Settings() can instantiate
@@ -16,13 +17,14 @@ os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 # Override database_url to SQLite before database.py is imported and creates its engine
 import config
+
 config.settings.database_url = "sqlite:///./test_bootstrap.db"
 
 import pytest
+from database import Base, get_db
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from database import Base, get_db
 
 
 @pytest.fixture(scope="function")
@@ -54,9 +56,11 @@ def client(db_session, monkeypatch):
     monkeypatch.setenv("POSTGRES_HOST", "localhost")
 
     import config
+
     config.settings.database_url = "sqlite:///:memory:"
 
     from main import app
+
     app.dependency_overrides[get_db] = lambda: db_session
     with TestClient(app) as c:
         yield c
@@ -68,7 +72,13 @@ def admin_headers(client, db_session):
     """Return Authorization headers for a seeded admin user."""
     from auth import hash_password
     from models import User, UserRole
-    admin = User(email="admin@test.com", hashed_password=hash_password("testpass"), role=UserRole.admin, force_password_change=False)
+
+    admin = User(
+        email="admin@test.com",
+        hashed_password=hash_password("testpass"),
+        role=UserRole.admin,
+        force_password_change=False,
+    )
     db_session.add(admin)
     db_session.commit()
     resp = client.post("/auth/login", data={"username": "admin@test.com", "password": "testpass"})

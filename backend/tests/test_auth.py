@@ -1,24 +1,34 @@
-import sys, os
+import os
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("POSTGRES_USER", "test")
 os.environ.setdefault("POSTGRES_PASSWORD", "test")
 os.environ.setdefault("POSTGRES_DB", "test")
 os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
-import pytest
-from unittest.mock import MagicMock
+
 import config
+import pytest
+from database import Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from database import Base
+
 config.settings.database_url = "sqlite:///:memory:"
 config.settings.jwt_secret = "test-secret-for-unit-tests"
 
-from auth import hash_password, verify_password, create_access_token, get_current_user, require_role, require_manager_key
+from auth import (
+    create_access_token,
+    get_current_user,
+    hash_password,
+    require_manager_key,
+    require_role,
+    verify_password,
+)
 from database import get_db
-from jose import jwt
 from fastapi import HTTPException
+from jose import jwt
 from models import User, UserRole
 
 
@@ -76,6 +86,7 @@ def db(tmp_path):
 def test_get_current_user_rejects_invalid_token(db):
     from auth import get_current_user
     from fastapi import HTTPException
+
     with pytest.raises(HTTPException) as exc:
         get_current_user(token="not-a-valid-token", db=db)
     assert exc.value.status_code == 401
@@ -83,7 +94,9 @@ def test_get_current_user_rejects_invalid_token(db):
 
 def test_get_current_user_rejects_expired_token(db):
     from datetime import datetime, timedelta, timezone
+
     from jose import jwt
+
     expired_payload = {"sub": "user@test.com", "exp": datetime.now(timezone.utc) - timedelta(hours=1)}
     expired_token = jwt.encode(expired_payload, "test-secret-for-unit-tests", algorithm="HS256")
     with pytest.raises(HTTPException) as exc:
@@ -107,7 +120,14 @@ def test_get_current_user_rejects_nonexistent_user(db):
 
 def test_get_current_user_returns_user(db):
     from models import User, UserRole
-    user = User(email="real@test.com", hashed_password=hash_password("pw"), role=UserRole.viewer, is_active=True, force_password_change=False)
+
+    user = User(
+        email="real@test.com",
+        hashed_password=hash_password("pw"),
+        role=UserRole.viewer,
+        is_active=True,
+        force_password_change=False,
+    )
     db.add(user)
     db.commit()
     token = create_access_token({"sub": "real@test.com", "role": "viewer"})
@@ -150,6 +170,7 @@ def auth_client(tmp_path, monkeypatch):
     session.commit()
 
     from main import app
+
     app.dependency_overrides[get_db] = lambda: session
     with TestClient(app) as c:
         yield c

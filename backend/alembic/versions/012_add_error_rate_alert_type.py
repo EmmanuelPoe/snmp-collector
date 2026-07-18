@@ -5,10 +5,11 @@ Revises: 011_add_device_tags
 Create Date: 2026-06-08
 
 """
+
 from alembic import op
 
-revision = '012_add_error_rate_alert_type'
-down_revision = '011_add_device_tags'
+revision = "012_add_error_rate_alert_type"
+down_revision = "011_add_device_tags"
 branch_labels = None
 depends_on = None
 

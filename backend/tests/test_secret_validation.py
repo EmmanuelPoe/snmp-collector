@@ -1,6 +1,5 @@
-import pytest
-
 import config
+import pytest
 from config import check_required_secrets
 
 _STRONG = "a-strong-unique-secret-123"
