@@ -36,8 +36,8 @@ implementation plan (step number in parentheses).
 - [x] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19, done 2026-07-15 — grace mode on; flip `AGENT_AUTH_ENFORCE=true` once all agents re-enrolled)*
 - [x] **Step 3.1** — CI pipeline *(plan Step 20, done 2026-07-09 — enable branch protection on GitHub to make it merge-blocking)*
 - [x] **Step 3.2** — Lint / format / type-check gates *(plan Step 21, done 2026-07-15)*
-- [ ] **Step 3.3** — Dependency + image scanning, SBOM *(plan Step 22)* ← **NEXT**
-- [ ] **Step 3.4** — Secret scanning *(plan Step 23)*
+- [x] **Step 3.3** — Dependency + image scanning, SBOM *(plan Step 22, done 2026-07-19)*
+- [ ] **Step 3.4** — Secret scanning *(plan Step 23)* ← **NEXT**
 - [ ] **Step 3.5** — Frontend + E2E test coverage *(plan Step 24)*
 - [ ] **Step 2.1** — Agent registry into Postgres *(plan Step 25)*
 - [ ] **Step 2.2** — Harden silent failure paths *(plan Step 26)*
@@ -217,13 +217,21 @@ churn out of functional history. New CI `lint` job runs all five checks
 injected violation fails both ruff (F821) and mypy (name-defined); all three
 pytest suites + the frontend build re-ran green after the format pass.
 
-### Step 3.3 — 🟠 Dependency and container vulnerability scanning *(plan Step 22)*
-**Why:** Deps are pinned (good) but nothing scans them. No SBOM.
-**What to do:** Enable Dependabot, run `pip-audit` + `npm audit` and image
-scanning (Trivy) in CI, and generate an SBOM per image. Add a policy for
-severity thresholds that block release.
-**Verify:** A known-vulnerable pinned dep triggers a CI failure/alert; SBOM artifact is
-produced per build.
+### Step 3.3 — 🟠 Dependency and container vulnerability scanning ✅ Done (2026-07-19)
+CI `dependency-audit` job: `pip-audit` per service (full-resolution) +
+`npm audit --omit=dev --audit-level=high`; `build-images` now Trivy-scans the
+five built images (**fail on fixable HIGH/CRITICAL**, `--ignore-unfixed`;
+exceptions in `.trivyignore` with reason + expiry) and uploads a syft SPDX SBOM
+per image as the `image-sboms` artifact. `.github/dependabot.yml`: pip ×3, npm,
+docker ×5, github-actions, weekly. **Existing findings fixed by bumping pins**
+(validated: all suites + frontend build green under the new versions):
+fastapi 0.109.1, cryptography 48.0.1, python-multipart 0.0.31 (backend);
+pyarrow 23.0.1, python-multipart 0.0.31, jinja2 3.1.6, pytest 9.0.3,
+pytest-asyncio 1.3.0 (manager/agent); `npm audit fix` (form-data, react-router).
+One allowlist entry: PYSEC-2026-2263 (pyasn1 0.4.8 — fix breaks pysnmp 4.4.12;
+expires 2026-10-31; clearing it = agent pysnmp migration + `make simulation`).
+**Pending on CI/Docker:** Trivy/syft run (needs built images), in-container
+manager suite + e2e under the bumped pins, Dependabot PRs appearing.
 
 ### Step 3.4 — 🟡 Secret scanning *(plan Step 23)*
 **Why:** `.env` is present in the working tree; risk of committed secrets.

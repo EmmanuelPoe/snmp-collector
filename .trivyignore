@@ -1,0 +1,11 @@
+# Trivy allowlist (Step 3.3 / plan Step 22).
+#
+# Policy: CI fails on *fixable* HIGH/CRITICAL findings in the images we build
+# (--ignore-unfixed handles the unfixable ones automatically). Anything listed
+# here must carry a reason and an expiry date; when the date passes, the entry
+# is treated as a failure — either fix it or consciously re-approve it.
+#
+# Format:
+#   CVE-XXXX-YYYY  # <reason> — expires YYYY-MM-DD
+#
+# (empty — no exceptions currently)

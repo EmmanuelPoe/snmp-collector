@@ -48,6 +48,39 @@ jobs:
         working-directory: frontend
         run: npx eslint src --max-warnings=0
 
+  dependency-audit:
+    # Dependency scanning (Step 3.3 / plan Step 22). Policy: fail on findings;
+    # unfixable ones get an --ignore-vuln entry below with a reason + expiry.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: pip install pip-audit==2.10.1
+      - name: pip-audit backend
+        run: pip-audit -r backend/requirements.txt
+      - name: pip-audit manager
+        run: pip-audit -r manager/requirements.txt
+      - name: pip-audit agent
+        # Allowlist (re-evaluate at expiry, then treat as a failure):
+        # - PYSEC-2026-2263 (pyasn1 0.4.8): fix needs pyasn1>=0.6, which breaks
+        #   the pinned pysnmp 4.4.12. Clearing it requires migrating the agent
+        #   to a maintained pysnmp and re-running `make simulation`.
+        #   Expires 2026-10-31.
+        run: pip-audit -r agent/requirements.txt --ignore-vuln PYSEC-2026-2263
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+      - name: npm audit (production deps)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
   backend-tests:
     runs-on: ubuntu-latest
     steps:
@@ -105,6 +138,35 @@ jobs:
         run: make ensure-env
       - name: Build all images
         run: docker compose build
+      # Image scanning + SBOMs (Step 3.3 / plan Step 22). Only the images we
+      # build are scanned — pulled infra images (postgres, nginx) are upgraded
+      # via their tags, not fixable here. Policy: fail on *fixable*
+      # HIGH/CRITICAL (--ignore-unfixed); exceptions live in .trivyignore with
+      # a reason + expiry.
+      - name: Install trivy and syft
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+          curl -sfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sudo sh -s -- -b /usr/local/bin
+      - name: Trivy scan built images
+        run: |
+          for svc in backend frontend manager agent snmp-simulator; do
+            img=$(docker compose config --images "$svc")
+            echo "== $img =="
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+              --ignorefile .trivyignore "$img"
+          done
+      - name: Generate SBOMs
+        run: |
+          mkdir -p sboms
+          for svc in backend frontend manager agent snmp-simulator; do
+            img=$(docker compose config --images "$svc")
+            syft "$img" -o spdx-json > "sboms/${svc}.spdx.json"
+          done
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-sboms
+          path: sboms/
 
   e2e-simulation:
     runs-on: ubuntu-latest
