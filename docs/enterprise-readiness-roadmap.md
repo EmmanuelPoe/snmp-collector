@@ -37,14 +37,14 @@ implementation plan (step number in parentheses).
 - [x] **Step 3.1** — CI pipeline *(plan Step 20, done 2026-07-09 — enable branch protection on GitHub to make it merge-blocking)*
 - [x] **Step 3.2** — Lint / format / type-check gates *(plan Step 21, done 2026-07-15)*
 - [x] **Step 3.3** — Dependency + image scanning, SBOM *(plan Step 22, done 2026-07-19)*
-- [ ] **Step 3.4** — Secret scanning *(plan Step 23)* ← **NEXT**
-- [ ] **Step 3.5** — Frontend + E2E test coverage *(plan Step 24)*
-- [ ] **Step 2.1** — Agent registry into Postgres *(plan Step 25)*
-- [ ] **Step 2.2** — Harden silent failure paths *(plan Step 26)*
-- [ ] **Step 2.3** — Liveness/readiness + ingest backpressure *(plan Step 27)*
-- [ ] **Step 2.4** — Backups + tested restore (RPO/RTO) *(plan Step 28)*
-- [ ] **Step 2.5** — Load-test harness at 1000 devices *(plan Step 29)*
-- [ ] **Step 2.6** — Metrics-store decision gate (DuckDB vs TimescaleDB hot path) *(plan Step 30)*
+- [x] **Step 3.4** — Secret scanning *(plan Step 23, done 2026-07-19 — history clean, no rotation needed)*
+- [x] **Step 3.5** — Frontend + E2E test coverage *(plan Step 24, done 2026-07-19 — Playwright live run pending first CI pass)*
+- [x] **Step 2.1** — Agent registry into Postgres *(plan Step 25, done 2026-07-19 — live-stack verification pending Docker)*
+- [x] **Step 2.2** — Harden silent failure paths *(plan Step 26, done 2026-07-19)*
+- [x] **Step 2.3** — Liveness/readiness + ingest backpressure *(plan Step 27, done 2026-07-19)*
+- [x] **Step 2.4** — Backups + tested restore (RPO/RTO) *(plan Step 28, built 2026-07-19 — restore drill itself pending Docker)*
+- [x] **Step 2.5** — Load-test harness at 1000 devices *(plan Step 29, harness built 2026-07-19 — run + publish numbers on next Docker session)*
+- [ ] **Step 2.6** — Metrics-store decision gate (DuckDB vs TimescaleDB hot path) *(plan Step 30 — **blocked on 2.5's published numbers**)*
 - [ ] **Step 4.1** — Non-root containers, least privilege *(plan Step 31)*
 - [ ] **Step 4.2** — Resource limits *(plan Step 32)*
 - [ ] **Step 4.3** — Production compose profile + install/upgrade runbooks *(plan Step 33)*
@@ -233,19 +233,33 @@ expires 2026-10-31; clearing it = agent pysnmp migration + `make simulation`).
 **Pending on CI/Docker:** Trivy/syft run (needs built images), in-container
 manager suite + e2e under the bumped pins, Dependabot PRs appearing.
 
-### Step 3.4 — 🟡 Secret scanning *(plan Step 23)*
-**Why:** `.env` is present in the working tree; risk of committed secrets.
-**What to do:** Add `gitleaks` to CI and pre-commit; confirm `.env` and
-`data/` are gitignored; scrub any historical secrets.
-**Verify:** CI blocks a PR that introduces a secret-looking string.
+### Step 3.4 — 🟡 Secret scanning ✅ Done (2026-07-19)
+gitleaks v8.24.3 as a pre-commit hook and a CI `secret-scan` job (full-history
+scan every run — small repo, strictly stronger than diff scans).
+**One-time history scan performed 2026-07-19**: 187 commits, 8 findings, all
+confirmed dummy values (test fixtures + the `.env.example` placeholder) — zero
+real secrets, nothing to rotate. Those exact values are allowlisted in
+`.gitleaks.toml` (policy in-file: never allowlist a real credential — rotate).
+Verified an injected realistic AWS key pair is caught. Gitignore audit:
+`.env`, `data/`, `nginx/certs/` covered, **but `data/db/metrics.db` had been
+force-added historically — now untracked** (`git rm --cached`); old dev-data
+copies remain in history (no credentials, acceptable per the
+rotate-don't-rewrite policy).
 
-### Step 3.5 — 🟡 Frontend and integration test coverage *(plan Step 24)*
-**Why:** `frontend/src` has no tests; E2E is a manual `make simulation`.
-**What to do:** Add React component/interaction tests for the critical
-flows (login, device CRUD, alert feed) and a Playwright happy-path E2E in CI. Track
-coverage with a floor that ratchets up.
-**Verify:** CI reports frontend coverage; Playwright login→device→metrics flow passes
-headless.
+### Step 3.5 — 🟡 Frontend and integration test coverage ✅ Done (2026-07-19)
+Testing-library added (react 14 / jest-dom 6 / user-event 14, pinned).
+10 component tests across the three critical flows: login
+(success/failure/lockout-423/forced password change), device modal (create,
+create-with-thresholds → alert-rule upsert, edit) and the dashboard alert feed
+(render + viewer gating, acknowledge, assign) — API mocked at the
+`services/api` boundary. Coverage floor enforced via jest `coverageThreshold`
+in `frontend/package.json` (starts at 22/15/13/23 %stmts/branch/func/lines —
+ratchet up, never down) through the new CI `frontend-tests` job. Playwright
+happy-path E2E (`e2e/smoke.spec.js`): bootstrap login → forced password change
+→ add simulator device → poll until metrics arrive → chart renders; wired into
+the CI e2e job *before* `run_simulation.sh` (Playwright consumes the one-time
+bootstrap password, sets a known one, the simulation reuses it).
+**Pending on CI/Docker:** first live Playwright run against the compose stack.
 
 ---
 
@@ -254,59 +268,81 @@ headless.
 Reframed for the locked scope: the goal is **durability and a benchmarked
 1000-device ceiling on one host**, not multi-node HA.
 
-### Step 2.1 — 🟠 Move the agent registry into Postgres *(plan Step 25)*
-**Why:** The manager persists the agent registry to a JSON file
-(`manager/registry.py:81-86` — the write is atomic, but the state is in-memory,
-lost on volume loss, not queryable, and invisible to backups). Per-agent
-credentials (1.7) need a durable home too.
-**What to do:** Move registry state (and agent credential hashes) into a Postgres
-table; the manager becomes stateless on disk apart from DuckDB. Registry contents
-then ride the Postgres backup path (2.4) for free.
-**Verify:** Restarting the manager (or wiping its volume) preserves agent
-registrations; registry rows appear in a Postgres backup.
+### Step 2.1 — 🟠 Move the agent registry into Postgres ✅ Done (2026-07-19)
+Backend Alembic migration `025` creates `agent_registry` (schema owned by the
+single migration authority; **data owned by the manager** — the documented
+mirror of the DuckDB arrangement). `DbAgentRegistry` in `manager/registry.py`:
+SQLAlchemy Core (no ORM), in-memory dict stays the read path, per-agent
+upsert/delete on change, full `SELECT` at startup; DB errors degrade to
+warnings (memory stays authoritative, next heartbeat retries) so a late
+Postgres never crashes the manager. Selected via `REGISTRY_BACKEND`
+(`file` default for unit tests/bare runs; compose sets `postgres` +
+`DATABASE_URL` + `depends_on: postgres healthy`). Enrollment slots stay
+in-memory by design (TTL'd one-time tokens). Tests:
+`manager/tests/test_registry_db.py` (5 — upsert/reload, heartbeat persist,
+deregister, claim-path hash, unreachable-DB degradation) against a SQLite URL.
+**Pending on Docker:** `make migrate` (024+025), e2e with the postgres
+backend, volume-wipe survival check, pg_dump inclusion.
 
-### Step 2.2 — 🟠 Harden silent failure paths *(plan Step 26)*
-**Why:** `manager/db.py:44-45` swallows all exceptions during schema migration;
-the bootstrap block in `backend/main.py:63-64` swallows `OperationalError` (a dead
-DB at startup proceeds silently); a corrupt registry file is silently discarded
-(`manager/registry.py:96-97`). Silent failures hide corruption.
-**What to do:** Narrow exception handling, log at WARNING/ERROR with context, and fail
-loudly where a corrupt/locked DB should stop startup rather than continue.
-**Verify:** Injecting a migration error surfaces a logged, actionable message instead
-of silent continuation; backend refuses to start when Postgres is unreachable.
+### Step 2.2 — 🟠 Harden silent failure paths ✅ Done (2026-07-19)
+All four swallow-alls narrowed and loud:
+- `manager/db.py _migrate`: only `duckdb.CatalogException` (fresh DB) is
+  expected; anything else logs ERROR and re-raises — corruption aborts startup.
+- `backend/main.py` bootstrap: `OperationalError` now logs ERROR and
+  propagates — a dead Postgres fails startup instead of reporting healthy
+  (compose healthcheck/restart handles boot ordering). This exposed that the
+  swallow had been masking a missing-schema gap in the test bootstrap DB,
+  now fixed in `backend/tests/conftest.py` (create_all + stale file removed).
+- `manager/registry.py` file backend: corrupt JSON logs ERROR and is
+  **quarantined to `registry.corrupt`** for inspection instead of vanishing.
+- `agent/uploader.py`: every upload failure logs — permanent-looking 4xx
+  (401/403/413…, not 429) at ERROR ("needs operator attention"), transient at
+  WARNING; both buffers share the helper; queueing behavior unchanged.
+Tests: backend `test_startup_failures.py`, manager corrupt-quarantine test,
+agent 401-ERROR + network-WARNING caplog tests (suites: 193/90/9).
 
-### Step 2.3 — 🟠 Liveness/readiness split + ingest backpressure *(plan Step 27)*
-**Why:** Only postgres, backend, and manager have compose healthchecks; both
-services expose a single `/health` that checks nothing. There is no backpressure
-signal when ingest lags — agents keep uploading into a saturated write lock.
-**What to do:** Add `/health/live` and `/health/ready` (ready checks Postgres/DuckDB).
-Add healthchecks for every service in compose. Return `503` + `Retry-After` from
-`/ingest` when the DuckDB write queue is saturated — the agent's existing disk
-retry queue absorbs the deferral.
-**Verify:** Killing Postgres flips readiness to unhealthy but liveness stays up;
-saturated ingest returns a retryable status and the agent queues rather than drops.
+### Step 2.3 — 🟠 Liveness/readiness split + ingest backpressure ✅ Done (2026-07-19)
+Backend: `/health/live` (static, `/health` stays an alias) + `/health/ready`
+(Postgres `SELECT 1` hard; manager reachability reported but non-fatal — the
+backend proxies metrics over HTTP rather than reading DuckDB directly, so the
+spec's "DuckDB read probe" maps to the manager hop). Manager: `/health/live` +
+`/health/ready` (DuckDB `SELECT 1` **through the write lock** — saturation
+reads as unready, which is the honest signal — plus registry-DB probe when on
+the postgres backend; response includes `write_queue` depth). Compose
+healthchecks on all seven services (frontend/nginx busybox wget, simulator
+real `snmpget`, agent freshness of `/tmp/agent-alive` touched by the heartbeat
+loop; backend/manager point at `/health/ready`). Backpressure: waiter counter
+around the DuckDB write lock (`INGEST_MAX_QUEUE`, default 8); `/ingest` sheds
+load with `503 + Retry-After: 30` from a route dependency (before body parse);
+the agent logs 503 at INFO as an expected deferral and its disk queue absorbs
+it. Tests: backend health ×3, manager health/backpressure ×3, agent 503-INFO.
+**Pending on Docker:** `docker ps` health states, stop-postgres readiness
+flip, saturation drill with row-count reconciliation (Step 2.5 harness).
 
-### Step 2.4 — 🔴 Backups and tested restore (RPO/RTO) *(plan Step 28)*
-**Why:** No backup/restore or PITR strategy exists for Postgres *or* the DuckDB
-metrics file (`scripts/` has only the simulation runner). Data loss on a single
-host is total.
-**What to do:** Script and schedule `pg_dump` + a consistent DuckDB snapshot;
-`make backup` / `make restore` targets; a tested restore runbook; stated RPO
-(backup interval) and RTO targets.
-**Verify:** A scheduled backup runs; a restore drill on a clean host reconstructs
-devices, users, alerts, and metrics.
+### Step 2.4 — 🔴 Backups and tested restore (RPO/RTO) ✅ Built (2026-07-19) — restore drill pending Docker
+`make backup` → `scripts/backup.sh`: `pg_dump -Fc` (everything relational incl.
+agent registry + credential hashes) + DuckDB snapshot via the manager's new
+`POST /internal/backup` (shared-key auth; CHECKPOINT + copy **inside the write
+lock**, so consistent under live ingest — deferrals absorbed by 2.3
+backpressure). Timestamped pairs in `./backups/` (gitignored, bind-mounted),
+retention newest 14 (`BACKUP_KEEP`), daily host-cron recipe documented.
+`make restore BACKUP=<ts>` → `scripts/restore.sh` (stop writers,
+`pg_restore --clean --if-exists`, swap DuckDB file, restart).
+`docs/runbooks/restore.md`: **RPO = backup interval (24 h default), RTO ≤ 30
+min**, verify checklist (incl. the after-backup-gap proof), quarterly drill
+feeding the 6.4 evidence pack. Tests: snapshot validity (opens read-only,
+expected tables) + auth. **Pending on Docker: the actual restore drill.**
 
-### Step 2.5 — 🔴 Load-test harness at the 1000-device target *(plan Step 29)*
-**Why:** The scale target is a product commitment; today there are no numbers.
-Known hot spots to measure: the single DuckDB write lock (`manager/db.py:8`), the
-30s alert-evaluator loop's per-device fetches, and the Prometheus exporter's
-N-sequential-calls-per-scrape pattern (flagged in Phase 2 of the implementation
-plan).
-**What to do:** Build a repeatable harness that simulates 1000 devices' ingest and
-query load; publish benchmark numbers (ingest rows/s, `/ingest` p99, lock wait,
-API query p99, evaluator loop duration) in a checked-in benchmark doc.
-**Verify:** `make loadtest` (or equivalent) runs against a fresh stack and emits
-the benchmark report.
+### Step 2.5 — 🔴 Load-test harness at the 1000-device target ✅ Harness built (2026-07-19) — numbers pending first run
+`make loadtest` = `scripts/loadtest/ingest_load.py` (4 synthetic agents pushing
+agent-sized Parquet batches through the real `/ingest`; reports rows/s, upload
+p50/p99, 503 deferrals, errors — batch generator verified against the agent's
+exact schema) + `scripts/loadtest/query_load.py` (8 dashboard-like readers +
+exporter scrape; query p50/p99) + a `docker stats` snapshot (feeds 4.2 limits).
+The alert evaluator now logs its loop duration (WARN when it blows the 30 s
+cadence). Recipe + results table: `docs/scale-benchmark.md` —
+**run it on the next Docker session and publish the numbers; Step 2.6 is
+blocked on them.**
 
 ### Step 2.6 — 🔴 Metrics-store decision gate *(plan Step 30)*
 **Why:** All manager writes serialize through one global lock on a single DuckDB

@@ -277,7 +277,15 @@ bumped pins; Dependabot activates once the branch reaches GitHub.
 
 **Decision required:** none.
 
-## Step 23 — Secret scanning *(roadmap 3.4)*
+## Step 23 — Secret scanning *(roadmap 3.4)* ✅ DONE (2026-07-19)
+
+**Built:** gitleaks v8.24.3 pre-commit hook + CI `secret-scan` job
+(full-history, `fetch-depth: 0`). One-time history scan: 187 commits →
+8 findings, all dummy values, allowlisted by exact value in `.gitleaks.toml`
+(policy: real credentials get rotated, never allowlisted). Injected AWS-key
+canary caught. Gitignore audit passed except `data/db/metrics.db`, which had
+been force-added — untracked via `git rm --cached` (history copies are dev
+data, left per the rotate-don't-rewrite policy).
 
 **Problem (verified):** `.env` exists in the working tree (gitignored, but one `git add -f` from disaster); no gitleaks/trufflehog anywhere.
 
@@ -289,7 +297,18 @@ bumped pins; Dependabot activates once the branch reaches GitHub.
 
 **Decision required:** none.
 
-## Step 24 — Frontend + E2E test coverage *(roadmap 3.5)*
+## Step 24 — Frontend + E2E test coverage *(roadmap 3.5)* ✅ DONE (2026-07-19)
+
+**Built:** testing-library stack pinned; 10 RTL tests (login ×4, device modal
+×3, alert feed ×3) mocking `services/api`; `npm run test:ci` with jest
+`coverageThreshold` floor (22/15/13/23) in the new `frontend-tests` CI job;
+Playwright `e2e/` package (chromium, single sequential smoke spec: bootstrap
+login → forced change → add simulator device → poll `/api/metrics/latest`
+until rows arrive → recharts surface visible) inserted in the e2e CI job ahead
+of `run_simulation.sh`, which now receives the Playwright-set password via
+`SIM_ADMIN_*`. `.prettierrc` hoisted to repo root to cover `e2e/`. Local:
+component suite + all gates green. **Pending:** first CI run for the live
+Playwright pass.
 
 **Problem (verified):** zero test files under `frontend/src`; `frontend/package.json` has CRA's default `react-scripts test` but no testing-library deps; the only E2E is the manual `make simulation`.
 
@@ -308,7 +327,16 @@ bumped pins; Dependabot activates once the branch reaches GitHub.
 
 # Phase 6 — Reliability & 1000-device scale (roadmap Tier 2)
 
-## Step 25 — Agent registry into Postgres *(roadmap 2.1)*
+## Step 25 — Agent registry into Postgres *(roadmap 2.1)* ✅ DONE (2026-07-19)
+
+**Built:** as specced — migration `025_agent_registry` (backend Alembic);
+`DbAgentRegistry` (SQLAlchemy Core, portable update-then-insert upsert,
+warn-and-degrade on DB errors); `REGISTRY_BACKEND=file|postgres` (file default
+so unit tests need no DB; compose sets postgres + `DATABASE_URL` and
+`depends_on: postgres: service_healthy`); slots stay in-memory. CI
+manager-tests forces `-e REGISTRY_BACKEND=file` (runs `--no-deps`).
+5 new tests against SQLite. **Pending:** live-stack verify (migrate, wipe
+survival, pg_dump, heartbeat-load overhead — fold into Step 29's harness).
 
 **Problem (verified):** the manager keeps the registry in memory and persists to a JSON file ([manager/registry.py:81-86](../manager/registry.py#L81-L86)). The write is already atomic (tmp + `os.replace`), but state is lost on volume loss, invisible to backups, not queryable, and a corrupt file is silently discarded ([registry.py:96-97](../manager/registry.py#L96-L97)). Per-agent credential hashes (Step 19) need a durable home.
 
@@ -324,7 +352,14 @@ bumped pins; Dependabot activates once the branch reaches GitHub.
 
 **Decision required:** none — the schema-in-Alembic/data-in-manager split is the recommendation; the alternative (manager proxies through backend HTTP) adds a hop and couples manager liveness to backend, rejected.
 
-## Step 26 — Harden silent failure paths *(roadmap 2.2)*
+## Step 26 — Harden silent failure paths *(roadmap 2.2)* ✅ DONE (2026-07-19)
+
+**Built:** as specced — `_migrate` catches only `duckdb.CatalogException`;
+backend bootstrap re-raises `OperationalError` after an ERROR log (test
+bootstrap DB gained real schema in conftest as a result); corrupt registry
+JSON quarantined to `.corrupt` with ERROR; uploader failures logged via a
+shared helper (permanent 4xx→ERROR, else WARNING) in both poll and trap
+buffers. caplog/behavior tests in all three suites.
 
 **Problem (verified):** four swallow-alls:
 - [manager/db.py:44-45](../manager/db.py#L44-L45) — `except Exception: pass` around DuckDB schema migration.
@@ -340,7 +375,17 @@ bumped pins; Dependabot activates once the branch reaches GitHub.
 
 **Decision required:** none.
 
-## Step 27 — Liveness/readiness + ingest backpressure *(roadmap 2.3)*
+## Step 27 — Liveness/readiness + ingest backpressure *(roadmap 2.3)* ✅ DONE (2026-07-19)
+
+**Built:** as specced with one documented adaptation — the backend's readiness
+probes Postgres (hard) + manager `/health` (informational) because it proxies
+metrics via the manager rather than reading DuckDB directly. Manager readiness
+goes through the write lock (saturation = unready) and probes the registry DB.
+Healthchecks on all seven compose services (agent via `/tmp/agent-alive`
+freshness; simulator via real snmpget). Backpressure: `_locked()` waiter
+counter in `manager/db.py`, `INGEST_MAX_QUEUE=8`, `/ingest` 503 + Retry-After
+from a route dependency (pre-body); agent logs 503 at INFO. Suites:
+backend 196 / manager 93 / agent 10. **Pending:** live-stack drills.
 
 **Problem (verified):** both services expose a static [`/health`](../backend/main.py#L112-L114) that checks nothing; compose healthchecks exist only for postgres, backend, and manager; frontend/nginx/agent have none. No backpressure: `/ingest` waits on the global DuckDB write lock ([manager/db.py:8](../manager/db.py#L8)) unboundedly.
 
@@ -356,7 +401,15 @@ bumped pins; Dependabot activates once the branch reaches GitHub.
 
 **Decision required:** none.
 
-## Step 28 — Backups + tested restore *(roadmap 2.4)*
+## Step 28 — Backups + tested restore *(roadmap 2.4)* ✅ BUILT (2026-07-19; drill pending Docker)
+
+**Built:** as specced with the recommended daily/keep-14 defaults —
+`db.backup_database()` (CHECKPOINT+copy under `_locked()`),
+`POST /internal/backup` (shared key), `scripts/backup.sh` (pg_dump -Fc +
+manager call + retention), `scripts/restore.sh`, `make backup`/`make restore`,
+`./backups` bind mount + gitignore, `docs/runbooks/restore.md` (RPO 24 h /
+RTO ≤ 30 min, quarterly drill). Snapshot-validity + auth tests in
+`manager/tests/test_health_backpressure.py`.
 
 **Problem (verified):** no backup tooling exists — `scripts/` holds only `run_simulation.sh`; no Makefile backup target; neither Postgres (`postgres_data` volume) nor the DuckDB file (`data/db/metrics.db`) is protected.
 
@@ -373,7 +426,13 @@ bumped pins; Dependabot activates once the branch reaches GitHub.
 
 **Decision required:** default backup schedule/retention — recommend daily, keep 14; both configurable.
 
-## Step 29 — Load-test harness at 1000 devices *(roadmap 2.5)*
+## Step 29 — Load-test harness at 1000 devices *(roadmap 2.5)* ✅ HARNESS BUILT (2026-07-19; numbers pending)
+
+**Built:** ingest + query drivers under `scripts/loadtest/`, evaluator loop
+duration logging, `make loadtest`, and `docs/scale-benchmark.md` (recipe +
+empty results table). Batch generator schema round-trip verified locally.
+**Run the recipe against a live stack to publish numbers — Step 30 blocks on
+them.**
 
 **Problem (verified):** the 1000-device target is unproven. Expected pressure points: the single write lock ([manager/db.py:8](../manager/db.py#L8)); the evaluator's per-device rates fetches every 30s ([backend/alert_evaluator.py](../backend/alert_evaluator.py)); the Prometheus exporter's N-sequential-manager-calls-per-scrape (flagged in Phase 2); DuckDB query latency as `snmp_polls` grows to ~10⁹ rows/90d at target load (1000 devices × ~30 interfaces × ~10 OIDs / 60s poll ≈ 5k rows/s).
 
