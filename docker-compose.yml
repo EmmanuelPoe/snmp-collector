@@ -43,6 +43,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   frontend:
     build:
@@ -55,6 +60,11 @@ services:
     container_name: snmp-frontend
     networks:
       - snmp-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       - backend
 
@@ -69,6 +79,11 @@ services:
       - ./nginx/security_headers.inc:/etc/nginx/security_headers.inc:ro
     networks:
       - snmp-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       - backend
       - frontend
@@ -82,6 +97,7 @@ services:
       - ./data/db:/data/db
       - ./data/dead-letter:/data/dead-letter
       - ./data/registry:/data/registry
+      - ./backups:/data/backups
     environment:
       - MANAGER_API_KEY=${MANAGER_API_KEY:-}
       - DB_PATH=/data/db/metrics.db
@@ -89,11 +105,18 @@ services:
       - DEAD_LETTER_PATH=/data/dead-letter
       - BACKEND_URL=http://backend:8000
       - AGENT_AUTH_ENFORCE=${AGENT_AUTH_ENFORCE:-false}
+      # Step 2.1: durable registry in Postgres (schema = backend migration 025;
+      # data = manager). registry.json remains only for REGISTRY_BACKEND=file.
+      - REGISTRY_BACKEND=postgres
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - snmp-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -124,6 +147,14 @@ services:
       - "${TRAP_LISTEN_PORT:-162}:162/udp"
     networks:
       - snmp-network
+    healthcheck:
+      # The agent has no HTTP server; the heartbeat loop touches
+      # /tmp/agent-alive every 30s — stale file = wedged loops.
+      test: ["CMD", "python", "-c", "import os,time,sys; sys.exit(0 if time.time()-os.stat('/tmp/agent-alive').st_mtime < 120 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     depends_on:
       manager:
         condition: service_healthy
@@ -138,6 +169,12 @@ services:
       - "1161:161/udp"
     networks:
       - snmp-network
+    healthcheck:
+      # Real SNMP probe — net-snmp-tools ships in the image.
+      test: ["CMD", "snmpget", "-v2c", "-c", "public", "-t", "2", "localhost", "1.3.6.1.2.1.1.3.0"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   snmp-network:

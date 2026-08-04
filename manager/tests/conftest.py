@@ -19,6 +19,11 @@ def patch_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("SLOTS_PATH", str(tmp_path / "slots.json"))
     monkeypatch.setenv("DEAD_LETTER_PATH", str(tmp_path / "dead-letter"))
     monkeypatch.setenv("BACKEND_URL", "http://backend-mock:8000")
+    # Unit tests always use the file registry backend (Step 2.1) — the
+    # in-container run inherits REGISTRY_BACKEND=postgres from compose, but
+    # runs with --no-deps (no postgres). test_registry_db.py covers the DB
+    # backend against a SQLite URL.
+    monkeypatch.setenv("REGISTRY_BACKEND", "file")
     import config
 
     config.settings = config.Settings()

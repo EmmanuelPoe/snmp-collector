@@ -15,6 +15,17 @@ class Settings(BaseSettings):
     # agent-facing routes (with a warning) so pre-1.7 agents keep working.
     # Flip to true once every agent holds a per-agent credential.
     agent_auth_enforce: bool = False
+    # Step 2.1: registry backend. "file" (default — unit tests and bare dev
+    # runs need no DB) or "postgres" (compose sets this; requires
+    # DATABASE_URL). Schema lives in backend Alembic migration 025.
+    registry_backend: str = "file"
+    database_url: str = ""
+    # Step 2.3 backpressure: /ingest sheds load with 503 + Retry-After once
+    # this many requests are holding/waiting on the DuckDB write lock.
+    ingest_max_queue: int = 8
+    # Step 2.4: where POST /internal/backup drops DuckDB snapshots (bind-mounted
+    # to ./backups on the host by compose).
+    backup_dir: str = "/data/backups"
 
     model_config = {"env_file": ".env"}
 

@@ -540,4 +540,12 @@ def run_evaluation():
 async def evaluation_loop():
     while True:
         await asyncio.sleep(30)
+        # Step 2.5: the run must fit inside its 30s cadence at the 1000-device
+        # target — emit the duration so the load test (and operators) see drift.
+        started = time.monotonic()
         run_evaluation()
+        elapsed = time.monotonic() - started
+        if elapsed > 30:
+            logger.warning("alert evaluation took %.1fs — exceeds its 30s cadence", elapsed)
+        else:
+            logger.info("alert evaluation completed in %.2fs", elapsed)

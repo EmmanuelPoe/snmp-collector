@@ -107,9 +107,23 @@ async def _register() -> tuple[str, str | None]:
             await asyncio.sleep(10)
 
 
+# Touched every heartbeat cycle; the compose healthcheck asserts freshness
+# (Step 2.3 — liveness of the asyncio loops, not manager reachability).
+LIVENESS_FILE = Path("/tmp/agent-alive")
+
+
+def _touch_liveness() -> None:
+    try:
+        LIVENESS_FILE.touch()
+    except OSError:
+        pass
+
+
 async def _heartbeat_loop() -> None:
+    _touch_liveness()
     while True:
         await asyncio.sleep(30)
+        _touch_liveness()
         try:
             async with httpx.AsyncClient() as client:
                 await client.post(

@@ -1,12 +1,36 @@
 import asyncio
+import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import config
 import duckdb
 
+logger = logging.getLogger(__name__)
+
 _conn: duckdb.DuckDBPyConnection | None = None
 _write_lock = asyncio.Lock()
+# Step 2.3 backpressure: how many coroutines are holding or waiting on the
+# write lock. /ingest sheds load (503 + Retry-After) above INGEST_MAX_QUEUE.
+_waiters = 0
+
+
+def write_queue_depth() -> int:
+    return _waiters
+
+
+@asynccontextmanager
+async def _locked():
+    global _waiters
+    _waiters += 1
+    try:
+        async with _write_lock:
+            yield
+    finally:
+        _waiters -= 1
+
+
 _ALLOWED_TABLES = frozenset({"snmp_polls", "snmp_traps"})
 
 _SCHEMA = [
@@ -35,15 +59,21 @@ _SCHEMA = [
 
 
 def _migrate(conn: duckdb.DuckDBPyConnection) -> None:
-    """Add new columns to snmp_polls for existing databases."""
+    """Add new columns to snmp_polls for existing databases. Only the
+    table-missing case is expected (fresh DB — _SCHEMA creates it right after);
+    anything else is real corruption and must abort startup, not be swallowed
+    (Step 2.2)."""
     try:
         cols = {row[0] for row in conn.execute("DESCRIBE snmp_polls").fetchall()}
-        if "interface_name" not in cols:
-            conn.execute("ALTER TABLE snmp_polls ADD COLUMN interface_name VARCHAR")
-        if "oid_name" not in cols:
-            conn.execute("ALTER TABLE snmp_polls ADD COLUMN oid_name VARCHAR")
-    except Exception:
-        pass  # Table may not exist yet — _SCHEMA will create it
+    except duckdb.CatalogException:
+        return  # fresh database — _SCHEMA will create the table
+    except Exception as exc:
+        logger.error("DuckDB schema inspection failed (%s): %s", config.settings.db_path, exc)
+        raise
+    if "interface_name" not in cols:
+        conn.execute("ALTER TABLE snmp_polls ADD COLUMN interface_name VARCHAR")
+    if "oid_name" not in cols:
+        conn.execute("ALTER TABLE snmp_polls ADD COLUMN oid_name VARCHAR")
 
 
 def get_db() -> duckdb.DuckDBPyConnection:
@@ -65,7 +95,7 @@ def close_db() -> None:
 
 
 async def query(sql: str, params: list | None = None) -> list[tuple]:
-    async with _write_lock:
+    async with _locked():
         conn = get_db()
         if params is not None:
             return conn.execute(sql, params).fetchall()
@@ -73,7 +103,7 @@ async def query(sql: str, params: list | None = None) -> list[tuple]:
 
 
 async def execute(sql: str, params: list | None = None) -> None:
-    async with _write_lock:
+    async with _locked():
         conn = get_db()
         if params is not None:
             conn.execute(sql, params)
@@ -81,12 +111,28 @@ async def execute(sql: str, params: list | None = None) -> None:
             conn.execute(sql)
 
 
+async def backup_database(dest_dir: str) -> dict:
+    """Safe copy of the live DuckDB file (Step 2.4): CHECKPOINT then copy,
+    all inside the write lock so no writer touches the file mid-copy. Ingest
+    requests arriving meanwhile are absorbed by Step 2.3 backpressure."""
+    import shutil
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    dest = Path(dest_dir) / f"metrics-{ts}.db"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    async with _locked():
+        conn = get_db()
+        conn.execute("CHECKPOINT")
+        shutil.copy2(config.settings.db_path, dest)
+    return {"path": str(dest), "bytes": dest.stat().st_size}
+
+
 async def purge_old_metrics(retention_days: int) -> dict:
     """Delete polls/traps older than retention_days. Delete-only: DuckDB reuses
     the freed space for subsequent inserts, so the file stabilises at steady
     state rather than growing unboundedly."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
-    async with _write_lock:
+    async with _locked():
         conn = get_db()
         polls = conn.execute("SELECT COUNT(*) FROM snmp_polls WHERE collected_at < ?", [cutoff]).fetchone()[0]
         traps = conn.execute("SELECT COUNT(*) FROM snmp_traps WHERE received_at < ?", [cutoff]).fetchone()[0]
@@ -98,7 +144,7 @@ async def purge_old_metrics(retention_days: int) -> dict:
 async def ingest_parquet(table: str, file_path: str) -> int:
     if table not in _ALLOWED_TABLES:
         raise ValueError(f"Unknown table: {table!r}")
-    async with _write_lock:
+    async with _locked():
         conn = get_db()
         before = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         if table == "snmp_polls":
@@ -117,7 +163,7 @@ async def ingest_parquet(table: str, file_path: str) -> int:
 async def transactional_ingest(table: str, file_path: str, file_id: str, ingested_at, row_count: int) -> None:
     if table not in _ALLOWED_TABLES:
         raise ValueError(f"Unknown table: {table!r}")
-    async with _write_lock:
+    async with _locked():
         conn = get_db()
         conn.execute("BEGIN")
         try:

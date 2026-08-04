@@ -20,8 +20,14 @@ import config
 
 config.settings.database_url = "sqlite:///./test_bootstrap.db"
 
+import models  # noqa: F401  — populate Base.metadata before create_all below
 import pytest
-from database import Base, get_db
+from database import Base, engine as _bootstrap_engine, get_db
+
+# The lifespan bootstrap (admin seeding) runs against the module-level engine
+# (test_bootstrap.db). Step 2.2 made a failing bootstrap abort startup instead
+# of being swallowed — so give that engine real tables.
+Base.metadata.create_all(bind=_bootstrap_engine)
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

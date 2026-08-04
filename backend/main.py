@@ -4,12 +4,13 @@ import logging
 import secrets
 from contextlib import asynccontextmanager
 
+import httpx
 from alert_evaluator import evaluation_loop
 from audit import prune_old_entries
 from auth import hash_password
 from config import check_required_secrets, settings
 from database import SessionLocal
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from models import User, UserRole
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -30,6 +31,7 @@ from routers.alerts import alerts_router, rules_router
 from routers.auth import router as auth_router
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 
@@ -78,6 +80,9 @@ async def audit_retention_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     check_required_secrets()
+    # Step 2.2: a dead Postgres must fail startup loudly (compose healthcheck +
+    # restart policy handles boot-order retries), not defer errors to the first
+    # request while /health reports healthy.
     db = SessionLocal()
     try:
         if db.query(User).count() == 0:
@@ -96,7 +101,8 @@ async def lifespan(app: FastAPI):
                 password,
             )
     except OperationalError:
-        pass
+        logger.error("Postgres is unreachable at startup — aborting (database_url host: %s)", settings.postgres_host)
+        raise
     finally:
         db.close()
     tasks = [asyncio.create_task(evaluation_loop()), asyncio.create_task(audit_retention_loop())]
@@ -153,5 +159,30 @@ def root():
 
 
 @app.get("/health")
-def health_check():
+@app.get("/health/live")
+def health_live():
+    """Liveness: the process is up. /health stays as an alias (nginx proxies it)."""
     return {"status": "healthy", "service": "snmp-collector-api"}
+
+
+@app.get("/health/ready")
+def health_ready(response: Response):
+    """Readiness (Step 2.3): Postgres is the hard dependency. The manager
+    (metrics path) is reported but non-fatal — device CRUD/auth still work
+    without it, and its own readiness is checked on its /health/ready."""
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+        finally:
+            db.close()
+    except Exception as exc:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "unready", "postgres": f"unavailable: {exc.__class__.__name__}"}
+
+    manager_status = "ok"
+    try:
+        httpx.get(f"{settings.manager_url}/health", timeout=2)
+    except httpx.HTTPError:
+        manager_status = "unreachable"
+    return {"status": "ready", "postgres": "ok", "manager": manager_status}

@@ -4,10 +4,11 @@ import logging
 from contextlib import asynccontextmanager
 
 import config
+import db as db_mod
 from db import close_db, get_db, purge_old_metrics
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from prometheus_fastapi_instrumentator import Instrumentator
-from routers import commands, ingest, metrics, registration, slots
+from routers import backup, commands, ingest, metrics, registration, slots
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +71,38 @@ app.include_router(ingest.router)
 app.include_router(metrics.router)
 app.include_router(slots.router)
 app.include_router(commands.router)
+app.include_router(backup.router)
 
 
 @app.get("/health")
+@app.get("/health/live")
 def health():
+    """Liveness: the process is up. /health stays for existing probes."""
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready(response: Response):
+    """Readiness (Step 2.3): DuckDB answers through the write lock (so a
+    saturated queue reads as unready, which is the honest signal) and the
+    registry backend is reachable."""
+    try:
+        await db_mod.query("SELECT 1")
+    except Exception as exc:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "unready", "duckdb": f"unavailable: {exc.__class__.__name__}"}
+
+    from registry import DbAgentRegistry, registry
+
+    registry_status = "ok"
+    if isinstance(registry, DbAgentRegistry):
+        try:
+            from sqlalchemy import text
+
+            with registry._engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+        except Exception as exc:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            return {"status": "unready", "duckdb": "ok", "registry": f"unavailable: {exc.__class__.__name__}"}
+
+    return {"status": "ready", "duckdb": "ok", "registry": registry_status, "write_queue": db_mod.write_queue_depth()}

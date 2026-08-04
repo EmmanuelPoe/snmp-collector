@@ -2,6 +2,8 @@ import re
 import tempfile
 from pathlib import Path
 
+import config
+import db
 from auth import require_agent_auth
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from services.ingest import ChecksumError, DuplicateFileError, ingest_file
@@ -11,7 +13,19 @@ router = APIRouter(tags=["ingest"])
 _VALID_TYPES = {"polls": "snmp_polls", "traps": "snmp_traps"}
 
 
-@router.post("/ingest")
+def reject_when_saturated():
+    """Step 2.3 backpressure: runs as a route dependency, i.e. BEFORE the
+    multipart body is parsed. Agents keep the file in their disk queue and
+    retry after Retry-After — no data loss, just deferral."""
+    if db.write_queue_depth() >= config.settings.ingest_max_queue:
+        raise HTTPException(
+            status_code=503,
+            detail="Ingest queue is full — retry later",
+            headers={"Retry-After": "30"},
+        )
+
+
+@router.post("/ingest", dependencies=[Depends(reject_when_saturated)])
 async def ingest(
     request: Request,
     file: UploadFile = File(...),

@@ -1,4 +1,4 @@
-.PHONY: help setup ensure-env ensure-dirs build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend
+.PHONY: loadtest backup restore help setup ensure-env ensure-dirs build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend
 
 # Create .env from the example on first run, generating strong random secrets so
 # the stack starts securely out of the box (the services refuse to start with the
@@ -175,3 +175,22 @@ clean-simulation:
 	docker-compose exec -T postgres psql -U snmpuser -d snmp_metrics -c \
 		"DELETE FROM devices WHERE name = 'Test-Simulator';" || true
 	@echo "✓ Simulation data cleaned"
+
+# Backup + restore (Step 2.4) — artifacts in ./backups; see docs/runbooks/restore.md
+backup:
+	@./scripts/backup.sh
+
+restore:
+	@test -n "$(BACKUP)" || (echo "usage: make restore BACKUP=<timestamp>  (see ls backups/)" && exit 1)
+	@./scripts/restore.sh $(BACKUP)
+
+# Load test at the 1000-device target (Step 2.5) — see docs/scale-benchmark.md
+loadtest:
+	@echo "🏋️  Load test: synthetic ingest (120s) + query fleet (60s)"
+	@set -a && . ./.env && set +a && \
+	python3 scripts/loadtest/ingest_load.py --devices 1000 --duration 120 --concurrency 4 --api-key "$$MANAGER_API_KEY" && \
+	echo "" && \
+	python3 scripts/loadtest/query_load.py --password "$${SIM_ADMIN_PASSWORD:?set SIM_ADMIN_PASSWORD to the admin password}" --duration 60
+	@echo ""
+	@echo "Container resource snapshot (feeds Step 4.2 limits):"
+	@docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' || true

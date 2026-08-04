@@ -124,3 +124,110 @@ async def test_retry_queue_files_uploaded(tmp_path, monkeypatch):
     buf._upload_file = fake_upload
     await buf.flush_retry_queue()
     assert len(upload_called) == 1
+
+
+class _FakeAsyncClient:
+    """Stub httpx.AsyncClient whose post() returns a canned response or raises."""
+
+    response = None
+    exc = None
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def post(self, *args, **kwargs):
+        if _FakeAsyncClient.exc:
+            raise _FakeAsyncClient.exc
+        return _FakeAsyncClient.response
+
+
+@pytest.fixture
+def upload_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("MANAGER_URL", "http://manager:8000")
+    monkeypatch.setenv("MANAGER_API_KEY", "test-key")
+    monkeypatch.setenv("QUEUE_PATH", str(tmp_path / "queue"))
+    monkeypatch.setenv("AGENT_ID_PATH", str(tmp_path / "agent_id"))
+    import config
+
+    config.settings = config.Settings()
+    return tmp_path
+
+
+@pytest.mark.asyncio
+async def test_upload_401_logs_error_and_keeps_file_queued(upload_env, monkeypatch, caplog):
+    """Step 2.2: permanent-looking 4xx logs ERROR so a dead credential is
+    visible instead of a silently growing queue."""
+    import logging
+
+    import httpx
+    import uploader
+    from uploader import UploadBuffer
+
+    buf = UploadBuffer(agent_id="ag-01")
+    queued = buf._queue / "abc_polls.parquet"
+    queued.write_bytes(b"not-really-parquet")
+
+    _FakeAsyncClient.exc = None
+    _FakeAsyncClient.response = httpx.Response(401, request=httpx.Request("POST", "http://manager:8000/ingest"))
+    monkeypatch.setattr(uploader.httpx, "AsyncClient", _FakeAsyncClient)
+
+    with caplog.at_level(logging.ERROR, logger="uploader"):
+        await buf._upload_file(queued, "abc_polls")
+
+    assert queued.exists()  # stays in the retry queue
+    assert any(r.levelno == logging.ERROR and "401" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_upload_network_failure_logs_warning(upload_env, monkeypatch, caplog):
+    import logging
+
+    import httpx
+    import uploader
+    from uploader import UploadBuffer
+
+    buf = UploadBuffer(agent_id="ag-01")
+    queued = buf._queue / "def_polls.parquet"
+    queued.write_bytes(b"bytes")
+
+    _FakeAsyncClient.response = None
+    _FakeAsyncClient.exc = httpx.ConnectError("connection refused")
+    monkeypatch.setattr(uploader.httpx, "AsyncClient", _FakeAsyncClient)
+
+    with caplog.at_level(logging.WARNING, logger="uploader"):
+        await buf._upload_file(queued, "def_polls")
+
+    _FakeAsyncClient.exc = None
+    assert queued.exists()
+    assert any(r.levelno == logging.WARNING and "queued for retry" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_upload_503_logs_info_deferral(upload_env, monkeypatch, caplog):
+    """Step 2.3: manager backpressure (503) is an expected deferral — INFO."""
+    import logging
+
+    import httpx
+    import uploader
+    from uploader import UploadBuffer
+
+    buf = UploadBuffer(agent_id="ag-01")
+    queued = buf._queue / "ghi_polls.parquet"
+    queued.write_bytes(b"bytes")
+
+    _FakeAsyncClient.exc = None
+    _FakeAsyncClient.response = httpx.Response(503, request=httpx.Request("POST", "http://manager:8000/ingest"))
+    monkeypatch.setattr(uploader.httpx, "AsyncClient", _FakeAsyncClient)
+
+    with caplog.at_level(logging.INFO, logger="uploader"):
+        await buf._upload_file(queued, "ghi_polls")
+
+    assert queued.exists()
+    assert any(r.levelno == logging.INFO and "deferred" in r.message for r in caplog.records)
+    assert not any(r.levelno >= logging.WARNING for r in caplog.records)

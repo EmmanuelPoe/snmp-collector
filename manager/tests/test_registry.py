@@ -99,6 +99,29 @@ def test_status_never_seen(reset_registry):
     assert agent.status == "offline"
 
 
+def test_corrupt_registry_file_quarantined_not_swallowed(tmp_path, monkeypatch, reset_registry, caplog):
+    """Step 2.2: a corrupt registry logs ERROR and is renamed .corrupt."""
+    import logging
+
+    import config
+
+    monkeypatch.setenv("REGISTRY_PATH", str(tmp_path / "registry.json"))
+    config.settings = config.Settings()
+    (tmp_path / "registry.json").write_text("{not valid json")
+
+    from registry import AgentRegistry
+
+    reg = AgentRegistry.__new__(AgentRegistry)
+    reg._agents = {}
+    with caplog.at_level(logging.ERROR, logger="registry"):
+        reg._load()
+
+    assert reg._agents == {}
+    assert not (tmp_path / "registry.json").exists()
+    assert (tmp_path / "registry.corrupt").exists()
+    assert any("corrupt" in r.message for r in caplog.records)
+
+
 def test_deregister(reset_registry):
     from registry import AgentRegistry
 

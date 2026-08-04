@@ -13,6 +13,29 @@ import pyarrow.parquet as pq
 log = logging.getLogger(__name__)
 
 
+def _log_upload_failure(file_id: str, exc: Exception) -> None:
+    """Step 2.2: upload failures are never silent. Permanent-looking 4xx
+    (bad credential, oversized payload …) logs ERROR — the retry queue will
+    never drain without operator action; everything else logs WARNING."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if code == 503:
+            # Manager shed load (Step 2.3 backpressure) — expected deferral,
+            # the retry loop drains the queue once it recovers.
+            log.info("Upload %s deferred — manager busy (503), queued for retry", file_id)
+        elif 400 <= code < 500 and code != 429:
+            log.error(
+                "Upload %s rejected with HTTP %d — retrying from queue, but this needs operator attention (auth/config): %s",
+                file_id,
+                code,
+                exc,
+            )
+        else:
+            log.warning("Upload %s failed with HTTP %d — queued for retry", file_id, code)
+    else:
+        log.warning("Upload %s failed (%s) — queued for retry", file_id, exc)
+
+
 class UploadBuffer:
     def __init__(self, agent_id: str, token: str | None = None):
         self._agent_id = agent_id
@@ -73,8 +96,8 @@ class UploadBuffer:
                     )
                     resp.raise_for_status()
             path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log_upload_failure(file_id, exc)
 
     async def flush_retry_queue(self) -> None:
         now = time.time()
@@ -130,7 +153,7 @@ class TrapBuffer:
                     resp.raise_for_status()
             path.unlink(missing_ok=True)
         except Exception as exc:
-            log.warning("Trap upload failed: %s", exc)
+            _log_upload_failure(file_id, exc)
 
 
 def _write_parquet(rows: list[dict], path: Path) -> None:
