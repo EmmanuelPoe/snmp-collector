@@ -1,0 +1,20 @@
+# Gitleaks config (Step 3.4 / plan Step 23). Extends the default ruleset.
+#
+# The allowlist below holds only *known dummy values* — test fixtures and the
+# documented .env.example placeholder — confirmed as the full set of findings
+# in the one-time full-history scan (2026-07-19, 187 commits, 0 real secrets).
+# Never allowlist a real credential: rotate it instead (startup secret
+# validation from Step 1.2 makes rotation cheap).
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known dummy secrets: test fixtures and documented placeholders"
+regexes = [
+    '''mgr-test-key-1234567''',
+    '''a-strong-unique-secret-123''',
+    '''test-secret-for-unit-tests''',
+    '''test-manager-api-key''',
+    '''change-me-in-production''',
+]

@@ -216,3 +216,6 @@ data/
 .superpowers/
 data/db/metrics.db
 backend/test_bootstrap.db
+
+# Backup artifacts (Step 2.4)
+backups/

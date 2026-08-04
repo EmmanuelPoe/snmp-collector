@@ -2,6 +2,11 @@
 #   pre-commit install
 # CI runs the same tools in the `lint` job — pre-commit is the fast local gate.
 repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.3
+    hooks:
+      - id: gitleaks
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.22
     hooks:
@@ -15,10 +20,10 @@ repos:
       # --prefix frontend` first. Config: frontend/.prettierrc + the CRA
       # eslintConfig in frontend/package.json.
       - id: prettier
-        name: prettier (frontend)
+        name: prettier (frontend + e2e)
         language: system
         entry: frontend/node_modules/.bin/prettier --check
-        files: ^frontend/src/.*\.(js|css)$
+        files: ^(frontend/src/.*\.(js|css)|e2e/[^/]+\.js)$
       - id: eslint
         name: eslint (frontend)
         language: system

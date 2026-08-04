@@ -42,11 +42,26 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
       - name: prettier check
-        working-directory: frontend
-        run: npx prettier --check "src/**/*.{js,css}"
+        run: frontend/node_modules/.bin/prettier --check "frontend/src/**/*.{js,css}" "e2e/*.js"
       - name: eslint
         working-directory: frontend
         run: npx eslint src --max-warnings=0
+
+  secret-scan:
+    # Secret scanning (Step 3.4 / plan Step 23). Scans the full git history on
+    # every run — the repo is small, and full-history is strictly stronger than
+    # per-PR diff scans. Also runs locally as a pre-commit hook.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+      - name: Scan full history
+        run: gitleaks git --redact --verbose
 
   dependency-audit:
     # Dependency scanning (Step 3.3 / plan Step 22). Policy: fail on findings;
@@ -111,6 +126,23 @@ jobs:
         working-directory: agent
         run: python -m pytest -q
 
+  frontend-tests:
+    # Component tests + coverage floor (Step 3.5 / plan Step 24). The floor is
+    # enforced by jest coverageThreshold in frontend/package.json — ratchet it
+    # up as coverage grows, never down.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci --prefix frontend
+      - name: Run component tests with coverage
+        run: npm run test:ci --prefix frontend
+
   manager-tests:
     # The manager container is authoritative for these tests (pinned Starlette;
     # newer local versions produce spurious 401-vs-403 failures).
@@ -128,7 +160,9 @@ jobs:
       - name: Build manager image
         run: docker compose build manager
       - name: Run manager tests in-container
-        run: docker compose run --rm --no-deps -T manager python -m pytest -q
+        # File registry backend: --no-deps means no postgres (the DB backend
+        # is covered by test_registry_db.py against SQLite).
+        run: docker compose run --rm --no-deps -T -e REGISTRY_BACKEND=file manager python -m pytest -q
 
   build-images:
     runs-on: ubuntu-latest
@@ -181,7 +215,46 @@ jobs:
           fi
       - name: Start the stack
         run: make up
+      # Playwright browser E2E (Step 3.5 / plan Step 24) runs first: it
+      # consumes the one-time bootstrap password and sets a known one, which
+      # the API-level simulation then reuses.
+      - name: Extract bootstrap admin password
+        run: |
+          for i in $(seq 1 30); do
+            PW=$(docker compose logs backend 2>/dev/null \
+              | grep -o 'login with admin@localhost / [^ ]*' | tail -n 1 | awk '{print $5}')
+            [ -n "$PW" ] && break
+            sleep 2
+          done
+          if [ -z "$PW" ]; then
+            echo "No bootstrap password found in backend logs" >&2
+            exit 1
+          fi
+          echo "::add-mask::$PW"
+          echo "E2E_BOOTSTRAP_PASSWORD=$PW" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install Playwright
+        run: |
+          npm ci --prefix e2e
+          npx --prefix e2e playwright install --with-deps chromium
+      - name: Run browser E2E
+        env:
+          E2E_NEW_PASSWORD: E2e-Playwright!234
+        run: npm test --prefix e2e
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
       - name: Run end-to-end simulation
+        env:
+          SIM_ADMIN_EMAIL: admin@localhost
+          SIM_ADMIN_PASSWORD: E2e-Playwright!234
         run: make simulation
       - name: Collect service logs
         if: failure()
