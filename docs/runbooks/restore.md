@@ -39,8 +39,11 @@ ls backups/                       # pick a timestamp pair
 make restore BACKUP=20260719-021500
 ```
 
-`scripts/restore.sh` stops the writers (backend/manager/agent), runs
-`pg_restore --clean --if-exists`, copies the DuckDB snapshot over
+`scripts/restore.sh` stops the writers (backend/manager/agent), recreates the
+Postgres database and restores it inside TimescaleDB's
+`timescaledb_pre_restore()`/`timescaledb_post_restore()` guard (required because
+the image ships the TimescaleDB extension, whose catalog data a plain
+`pg_restore --clean` cannot reconcile), copies the DuckDB snapshot over
 `data/db/metrics.db`, and restarts the services.
 
 **Verify after restore:**
