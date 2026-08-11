@@ -44,7 +44,7 @@ implementation plan (step number in parentheses).
 - [x] **Step 2.3** — Liveness/readiness + ingest backpressure *(plan Step 27, done 2026-07-19)*
 - [x] **Step 2.4** — Backups + tested restore (RPO/RTO) *(plan Step 28, built 2026-07-19 — restore drill itself pending Docker)*
 - [x] **Step 2.5** — Load-test harness at 1000 devices *(plan Step 29, harness built 2026-07-19 — run + publish numbers on next Docker session)*
-- [ ] **Step 2.6** — Metrics-store decision gate (DuckDB vs TimescaleDB hot path) *(plan Step 30 — **blocked on 2.5's published numbers**)*
+- [x] **Step 2.6** — Metrics-store decision gate (DuckDB vs TimescaleDB hot path) *(plan Step 30, decided 2026-08-11 — **keep DuckDB**, ~100× ingest headroom; see [metrics-store-decision.md](metrics-store-decision.md). One open item: high-fan-out query benchmark)*
 - [ ] **Step 4.1** — Non-root containers, least privilege *(plan Step 31)*
 - [ ] **Step 4.2** — Resource limits *(plan Step 32)*
 - [ ] **Step 4.3** — Production compose profile + install/upgrade runbooks *(plan Step 33)*
@@ -344,16 +344,19 @@ cadence). Recipe + results table: `docs/scale-benchmark.md` —
 **run it on the next Docker session and publish the numbers; Step 2.6 is
 blocked on them.**
 
-### Step 2.6 — 🔴 Metrics-store decision gate *(plan Step 30)*
+### Step 2.6 — 🔴 Metrics-store decision gate *(plan Step 30)* ✅ Decided (2026-08-11) — keep DuckDB
 **Why:** All manager writes serialize through one global lock on a single DuckDB
 file, and the backend mounts the same file read-only. Whether that holds at 1000
 devices is an empirical question — decide from 2.5's numbers, not intuition.
-**What to do:** Against pre-stated pass/fail criteria, either (a) keep DuckDB and
-tune (batching, partitioning), or (b) move the hot metrics path to TimescaleDB
-(already in the stack) and keep DuckDB for columnar batch. Document the chosen
-ceiling and the migration path either way.
-**Verify:** Documented, benchmarked ingest/query throughput at the target device
-count; the load test sustains it without lock starvation.
+**Decision:** **Keep DuckDB and tune.** The 2.5 run measured a 510k rows/s ingest
+ceiling (~100× the ~5k rows/s steady-state target), upload p99 152 ms, 0 backpressure
+deferrals, 0 errors, evaluator loop 0.03–0.06 s. Full pass/fail table, the "keep
+and tune" plan, and the TimescaleDB escape-hatch triggers are in
+[metrics-store-decision.md](metrics-store-decision.md). TimescaleDB stays in the
+stack (0 hypertables today) as the documented migration path.
+**Open item:** one criterion (query p99 at 1000-device read fan-out) is still
+provisional — the query load ran at `devices_seen: 1`. Close with a high-fan-out
+query benchmark before calling the gate 100% shut.
 
 ---
 
