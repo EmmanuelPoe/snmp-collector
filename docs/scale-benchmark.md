@@ -36,13 +36,34 @@ Repeat twice; results must agree within ~10% to publish.
 
 ## Published results
 
-> **Pending first run** — the harness landed 2026-07-19 with Docker
-> unavailable on the dev host. Run the recipe above and fill this table;
-> keep superseded rows for history.
+First run on the dev host (single-host compose, 8-core / 7.65 GiB Docker VM,
+macOS). The ingest driver pushes as fast as the manager will accept, so
+**ingest rows/s is the DuckDB write *ceiling*, not the steady-state load** — the
+1000-device steady-state requirement is ≈ 5,000 rows/s (top of this doc).
 
-| Date | Commit | Ingest rows/s | Upload p50/p99 ms | 503 deferrals | Query p50/p99 ms | Scrape ms | Evaluator loop s | Peak CPU / RSS (manager) | Verdict vs 5k rows/s |
-|------|--------|---------------|-------------------|---------------|------------------|-----------|------------------|--------------------------|----------------------|
-| —    | —      | —             | —                 | —             | —                | —         | —                | —                        | —                    |
+| Date | Commit | Ingest rows/s | Upload p50/p99 ms | 503 deferrals | Query p50/p99 ms | Evaluator loop s | RSS (manager) | Verdict vs 5k rows/s |
+|------|--------|---------------|-------------------|---------------|------------------|------------------|---------------|----------------------|
+| 2026-08-11 | `aa913f9` | **510,020** (61.2M rows / 120 s) | 40.3 / 151.5 | **0** | 16.7 / 40.0 | 0.03–0.06 | 809 MiB | ✅ ~**100× headroom** |
+
+Config: 1000 devices × 30 interfaces × 10 OIDs, 25-device batches, ingest
+concurrency 4 (120 s); query concurrency 8 (60 s). Both drivers: **0 errors**.
+DuckDB file grew to 643 MB over the run. `docker stats` at snapshot (post-load,
+idle): manager 809 MiB RSS, backend 229 MiB, postgres 124 MiB, agent 72 MiB —
+CPU < 1% each at rest; the ingest run kept all services healthy with no 503
+backpressure and no evaluator lateness.
+
+**Caveats / not yet measured:**
+- Query load saw only **1 real device** (`devices_seen: 1`) — the backend query
+  path resolves `device_id → ip` from Postgres, and the synthetic ingest fleet
+  is not registered as Postgres devices. So query p50/p99 exercise the
+  backend→manager→DuckDB hop against a 61M-row table but at low fan-out; a
+  high-device-count query benchmark needs the fleet registered as real devices.
+- `docker stats` is a post-run idle snapshot, not peak-under-load; peak CPU was
+  not isolated. Manager RSS (809 MiB) reflects the DuckDB working set after
+  ingesting 61M rows.
+- Sustained-volume query latency as `snmp_polls` approaches ~10⁹ rows at 90-day
+  retention is still open (see below).
+- Second confirming run (the "within ~10%" rule) not yet done — single run so far.
 
 ## Known pressure points being measured
 
