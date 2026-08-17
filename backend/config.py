@@ -1,6 +1,25 @@
+import os
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings
+
+
+# Docker/compose secrets (Step 4.4): if <NAME>_FILE points at a readable file,
+# load its contents into <NAME> before Settings() reads the environment — unless
+# <NAME> is already set explicitly. Keeps secret material in root-owned files
+# instead of the process environment (invisible to `docker inspect`), while
+# check_required_secrets() still validates whatever value results.
+def _hydrate_file_secrets(*names: str) -> None:
+    for name in names:
+        if os.environ.get(name):
+            continue
+        path = os.environ.get(f"{name}_FILE")
+        if path and Path(path).is_file():
+            os.environ[name] = Path(path).read_text().strip()
+
+
+_hydrate_file_secrets("JWT_SECRET", "MANAGER_API_KEY", "ENCRYPTION_KEY", "POSTGRES_PASSWORD")
 
 
 class Settings(BaseSettings):

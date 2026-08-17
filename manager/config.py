@@ -1,4 +1,22 @@
+import os
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
+
+
+# Docker/compose secrets (Step 4.4): load <NAME> from <NAME>_FILE when set, so
+# secrets live in root-owned files rather than the environment. See backend
+# config for the full rationale.
+def _hydrate_file_secrets(*names: str) -> None:
+    for name in names:
+        if os.environ.get(name):
+            continue
+        path = os.environ.get(f"{name}_FILE")
+        if path and Path(path).is_file():
+            os.environ[name] = Path(path).read_text().strip()
+
+
+_hydrate_file_secrets("MANAGER_API_KEY")
 
 
 class Settings(BaseSettings):
