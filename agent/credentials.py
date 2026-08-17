@@ -28,6 +28,10 @@ def load_secret() -> str | None:
     return None
 
 
+def clear_secret() -> None:
+    Path(config.settings.agent_secret_path).unlink(missing_ok=True)
+
+
 def auth_token(agent_id: str | None, secret: str | None) -> str:
     if agent_id and secret:
         return f"{agent_id}:{secret}"

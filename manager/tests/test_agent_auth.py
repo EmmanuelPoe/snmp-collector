@@ -49,6 +49,21 @@ def test_agent_credential_works_on_own_routes(client, two_agents, mock_backend_e
     assert client.get(f"/agents/{agent_a}/commands", headers=cred_a).status_code == 200
 
 
+def test_unknown_agent_gets_404_for_self_heal(client, two_agents, mock_backend_empty):
+    """An agent the registry has never heard of (reset/migrated/restored) gets
+    404 — the signal the agent uses to re-register (Step 2.1 self-heal) — as
+    distinct from a bad secret on a known agent (401)."""
+    cred = {"Authorization": "Bearer snmp-agent-99-deadbeef:some-secret"}
+    assert client.post("/heartbeat", json={"agent_id": "snmp-agent-99-deadbeef"}, headers=cred).status_code == 404
+    assert client.get("/config/snmp-agent-99-deadbeef", headers=cred).status_code == 404
+
+
+def test_known_agent_bad_secret_gets_401(client, two_agents, mock_backend_empty):
+    (agent_a, _), _ = two_agents
+    cred = {"Authorization": f"Bearer {agent_a}:wrong-secret"}
+    assert client.post("/heartbeat", json={"agent_id": agent_a}, headers=cred).status_code == 401
+
+
 def test_agent_cannot_act_as_other_agent(client, two_agents):
     (agent_a, _), (_, cred_b) = two_agents
     assert client.post("/heartbeat", json={"agent_id": agent_a}, headers=cred_b).status_code == 403
@@ -74,9 +89,14 @@ def test_bad_secret_rejected(client, two_agents):
 
 
 def test_deregister_kills_credential(client, two_agents, auth_headers):
+    # Deregister removes the agent from the registry, so it authenticates as an
+    # unknown agent → 404 (same as a registry reset). The credential no longer
+    # works; a claim-enrolled agent cannot re-register (consumed token), so
+    # revocation holds. A shared-key holder could re-register, but it always had
+    # that authority — deregister was never a hard revocation for it.
     (agent_a, cred_a), _ = two_agents
     assert client.delete(f"/agents/{agent_a}", headers=auth_headers).status_code == 204
-    assert client.post("/heartbeat", json={"agent_id": agent_a}, headers=cred_a).status_code == 401
+    assert client.post("/heartbeat", json={"agent_id": agent_a}, headers=cred_a).status_code == 404
 
 
 def test_shared_key_accepted_on_agent_routes_in_grace_mode(client, two_agents, auth_headers):

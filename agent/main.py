@@ -35,6 +35,7 @@ _agent_id: str | None = None
 _agent_secret: str | None = None
 _buffer: UploadBuffer | None = None
 _trap_buffer: TrapBuffer | None = None
+_reregister_lock = asyncio.Lock()
 
 
 def _auth_token() -> str:
@@ -107,6 +108,33 @@ async def _register() -> tuple[str, str | None]:
             await asyncio.sleep(10)
 
 
+async def _reregister(stale_id: str) -> None:
+    """Recover when the manager returns 404 for us — it no longer knows this
+    agent because its registry was reset, migrated, or restored from a backup
+    older than our enrollment. Drop the stored identity, register fresh, and
+    re-point the upload buffers at the new id+token. Concurrent callers (the
+    heartbeat and poll loops can both see the 404) collapse to a single
+    re-registration via the lock + stale-id guard.
+
+    Note: an agent enrolled with a one-time claim token cannot self-heal once
+    that token is consumed — it will retry registration until re-enrolled.
+    """
+    global _agent_id, _agent_secret
+    async with _reregister_lock:
+        if _agent_id != stale_id:
+            return  # another loop already healed us
+        log.warning("Manager does not recognise agent_id %s — re-registering", stale_id)
+        Path(config.settings.agent_id_path).unlink(missing_ok=True)
+        credentials.clear_secret()
+        _agent_id, _agent_secret = await _register()
+        token = _auth_token()
+        if _buffer:
+            _buffer.update_identity(_agent_id, token)
+        if _trap_buffer:
+            _trap_buffer.update_identity(_agent_id, token)
+        log.info("Re-registered as agent_id: %s", _agent_id)
+
+
 # Touched every heartbeat cycle; the compose healthcheck asserts freshness
 # (Step 2.3 — liveness of the asyncio loops, not manager reachability).
 LIVENESS_FILE = Path("/tmp/agent-alive")
@@ -126,12 +154,14 @@ async def _heartbeat_loop() -> None:
         _touch_liveness()
         try:
             async with httpx.AsyncClient() as client:
-                await client.post(
+                resp = await client.post(
                     f"{config.settings.manager_url}/heartbeat",
                     json={"agent_id": _agent_id, "pending_uploads": _buffer.pending_count() if _buffer else 0},
                     headers=_auth_headers(),
                     timeout=5.0,
                 )
+            if resp.status_code == 404:
+                await _reregister(_agent_id)
         except Exception as exc:
             log.debug("Heartbeat failed: %s", exc)
 
@@ -167,6 +197,9 @@ async def _poll_loop() -> None:
         try:
             devices = await _fetch_devices()
         except Exception as exc:
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404:
+                await _reregister(_agent_id)
+                continue
             log.warning("Failed to fetch devices: %s — retrying in 60s", exc)
             await asyncio.sleep(60)
             continue

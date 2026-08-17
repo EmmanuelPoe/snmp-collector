@@ -41,7 +41,15 @@ def require_agent_auth(
     if ":" in token:
         agent_id, secret = token.split(":", 1)
         info = registry.get(agent_id)
-        if info is not None and info.verify_secret(secret):
+        # Unknown agent (registry reset/migrated/restored older than enrollment)
+        # → 404 so the agent re-registers (Step 2.1 self-heal). A *known* agent
+        # presenting a bad secret is a real auth failure → 401, no auto-heal.
+        if info is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Unknown agent — re-registration required",
+            )
+        if info.verify_secret(secret):
             return agent_id
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

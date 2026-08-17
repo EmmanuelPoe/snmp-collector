@@ -47,6 +47,13 @@ class UploadBuffer:
         self._queue = Path(config.settings.queue_path)
         self._queue.mkdir(parents=True, exist_ok=True)
 
+    def update_identity(self, agent_id: str, token: str | None) -> None:
+        """Adopt a new identity after the agent re-registers (Step 2.1 self-heal).
+        Buffered rows already carry the old agent_id and are left as-is; only
+        future uploads use the new auth token."""
+        self._agent_id = agent_id
+        self._token = token or config.settings.manager_api_key
+
     def add(self, row: dict) -> None:
         if self._first_row_at is None:
             self._first_row_at = time.monotonic()
@@ -117,6 +124,11 @@ class TrapBuffer:
         self._rows: list[dict] = []
         self._queue = Path(config.settings.queue_path) / "traps"
         self._queue.mkdir(parents=True, exist_ok=True)
+
+    def update_identity(self, agent_id: str, token: str | None) -> None:
+        """Adopt a new identity after the agent re-registers (Step 2.1 self-heal)."""
+        self._agent_id = agent_id
+        self._token = token or config.settings.manager_api_key
 
     async def add(self, row: dict) -> None:
         self._rows.append(row)
