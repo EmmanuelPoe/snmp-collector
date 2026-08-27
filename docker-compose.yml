@@ -8,8 +8,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    # Host port publishing for postgres lives in docker-compose.override.yml
+    # (dev-only, auto-loaded). Production (explicit -f prod) leaves 5432 closed.
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -91,8 +91,9 @@ services:
   manager:
     build: ./manager
     container_name: snmp-manager
-    ports:
-      - "8001:8000"
+    # Host port publishing for the manager lives in docker-compose.override.yml
+    # (dev-only, auto-loaded). Production reaches the manager over the internal
+    # network and the nginx /agent/ route; 8001 stays closed on the host.
     volumes:
       - ./data/db:/data/db
       - ./data/dead-letter:/data/dead-letter

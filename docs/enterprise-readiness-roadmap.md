@@ -45,10 +45,10 @@ implementation plan (step number in parentheses).
 - [x] **Step 2.4** — Backups + tested restore (RPO/RTO) *(plan Step 28, built 2026-07-19 — restore drill itself pending Docker)*
 - [x] **Step 2.5** — Load-test harness at 1000 devices *(plan Step 29, harness built 2026-07-19 — run + publish numbers on next Docker session)*
 - [x] **Step 2.6** — Metrics-store decision gate (DuckDB vs TimescaleDB hot path) *(plan Step 30, decided 2026-08-11 — **keep DuckDB**, ~100× ingest headroom; see [metrics-store-decision.md](metrics-store-decision.md). One open item: high-fan-out query benchmark)*
-- [ ] **Step 4.1** — Non-root containers, least privilege *(plan Step 31)*
-- [ ] **Step 4.2** — Resource limits *(plan Step 32)*
-- [ ] **Step 4.3** — Production compose profile + install/upgrade runbooks *(plan Step 33)*
-- [ ] **Step 4.4** — Single-host secrets handling *(plan Step 34)*
+- [x] **Step 4.1** — Non-root containers, least privilege *(plan Step 31, done 2026-08-16 — backend/agent/frontend now non-root; read_only+cap_drop in the prod overlay; verified UIDs live)*
+- [x] **Step 4.2** — Resource limits *(plan Step 33 overlay, done 2026-08-16 — per-service CPU/mem sized from the 2.5 numbers)*
+- [x] **Step 4.3** — Production compose profile + install/upgrade runbooks *(plan Step 33, done 2026-08-16 — docker-compose.prod.yml + dev/prod port split via override.yml; install/upgrade/rollback runbooks)*
+- [x] **Step 4.4** — Single-host secrets handling *(plan Step 34, done 2026-08-16 — `*_FILE` config support + compose `secrets:` + secret-rotation runbook + ENCRYPTION_KEY rotation script)*
 - [ ] **Step 5.1** — Shared structured logging + correlation IDs *(plan Step 35)*
 - [ ] **Step 5.2** — Observability overlay: dashboards + alert rules as code *(plan Step 36)*
 - [ ] **Step 5.3** — SLO definitions (+ optional OTel) *(plan Step 37)*

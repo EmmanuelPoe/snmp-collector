@@ -335,4 +335,26 @@ The history endpoint requires at least two poll samples within the requested tim
 
 ---
 
+## Production deployment
+
+`make up` targets local dev. For a hardened single-host deployment, layer the
+production overlay on top of the base + TLS files:
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.tls.yml -f docker-compose.prod.yml up -d
+```
+
+The overlay (`docker-compose.prod.yml`) adds restart policies, log rotation,
+per-service resource limits (sized from [docs/scale-benchmark.md](docs/scale-benchmark.md)),
+least-privilege hardening (non-root, `cap_drop`, read-only rootfs where feasible),
+and file-based secrets (`*_FILE`) so no secret material sits in the environment.
+Internal ports (5432, 8001) are published only by the dev-auto-loaded
+`docker-compose.override.yml`, so production leaves them closed.
+
+Runbooks: [install](docs/runbooks/install.md) · [upgrade](docs/runbooks/upgrade.md) ·
+[rollback](docs/runbooks/rollback.md) · [backup/restore](docs/runbooks/restore.md) ·
+[secret rotation](docs/runbooks/secret-rotation.md) · [TLS](docs/runbooks/tls.md).
+
+---
+
 Built with Docker, FastAPI, React, PostgreSQL (TimescaleDB), DuckDB, and Nginx.
