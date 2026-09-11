@@ -1,9 +1,12 @@
 import re
 import tempfile
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import config
 import db
+import metrics
 from auth import require_agent_auth
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from logging_json import get_logger
@@ -11,6 +14,14 @@ from services.ingest import ChecksumError, DuplicateFileError, ingest_file
 
 router = APIRouter(tags=["ingest"])
 logger = get_logger(__name__)
+
+
+def _record_duckdb_size() -> None:
+    try:
+        metrics.duckdb_file_bytes.set(Path(config.settings.db_path).stat().st_size)
+    except OSError:
+        pass
+
 
 _VALID_TYPES = {"polls": "snmp_polls", "traps": "snmp_traps"}
 
@@ -52,8 +63,14 @@ async def ingest(
         tmp.write(await file.read())
         tmp_path = Path(tmp.name)
 
+    started = time.monotonic()
     try:
         rows = await ingest_file(x_file_id, x_sha256, tmp_path, table)
+        metrics.ingest_duration.labels(table=table).observe(time.monotonic() - started)
+        metrics.ingest_rows.labels(table=table).inc(rows)
+        metrics.ingest_last_success.set(datetime.now(timezone.utc).timestamp())
+        metrics.ingest_queue_depth.set(db.write_queue_depth())
+        _record_duckdb_size()
         logger.info("ingest accepted", extra={"file_id": x_file_id, "table": table, "rows": rows})
         return {"ok": True, "rows_ingested": rows}
     except ChecksumError as exc:

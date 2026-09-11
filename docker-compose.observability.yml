@@ -1,0 +1,93 @@
+# Observability overlay (Step 5.2 / plan Step 36). Opt-in — layer on top of the
+# base stack:
+#   docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+# Ships platform metrics (Prometheus + node-exporter), dashboards + alert rules as
+# code (Grafana, provisioned), and container logs (Loki + Promtail — queryable by
+# the Step 5.1 JSON fields, e.g. correlation_id). Grafana needs
+# GF_SECURITY_ADMIN_PASSWORD in .env.
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: snmp-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./observability/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    networks:
+      - snmp-network
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: snmp-node-exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+    pid: host
+    volumes:
+      # Plain :ro (not rslave) so it also starts on Docker Desktop; on a Linux
+      # host bind-mounted sub-filesystems just won't be separately reported.
+      - /:/host:ro
+    networks:
+      - snmp-network
+
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: snmp-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - snmp-network
+
+  promtail:
+    image: grafana/promtail:3.1.1
+    container_name: snmp-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    networks:
+      - snmp-network
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: snmp-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?set GF_SECURITY_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - snmp-network
+
+volumes:
+  prometheus_data:
+  loki_data:
+  grafana_data:

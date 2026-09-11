@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 import config
 import httpx
+import metrics
 from auth import ensure_same_agent, require_agent_auth, require_api_key
 from fastapi import APIRouter, Depends, HTTPException
 from logging_json import correlation_headers
@@ -39,6 +40,7 @@ def heartbeat(req: HeartbeatRequest, identity: str = Depends(require_agent_auth)
         registry.heartbeat(req.agent_id, req.pending_uploads)
     except KeyError:
         raise HTTPException(status_code=404, detail="Agent not registered")
+    metrics.agent_pending_uploads.labels(agent_id=req.agent_id).set(req.pending_uploads)
     return {"ok": True}
 
 
@@ -65,6 +67,7 @@ def deregister_offline(_: str = Depends(require_api_key)):
     offline_ids = [a.agent_id for a in registry.all() if a.status == "offline"]
     for agent_id in offline_ids:
         registry.deregister(agent_id)
+        _clear_agent_metric(agent_id)
 
 
 @router.delete("/agents/{agent_id}", status_code=204)
@@ -72,6 +75,15 @@ def deregister_agent(agent_id: str, _: str = Depends(require_api_key)):
     if not registry.get(agent_id):
         raise HTTPException(status_code=404, detail="Agent not found")
     registry.deregister(agent_id)
+    _clear_agent_metric(agent_id)
+
+
+def _clear_agent_metric(agent_id: str) -> None:
+    """Drop a deregistered agent's gauge series so it doesn't linger."""
+    try:
+        metrics.agent_pending_uploads.remove(agent_id)
+    except KeyError:
+        pass
 
 
 def _agent_list() -> list[dict]:

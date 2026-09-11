@@ -1,4 +1,4 @@
-.PHONY: loadtest backup restore help setup ensure-env ensure-dirs build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend
+.PHONY: loadtest backup restore help setup ensure-env ensure-dirs build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend observability-up observability-down observability-token dev-frontend dev-backend
 
 # Create .env from the example on first run, generating strong random secrets so
 # the stack starts securely out of the box (the services refuse to start with the
@@ -146,8 +146,19 @@ restart-backend:
 restart-frontend:
 	docker-compose restart frontend
 
-restart-exporter:
-	docker-compose restart snmp-exporter
+# Observability overlay (Step 5.2): Prometheus + Grafana + Loki + Promtail.
+observability-up: ensure-env
+	docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+	@echo "Grafana: http://localhost:3001  Prometheus: http://localhost:9090"
+
+observability-down:
+	docker-compose -f docker-compose.yml -f docker-compose.observability.yml down
+
+# Write PROMETHEUS_SCRAPE_TOKEN (from .env) to the gitignored file Prometheus
+# reads for the token-gated per-device metrics job.
+observability-token: ensure-env
+	@grep '^PROMETHEUS_SCRAPE_TOKEN=' .env | cut -d= -f2- > observability/prometheus/scrape_token
+	@echo "Wrote observability/prometheus/scrape_token"
 
 # Run simulation test
 simulation:

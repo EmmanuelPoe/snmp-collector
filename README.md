@@ -192,7 +192,23 @@ make shell-db          # psql into postgres
 
 make dev-frontend      # Run frontend locally (npm start)
 make dev-backend       # Run backend locally (uvicorn --reload)
+
+make observability-up    # Start the Prometheus/Grafana/Loki overlay
+make observability-down  # Stop the observability overlay
+make observability-token # Enable the token-gated per-device metrics scrape
 ```
+
+## Observability
+
+An opt-in overlay adds Prometheus, Grafana (with provisioned dashboards + alert
+rules as code), Loki, Promtail, and node-exporter:
+
+```bash
+make observability-up   # Grafana http://localhost:3001, Prometheus http://localhost:9090
+```
+
+Set `GF_SECURITY_ADMIN_PASSWORD` in `.env` first. Logs are queryable in Grafana by
+`correlation_id` (Step 5.1 schema). See [observability/README.md](observability/README.md).
 
 ## API reference
 

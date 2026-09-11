@@ -5,6 +5,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 
 import httpx
+import metrics
 from config import settings
 from database import SessionLocal
 from logging_json import correlation_headers, new_correlation_id
@@ -549,6 +550,7 @@ async def evaluation_loop():
         started = time.monotonic()
         run_evaluation()
         elapsed = time.monotonic() - started
+        metrics.alert_eval_last_duration.set(elapsed)
         if elapsed > 30:
             logger.warning("alert evaluation took %.1fs — exceeds its 30s cadence", elapsed)
         else:

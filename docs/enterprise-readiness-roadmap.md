@@ -50,7 +50,7 @@ implementation plan (step number in parentheses).
 - [x] **Step 4.3** — Production compose profile + install/upgrade runbooks *(plan Step 33, done 2026-08-16 — docker-compose.prod.yml + dev/prod port split via override.yml; install/upgrade/rollback runbooks)*
 - [x] **Step 4.4** — Single-host secrets handling *(plan Step 34, done 2026-08-16 — `*_FILE` config support + compose `secrets:` + secret-rotation runbook + ENCRYPTION_KEY rotation script)*
 - [x] **Step 5.1** — Shared structured logging + correlation IDs *(plan Step 35, done 2026-09-10 — shared/logging_json.py vendored into all 3 services (CI drift-check); JSON schema ts/level/service/logger/msg/correlation_id/+extras; ASGI CorrelationMiddleware on backend+manager; X-Correlation-ID forwarded on every cross-service httpx call; agent stamps one per poll/heartbeat/retry cycle)*
-- [ ] **Step 5.2** — Observability overlay: dashboards + alert rules as code *(plan Step 36)*
+- [x] **Step 5.2** — Observability overlay: dashboards + alert rules as code *(plan Step 36, done 2026-09-10 — docker-compose.observability.yml: Prometheus+Grafana+Loki+Promtail+node-exporter; platform metrics (ingest freshness/rows/latency, write-lock wait, queue depth, DuckDB size, agent uploads, evaluator duration, backup age); 2 provisioned dashboards + 7 alert rules as code; verified live incl. freshness alert firing + Loki correlation-id query. Fixed latent bug: PROMETHEUS_SCRAPE_TOKEN was never passed to the backend container)*
 - [ ] **Step 5.3** — SLO definitions (+ optional OTel) *(plan Step 37)*
 - [x] **Step 6.1** — Password + session policy *(plan Step 38, done 2026-09-10 — password_policy.py (min-length + common-password + email-name checks, opt-in classes); sliding idle window via `/auth/refresh` + absolute cap; frontend SessionMonitor with idle-warning toast)*
 - [ ] **Step 6.2** — RBAC gating audit + pagination caps *(plan Step 39)*
@@ -414,7 +414,7 @@ calls and agent uploads, and emit it in every log line.
 **Verify:** A single upload can be followed end-to-end across services by one
 correlation ID; all services emit the same log schema.
 
-### Step 5.2 — 🟡 Observability overlay: dashboards + alert rules as code *(plan Step 36)*
+### Step 5.2 — 🟡 Observability overlay: dashboards + alert rules as code *(plan Step 36)* ✅ Done (2026-09-10)
 **Why:** Metrics are exposed but there are no checked-in dashboards or platform
 alert rules. Also fixes the docs/compose drift: `.env.example` references a
 `docker-compose.observability.yml` (and a Grafana password) that don't exist, and

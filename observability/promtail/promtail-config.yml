@@ -1,0 +1,39 @@
+# Promtail (Step 5.2): discover the collector's containers via the Docker socket
+# and ship their logs to Loki. The Step 5.1 JSON schema is parsed so `service`
+# and `level` become low-cardinality labels; correlation_id stays in the line and
+# is queried at read time with `| json | correlation_id="..."` (labelling it would
+# explode cardinality).
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+    relabel_configs:
+      # Only our services; drop the leading slash from the container name.
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(snmp-.*)'
+        action: keep
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(snmp-.*)'
+        target_label: container
+    pipeline_stages:
+      # App lines are JSON (Step 5.1); non-JSON lines (e.g. uvicorn access) pass
+      # through unparsed and just carry the container label.
+      - json:
+          expressions:
+            service: service
+            level: level
+      - labels:
+          service:
+          level:

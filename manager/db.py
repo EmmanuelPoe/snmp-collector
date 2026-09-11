@@ -1,11 +1,13 @@
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import config
 import duckdb
+import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +26,10 @@ def write_queue_depth() -> int:
 async def _locked():
     global _waiters
     _waiters += 1
+    start = time.monotonic()
     try:
         async with _write_lock:
+            metrics.write_lock_wait.observe(time.monotonic() - start)
             yield
     finally:
         _waiters -= 1

@@ -571,7 +571,38 @@ suites green (backend 212, manager 103, agent 12). No migration.
 
 **Decision required:** build-context widening vs vendored copies — recommend widening the build context (one source of truth); it costs a slightly larger build context only.
 
-## Step 36 — Observability overlay: dashboards + alert rules as code *(roadmap 5.2)*
+## Step 36 — Observability overlay: dashboards + alert rules as code *(roadmap 5.2)* ✅ DONE (2026-09-10)
+
+**Built:** `docker-compose.observability.yml` (opt-in; `make observability-up`) with
+Prometheus, Grafana, Loki, Promtail, and node-exporter — all on `snmp-network`.
+Platform instrumentation on the existing unauthenticated scrape endpoints
+(manager `/metrics`, backend `/internal/prometheus`) via `manager/metrics.py` +
+`backend/metrics.py`: `snmp_ingest_rows_total`, `snmp_ingest_duration_seconds`,
+`snmp_ingest_last_success_timestamp_seconds` (freshness), `snmp_ingest_queue_depth`,
+`snmp_write_lock_wait_seconds`, `snmp_duckdb_file_bytes`, `snmp_agent_pending_uploads`
+(from heartbeat, cleared on deregister), `snmp_alert_eval_last_duration_seconds`,
+`snmp_backup_age_seconds` (manager refresh loop, reads the mounted backup dir).
+Alert rules as code in `observability/prometheus/alerts.yml` (7: ingest freshness,
+evaluator overrun, queue depth, agent uploads, disk >80% via node-exporter, backup
+age > RPO, target down). Two provisioned Grafana dashboards
+(`observability/grafana/dashboards/`): platform-health + device-overview, with
+provisioned Prometheus+Loki datasources (fixed UIDs). Promtail discovers the
+`snmp-*` containers via the docker socket and parses the Step 5.1 JSON so logs are
+queryable by `service`/`level` (labels) and `correlation_id` (`| json`). The stray
+`prometheus/` snmp-exporter dir was moved to `observability/snmp-exporter/` and
+documented as a separate, unwired direct-SNMP path. Fixed a latent bug found in
+verification: `PROMETHEUS_SCRAPE_TOKEN` was documented + read by the backend but
+never passed to the backend container, so the per-device exporter always 503'd in
+Docker. The per-device metrics scrape is token-gated via a gitignored
+`scrape_token` file (`make observability-token`). Also fixed the bogus
+`observability/loki/loki-config.yml` (was an empty directory) and the dead Makefile
+`restart-exporter` target.
+
+**Verified live:** all scrape targets up (backend, manager, node, prometheus, and
+device-metrics with the token); both dashboards + datasources auto-provisioned;
+Loki query by one `correlation_id` returned agent + manager lines; stopping the
+agent drove `IngestFreshnessStalled` to firing; disk + backup-age alerts pending
+off real readings. Suites unchanged green (backend 212, manager 103, agent 12).
 
 **Problem (verified):** `docker-compose.observability.yml` is referenced by `.env.example` (with `GF_SECURITY_ADMIN_PASSWORD`) **but does not exist**; `observability/` contains only an empty `loki/` dir; no Grafana dashboards or platform alert rules are checked in. Prometheus HTTP metrics are already exposed (`/internal/prometheus` via Instrumentator, [backend/main.py:91](../backend/main.py#L91)).
 

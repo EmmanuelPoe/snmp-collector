@@ -1,8 +1,11 @@
 import asyncio
+import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import config
 import db as db_mod
+import metrics as platform_metrics
 from db import close_db, get_db, purge_old_metrics
 from fastapi import FastAPI, Response, status
 from logging_json import CorrelationMiddleware, configure_logging, get_logger
@@ -13,6 +16,8 @@ configure_logging("manager")
 logger = get_logger(__name__)
 
 _RETENTION_INTERVAL_SECONDS = 7 * 24 * 3600  # weekly
+_METRICS_REFRESH_SECONDS = 60
+_BACKUP_SUFFIXES = (".dump", ".db")
 
 
 async def _retention_loop():
@@ -26,17 +31,44 @@ async def _retention_loop():
         await asyncio.sleep(_RETENTION_INTERVAL_SECONDS)
 
 
+def _newest_backup_mtime() -> float | None:
+    try:
+        mtimes = [
+            p.stat().st_mtime
+            for p in Path(config.settings.backup_dir).iterdir()
+            if p.is_file() and p.suffix in _BACKUP_SUFFIXES
+        ]
+    except OSError:
+        return None
+    return max(mtimes) if mtimes else None
+
+
+async def _metrics_refresh_loop():
+    """Keep the size/age gauges fresh even when no ingest is happening."""
+    while True:
+        try:
+            platform_metrics.duckdb_file_bytes.set(Path(config.settings.db_path).stat().st_size)
+        except OSError:
+            pass
+        newest = _newest_backup_mtime()
+        if newest is not None:
+            platform_metrics.backup_age_seconds.set(time.time() - newest)
+        await asyncio.sleep(_METRICS_REFRESH_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config.check_required_secrets()
     get_db()
-    task = asyncio.create_task(_retention_loop())
+    tasks = [asyncio.create_task(_retention_loop()), asyncio.create_task(_metrics_refresh_loop())]
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     close_db()
 
 
