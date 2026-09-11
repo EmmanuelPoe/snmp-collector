@@ -1,16 +1,16 @@
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Header, status
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from sqlalchemy.orm import Session
-
 from config import settings
 from database import get_db
-from models import User
+from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from models import RevokedToken, User
+from passlib.context import CryptContext
+from sqlalchemy.orm import Session
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -24,9 +24,22 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(data: dict) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=settings.jwt_expire_hours)
-    return jwt.encode({**data, "exp": expire}, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+def create_access_token(data: dict, session_start: Optional[int] = None) -> str:
+    now = datetime.now(timezone.utc)
+    # Idle window (Step 6.1): the token lives for session_idle_minutes; the
+    # frontend refreshes it on activity, so an inactive session lapses at idle.
+    expire = now + timedelta(minutes=settings.session_idle_minutes)
+    # Absolute cap: sst (session start) is preserved across refreshes, so a
+    # session can never outlive session_absolute_hours regardless of activity.
+    sst = session_start if session_start is not None else int(now.timestamp())
+    absolute_deadline = datetime.fromtimestamp(sst, tz=timezone.utc) + timedelta(hours=settings.session_absolute_hours)
+    expire = min(expire, absolute_deadline)
+    # jti (Step 1.4): unique token id so an individual token can be revoked at logout.
+    return jwt.encode(
+        {**data, "exp": expire, "sst": sst, "jti": uuid.uuid4().hex},
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
 
 
 def _resolve_user(token: str, db: Session) -> User:
@@ -44,6 +57,14 @@ def _resolve_user(token: str, db: Session) -> User:
         raise exc
     user = db.query(User).filter(User.email == email, User.is_active == True).first()
     if not user:
+        raise exc
+    # Token lifecycle (Step 1.4): reject version-stale tokens (issued before the
+    # user's last password change) and revoked (logged-out) tokens. Tokens issued
+    # before this feature carry no "ver" claim and default to version 0.
+    if payload.get("ver", 0) != (user.token_version or 0):
+        raise exc
+    jti = payload.get("jti")
+    if jti and db.query(RevokedToken).filter(RevokedToken.jti == jti).first():
         raise exc
     return user
 
@@ -71,10 +92,12 @@ def get_current_user_unchecked(
 
 def require_role(*roles: str):
     """Return a FastAPI dependency that enforces one of the given roles."""
+
     def dependency(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
         return current_user
+
     return dependency
 
 

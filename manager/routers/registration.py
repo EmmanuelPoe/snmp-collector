@@ -1,19 +1,22 @@
-import httpx
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
-from models import RegisterRequest, RegisterResponse, HeartbeatRequest, DeviceConfig, ClaimRequest, ClaimResponse
-from registry import registry, AgentInfo
-from slots import slot_store
-from auth import require_api_key
+
 import config
+import httpx
+import metrics
+from auth import ensure_same_agent, require_agent_auth, require_api_key
+from fastapi import APIRouter, Depends, HTTPException
+from logging_json import correlation_headers
+from models import ClaimRequest, ClaimResponse, DeviceConfig, HeartbeatRequest, RegisterRequest, RegisterResponse
+from registry import AgentInfo, hash_secret, new_secret, registry
+from slots import slot_store
 
 router = APIRouter(tags=["registration"])
 
 
 @router.post("/register", response_model=RegisterResponse)
 async def register(req: RegisterRequest, _: str = Depends(require_api_key)):
-    agent_id = registry.register(req.hostname, req.ip)
-    return RegisterResponse(agent_id=agent_id, devices=await _devices_for(agent_id))
+    agent_id, secret = registry.register(req.hostname, req.ip)
+    return RegisterResponse(agent_id=agent_id, agent_secret=secret, devices=await _devices_for(agent_id))
 
 
 @router.post("/claim", response_model=ClaimResponse)
@@ -22,25 +25,28 @@ async def claim(req: ClaimRequest):
         agent_id = slot_store.claim(req.token, req.hostname, req.ip)
     except KeyError:
         raise HTTPException(status_code=404, detail="Token not found or expired")
-    info = AgentInfo(agent_id, req.hostname, req.ip)
+    secret = new_secret()
+    info = AgentInfo(agent_id, req.hostname, req.ip, secret_hash=hash_secret(secret))
     info.last_seen = datetime.now(timezone.utc)
-    registry._agents[agent_id] = info
-    registry._persist()
+    registry.add(info)
     devices = await _devices_for(agent_id)
-    return ClaimResponse(agent_id=agent_id, devices=devices)
+    return ClaimResponse(agent_id=agent_id, agent_secret=secret, devices=devices)
 
 
 @router.post("/heartbeat")
-def heartbeat(req: HeartbeatRequest, _: str = Depends(require_api_key)):
+def heartbeat(req: HeartbeatRequest, identity: str = Depends(require_agent_auth)):
+    ensure_same_agent(identity, req.agent_id)
     try:
         registry.heartbeat(req.agent_id, req.pending_uploads)
     except KeyError:
         raise HTTPException(status_code=404, detail="Agent not registered")
+    metrics.agent_pending_uploads.labels(agent_id=req.agent_id).set(req.pending_uploads)
     return {"ok": True}
 
 
 @router.get("/config/{agent_id}", response_model=list[DeviceConfig])
-async def get_config(agent_id: str, _: str = Depends(require_api_key)):
+async def get_config(agent_id: str, identity: str = Depends(require_agent_auth)):
+    ensure_same_agent(identity, agent_id)
     if not registry.get(agent_id):
         raise HTTPException(status_code=404, detail="Agent not found")
     return await _devices_for(agent_id)
@@ -61,6 +67,7 @@ def deregister_offline(_: str = Depends(require_api_key)):
     offline_ids = [a.agent_id for a in registry.all() if a.status == "offline"]
     for agent_id in offline_ids:
         registry.deregister(agent_id)
+        _clear_agent_metric(agent_id)
 
 
 @router.delete("/agents/{agent_id}", status_code=204)
@@ -68,6 +75,15 @@ def deregister_agent(agent_id: str, _: str = Depends(require_api_key)):
     if not registry.get(agent_id):
         raise HTTPException(status_code=404, detail="Agent not found")
     registry.deregister(agent_id)
+    _clear_agent_metric(agent_id)
+
+
+def _clear_agent_metric(agent_id: str) -> None:
+    """Drop a deregistered agent's gauge series so it doesn't linger."""
+    try:
+        metrics.agent_pending_uploads.remove(agent_id)
+    except KeyError:
+        pass
 
 
 def _agent_list() -> list[dict]:
@@ -103,7 +119,10 @@ async def _devices_for(agent_id: str) -> list[DeviceConfig]:
             resp = await client.get(
                 f"{config.settings.backend_url}/internal/devices",
                 params={"agent_id": agent_id},
-                headers={"Authorization": f"Bearer {config.settings.manager_api_key}"},
+                headers={
+                    "Authorization": f"Bearer {config.settings.manager_api_key}",
+                    **correlation_headers(),
+                },
                 timeout=10.0,
             )
             resp.raise_for_status()

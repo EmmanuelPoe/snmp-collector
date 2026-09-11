@@ -6,16 +6,16 @@ authenticate with a dedicated bearer token (PROMETHEUS_SCRAPE_TOKEN), kept
 separate from MANAGER_API_KEY so the manager/agent secret never lands in a
 scrape config.
 """
+
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException
-from fastapi.responses import PlainTextResponse
-from sqlalchemy.orm import Session
-
 from config import settings
 from database import get_db
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import PlainTextResponse
 from models import Device
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,12 @@ def _require_scrape_token(authorization: str = Header(None)):
 
 def _fetch_rates(device_ip: str) -> dict:
     url = f"{settings.manager_url}/internal/metrics/rates"
-    resp = httpx.get(url, params={"device_ip": device_ip, "hours": _RATES_LOOKBACK_HOURS},
-                     headers={"Authorization": f"Bearer {settings.manager_api_key}"}, timeout=10)
+    resp = httpx.get(
+        url,
+        params={"device_ip": device_ip, "hours": _RATES_LOOKBACK_HOURS},
+        headers={"Authorization": f"Bearer {settings.manager_api_key}"},
+        timeout=10,
+    )
     resp.raise_for_status()
     return resp.json()
 
@@ -67,19 +71,18 @@ def _render(devices_rates: list[tuple]) -> str:
         lines["snmp_device_up"].append(f"snmp_device_up{{{dlabel}}} {1 if interfaces else 0}")
         for name, iface in interfaces.items():
             ilabel = f'{dlabel},interface="{_esc(name)}"'
-            lines["snmp_interface_in_bps"].append(
-                f"snmp_interface_in_bps{{{ilabel}}} {iface.get('current_in_bps', 0)}")
+            lines["snmp_interface_in_bps"].append(f"snmp_interface_in_bps{{{ilabel}}} {iface.get('current_in_bps', 0)}")
             lines["snmp_interface_out_bps"].append(
-                f"snmp_interface_out_bps{{{ilabel}}} {iface.get('current_out_bps', 0)}")
+                f"snmp_interface_out_bps{{{ilabel}}} {iface.get('current_out_bps', 0)}"
+            )
             if iface.get("utilization_pct") is not None:
                 lines["snmp_interface_utilization_percent"].append(
-                    f"snmp_interface_utilization_percent{{{ilabel}}} {iface['utilization_pct']}")
-            lines["snmp_interface_errors"].append(
-                f"snmp_interface_errors{{{ilabel}}} {iface.get('error_count', 0)}")
+                    f"snmp_interface_utilization_percent{{{ilabel}}} {iface['utilization_pct']}"
+                )
+            lines["snmp_interface_errors"].append(f"snmp_interface_errors{{{ilabel}}} {iface.get('error_count', 0)}")
             status = iface.get("status")
             if status in ("up", "down"):
-                lines["snmp_interface_up"].append(
-                    f"snmp_interface_up{{{ilabel}}} {1 if status == 'up' else 0}")
+                lines["snmp_interface_up"].append(f"snmp_interface_up{{{ilabel}}} {1 if status == 'up' else 0}")
 
     out = []
     for name, help_text in _GAUGES.items():
@@ -91,8 +94,7 @@ def _render(devices_rates: list[tuple]) -> str:
     return "\n".join(out) + "\n"
 
 
-@router.get("/metrics/prometheus", response_class=PlainTextResponse,
-            dependencies=[Depends(_require_scrape_token)])
+@router.get("/metrics/prometheus", response_class=PlainTextResponse, dependencies=[Depends(_require_scrape_token)])
 def prometheus_metrics(db: Session = Depends(get_db)):
     devices = db.query(Device).filter(Device.enabled == True).all()
     devices_rates = []

@@ -3,21 +3,34 @@
     "version": "1.0.0",
     "private": true,
     "dependencies": {
+        "@emotion/react": "^11.11.3",
+        "@emotion/styled": "^11.11.0",
+        "@mui/icons-material": "^5.15.0",
+        "@mui/material": "^5.15.0",
+        "axios": "^1.6.2",
+        "cytoscape": "^3.34.0",
         "react": "^18.2.0",
+        "react-cytoscapejs": "^2.0.0",
         "react-dom": "^18.2.0",
         "react-router-dom": "^6.21.0",
-        "axios": "^1.6.2",
-        "recharts": "^2.10.3",
-        "@mui/material": "^5.15.0",
-        "@mui/icons-material": "^5.15.0",
-        "@emotion/react": "^11.11.3",
-        "@emotion/styled": "^11.11.0"
+        "recharts": "^2.10.3"
     },
     "scripts": {
         "start": "react-scripts start",
         "build": "react-scripts build",
         "test": "react-scripts test",
+        "test:ci": "react-scripts test --watchAll=false --coverage",
         "eject": "react-scripts eject"
+    },
+    "jest": {
+        "coverageThreshold": {
+            "global": {
+                "statements": 22,
+                "branches": 15,
+                "functions": 13,
+                "lines": 23
+            }
+        }
     },
     "eslintConfig": {
         "extends": [
@@ -37,6 +50,10 @@
         ]
     },
     "devDependencies": {
+        "@testing-library/jest-dom": "^6.6.3",
+        "@testing-library/react": "^14.3.1",
+        "@testing-library/user-event": "^14.5.2",
+        "prettier": "3.9.5",
         "react-scripts": "5.0.1"
     }
 }

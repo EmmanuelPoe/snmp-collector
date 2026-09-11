@@ -1,12 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  getNotificationChannels, createNotificationChannel,
-  updateNotificationChannel, deleteNotificationChannel,
+  getNotificationChannels,
+  createNotificationChannel,
+  updateNotificationChannel,
+  deleteNotificationChannel,
 } from '../services/api';
 import { useToast } from '../hooks/useToast';
 
 const SEVERITIES = ['critical', 'warning', 'info'];
-const EMPTY_FORM = { name: '', type: 'slack', url: '', severity_filter: [...SEVERITIES], enabled: true };
+const EMPTY_FORM = {
+  name: '',
+  type: 'slack',
+  url: '',
+  severity_filter: [...SEVERITIES],
+  enabled: true,
+};
 
 export default function NotificationSettings() {
   const { showToast } = useToast();
@@ -17,7 +25,10 @@ export default function NotificationSettings() {
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
 
-  const closeModal = () => { setShowModal(false); setForm(EMPTY_FORM); };
+  const closeModal = () => {
+    setShowModal(false);
+    setForm(EMPTY_FORM);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,13 +41,15 @@ export default function NotificationSettings() {
     }
   }, [showToast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const toggleSeverity = (sev) => {
-    setForm(f => ({
+    setForm((f) => ({
       ...f,
       severity_filter: f.severity_filter.includes(sev)
-        ? f.severity_filter.filter(s => s !== sev)
+        ? f.severity_filter.filter((s) => s !== sev)
         : [...f.severity_filter, sev],
     }));
   };
@@ -45,7 +58,7 @@ export default function NotificationSettings() {
     setTogglingId(ch.id);
     try {
       const updated = await updateNotificationChannel(ch.id, { enabled: !ch.enabled });
-      setChannels(prev => prev.map(c => c.id === ch.id ? updated : c));
+      setChannels((prev) => prev.map((c) => (c.id === ch.id ? updated : c)));
     } catch {
       showToast('Failed to update channel', 'error');
     } finally {
@@ -57,7 +70,7 @@ export default function NotificationSettings() {
     if (!window.confirm(`Delete notification channel "${ch.name}"?`)) return;
     try {
       await deleteNotificationChannel(ch.id);
-      setChannels(prev => prev.filter(c => c.id !== ch.id));
+      setChannels((prev) => prev.filter((c) => c.id !== ch.id));
       showToast('Channel deleted', 'success');
     } catch {
       showToast('Failed to delete channel', 'error');
@@ -69,7 +82,7 @@ export default function NotificationSettings() {
     setSaving(true);
     try {
       const created = await createNotificationChannel(form);
-      setChannels(prev => [...prev, created]);
+      setChannels((prev) => [...prev, created]);
       closeModal();
       showToast(`Channel "${form.name}" added`, 'success');
     } catch (err) {
@@ -79,7 +92,12 @@ export default function NotificationSettings() {
     }
   };
 
-  if (loading) return <div className="loading-center"><div className="spinner" /></div>;
+  if (loading)
+    return (
+      <div className="loading-center">
+        <div className="spinner" />
+      </div>
+    );
 
   return (
     <div className="fade-in">
@@ -91,15 +109,31 @@ export default function NotificationSettings() {
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid var(--color-border)' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '14px 16px',
+            borderBottom: '1px solid var(--color-border)',
+          }}
+        >
           <div>
-            <div className="page-title" style={{ fontSize: 13 }}>Notification Channels</div>
-            <div className="page-subtitle">New alerts are POSTed to each enabled channel matching the alert severity.</div>
+            <div className="page-title" style={{ fontSize: 13 }}>
+              Notification Channels
+            </div>
+            <div className="page-subtitle">
+              New alerts are POSTed to each enabled channel matching the alert severity.
+            </div>
           </div>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ Add Channel</button>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            + Add Channel
+          </button>
         </div>
         {channels.length === 0 ? (
-          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--color-text-faint)' }}>
+          <div
+            style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--color-text-faint)' }}
+          >
             No channels configured. Add one to start receiving alert notifications.
           </div>
         ) : (
@@ -115,14 +149,33 @@ export default function NotificationSettings() {
               </tr>
             </thead>
             <tbody>
-              {channels.map(ch => (
+              {channels.map((ch) => (
                 <tr key={ch.id}>
                   <td style={{ fontWeight: 500 }}>{ch.name}</td>
-                  <td><span className="badge">{ch.type}</span></td>
-                  <td className="font-mono text-sm text-muted" style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.url}</td>
-                  <td className="text-sm text-muted">{(ch.severity_filter && ch.severity_filter.length) ? ch.severity_filter.join(', ') : 'all'}</td>
                   <td>
-                    <span className={`badge ${ch.enabled ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 8 }}>
+                    <span className="badge">{ch.type}</span>
+                  </td>
+                  <td
+                    className="font-mono text-sm text-muted"
+                    style={{
+                      maxWidth: 240,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {ch.url}
+                  </td>
+                  <td className="text-sm text-muted">
+                    {ch.severity_filter && ch.severity_filter.length
+                      ? ch.severity_filter.join(', ')
+                      : 'all'}
+                  </td>
+                  <td>
+                    <span
+                      className={`badge ${ch.enabled ? 'badge-success' : 'badge-danger'}`}
+                      style={{ marginRight: 8 }}
+                    >
                       {ch.enabled ? 'Active' : 'Disabled'}
                     </span>
                     <button
@@ -134,7 +187,9 @@ export default function NotificationSettings() {
                     </button>
                   </td>
                   <td>
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(ch)}>Delete</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(ch)}>
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -145,42 +200,75 @@ export default function NotificationSettings() {
 
       {showModal && (
         <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Add Notification Channel</h3>
-              <button className="modal-close" onClick={closeModal}>×</button>
+              <button className="modal-close" onClick={closeModal}>
+                ×
+              </button>
             </div>
             <form onSubmit={handleCreate}>
               <div className="form-group">
                 <label className="form-label">Name</label>
-                <input className="input" required placeholder="e.g. ops-alerts"
-                  value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                <input
+                  className="input"
+                  required
+                  placeholder="e.g. ops-alerts"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">Type</label>
-                <select className="input" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                <select
+                  className="input"
+                  value={form.type}
+                  onChange={(e) => setForm({ ...form, type: e.target.value })}
+                >
                   <option value="slack">Slack</option>
                   <option value="webhook">Generic webhook</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">{form.type === 'slack' ? 'Slack incoming webhook URL' : 'Webhook URL'}</label>
-                <input className="input" required placeholder="https://..."
-                  value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} />
+                <label className="form-label">
+                  {form.type === 'slack' ? 'Slack incoming webhook URL' : 'Webhook URL'}
+                </label>
+                <input
+                  className="input"
+                  required
+                  placeholder="https://..."
+                  value={form.url}
+                  onChange={(e) => setForm({ ...form, url: e.target.value })}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">Severities</label>
                 <div style={{ display: 'flex', gap: 12 }}>
-                  {SEVERITIES.map(sev => (
-                    <label key={sev} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', textTransform: 'capitalize' }}>
-                      <input type="checkbox" checked={form.severity_filter.includes(sev)} onChange={() => toggleSeverity(sev)} />
+                  {SEVERITIES.map((sev) => (
+                    <label
+                      key={sev}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        cursor: 'pointer',
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.severity_filter.includes(sev)}
+                        onChange={() => toggleSeverity(sev)}
+                      />
                       <span className="text-sm">{sev}</span>
                     </label>
                   ))}
                 </div>
               </div>
               <div className="action-buttons">
-                <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={closeModal}>
+                  Cancel
+                </button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? 'Adding...' : 'Add Channel'}
                 </button>

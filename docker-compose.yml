@@ -8,8 +8,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    # Host port publishing for postgres lives in docker-compose.override.yml
+    # (dev-only, auto-loaded). Production (explicit -f prod) leaves 5432 closed.
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -32,15 +32,26 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_HOST: postgres
       MANAGER_URL: http://manager:8000
-      MANAGER_API_KEY: ${MANAGER_API_KEY:-change-me-in-production}
+      MANAGER_API_KEY: ${MANAGER_API_KEY:-}
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS:-8}
+      PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-12}
+      PASSWORD_REQUIRE_CLASSES: ${PASSWORD_REQUIRE_CLASSES:-false}
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-60}
+      SESSION_ABSOLUTE_HOURS: ${SESSION_ABSOLUTE_HOURS:-12}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-400}
+      PROMETHEUS_SCRAPE_TOKEN: ${PROMETHEUS_SCRAPE_TOKEN:-}
     networks:
       - snmp-network
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   frontend:
     build:
@@ -53,6 +64,11 @@ services:
     container_name: snmp-frontend
     networks:
       - snmp-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       - backend
 
@@ -64,8 +80,14 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/security_headers.inc:/etc/nginx/security_headers.inc:ro
     networks:
       - snmp-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       - backend
       - frontend
@@ -73,23 +95,33 @@ services:
   manager:
     build: ./manager
     container_name: snmp-manager
-    ports:
-      - "8001:8000"
+    # Host port publishing for the manager lives in docker-compose.override.yml
+    # (dev-only, auto-loaded). Production reaches the manager over the internal
+    # network and the nginx /agent/ route; 8001 stays closed on the host.
     volumes:
       - ./data/db:/data/db
       - ./data/dead-letter:/data/dead-letter
       - ./data/registry:/data/registry
+      - ./backups:/data/backups
     environment:
-      - MANAGER_API_KEY=${MANAGER_API_KEY:-change-me-in-production}
+      - MANAGER_API_KEY=${MANAGER_API_KEY:-}
       - DB_PATH=/data/db/metrics.db
       - REGISTRY_PATH=/data/registry/registry.json
       - DEAD_LETTER_PATH=/data/dead-letter
       - BACKEND_URL=http://backend:8000
+      - AGENT_AUTH_ENFORCE=${AGENT_AUTH_ENFORCE:-false}
+      # Step 2.1: durable registry in Postgres (schema = backend migration 025;
+      # data = manager). registry.json remains only for REGISTRY_BACKEND=file.
+      - REGISTRY_BACKEND=postgres
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - snmp-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -99,7 +131,10 @@ services:
     container_name: snmp-agent
     environment:
       - MANAGER_URL=http://manager:8000
-      - MANAGER_API_KEY=${MANAGER_API_KEY:-change-me-in-production}
+      # Bootstrap-only (dev): lets the bundled agent self-register via
+      # /register. After that it authenticates with its per-agent secret
+      # (Step 1.7). Remote agents enroll with CLAIM_TOKEN and never hold this.
+      - MANAGER_API_KEY=${MANAGER_API_KEY:-}
       - AGENT_HOSTNAME=${AGENT_HOSTNAME:-snmp-agent-01}
       - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-60}
       - UPLOAD_MAX_ROWS=500
@@ -117,6 +152,14 @@ services:
       - "${TRAP_LISTEN_PORT:-162}:162/udp"
     networks:
       - snmp-network
+    healthcheck:
+      # The agent has no HTTP server; the heartbeat loop touches
+      # /tmp/agent-alive every 30s — stale file = wedged loops.
+      test: ["CMD", "python", "-c", "import os,time,sys; sys.exit(0 if time.time()-os.stat('/tmp/agent-alive').st_mtime < 120 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     depends_on:
       manager:
         condition: service_healthy
@@ -131,6 +174,12 @@ services:
       - "1161:161/udp"
     networks:
       - snmp-network
+    healthcheck:
+      # Real SNMP probe — net-snmp-tools ships in the image.
+      test: ["CMD", "snmpget", "-v2c", "-c", "public", "-t", "2", "localhost", "1.3.6.1.2.1.1.3.0"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   snmp-network:

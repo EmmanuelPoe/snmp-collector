@@ -1,8 +1,10 @@
 import enum
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, Enum, Float, ForeignKey
+
+from crypto import EncryptedString
+from database import Base
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from database import Base
 
 
 class Device(Base):
@@ -12,7 +14,8 @@ class Device(Base):
     name = Column(String(255), unique=True, nullable=False, index=True)
     ip_address = Column(String(45), nullable=False)
     snmp_version = Column(String(10), default="2c")
-    snmp_community = Column(String(255), default="public")
+    # Secrets encrypted at rest (Fernet) via EncryptedString.
+    snmp_community = Column(EncryptedString(), default="public")
     snmp_port = Column(Integer, default=161)
     snmp_modules = Column(JSON, default=["if_mib"])
     device_type = Column(String(50))
@@ -20,9 +23,9 @@ class Device(Base):
     enabled = Column(Boolean, default=True)
     username = Column(String(255), nullable=True)
     auth_protocol = Column(String(50), nullable=True)
-    auth_password = Column(String(255), nullable=True)
+    auth_password = Column(EncryptedString(), nullable=True)
     priv_protocol = Column(String(50), nullable=True)
-    priv_password = Column(String(255), nullable=True)
+    priv_password = Column(EncryptedString(), nullable=True)
     assigned_agent_id = Column(String(255), nullable=True)
     tags = Column(JSON, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -58,7 +61,44 @@ class User(Base):
     role = Column(Enum(UserRole), nullable=False, default=UserRole.viewer)
     is_active = Column(Boolean, default=True)
     force_password_change = Column(Boolean, nullable=False, server_default="true", default=True)
+    # Login lockout (Step 1.3): persisted so lockouts survive restarts.
+    failed_login_count = Column(Integer, nullable=False, default=0, server_default="0")
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    # Token lifecycle (Step 1.4): bumped on password change so all previously
+    # issued tokens (which embed the version as the "ver" claim) become invalid.
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class RevokedToken(Base):
+    """Denylist of logged-out JWTs (by jti), pruned opportunistically at logout
+    once past their natural expiry (Step 1.4)."""
+
+    __tablename__ = "revoked_tokens"
+
+    jti = Column(String(64), primary_key=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class AuditLog(Base):
+    """Append-only audit trail (Step 1.5): who did what, when, from where.
+    No update/delete route exists for it; rows leave only via retention pruning."""
+
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # Null actor = unauthenticated action (e.g. failed login attempt).
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_email = Column(String(255), nullable=True)
+    action = Column(String(100), nullable=False)
+    target_type = Column(String(50), nullable=True)
+    target_id = Column(String(255), nullable=True)
+    # Changed fields only; credential values redacted (see audit.redact).
+    summary = Column(JSON, nullable=True)
+    source_ip = Column(String(45), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    __table_args__ = (Index("ix_audit_log_target", "target_type", "target_id"),)
 
 
 class AlertType(str, enum.Enum):
@@ -88,8 +128,7 @@ class Alert(Base):
     device_id = Column(Integer, nullable=True)
     agent_id = Column(String(255), nullable=True)
     alert_type = Column(Enum(AlertType), nullable=False)
-    severity = Column(Enum(AlertSeverity), nullable=False,
-                      default=AlertSeverity.warning, server_default="warning")
+    severity = Column(Enum(AlertSeverity), nullable=False, default=AlertSeverity.warning, server_default="warning")
     message = Column(Text, nullable=False)
     triggered_at = Column(DateTime(timezone=True), server_default=func.now())
     resolved_at = Column(DateTime(timezone=True), nullable=True)
@@ -137,6 +176,22 @@ class NotificationChannel(Base):
     # Severities that trigger this channel. Empty list = all severities.
     severity_filter = Column(JSON, default=list)
     enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class TopologyEdge(Base):
+    __tablename__ = "topology_edges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    local_device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    local_port = Column(String(255), nullable=True)
+    remote_chassis_id = Column(String(255), nullable=True)
+    remote_sysname = Column(String(255), nullable=True)
+    remote_port_id = Column(String(255), nullable=True)
+    remote_port_desc = Column(String(255), nullable=True)
+    # Set when the LLDP neighbour resolves to a known device (by sysname/IP).
+    remote_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True, index=True)
+    last_seen = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

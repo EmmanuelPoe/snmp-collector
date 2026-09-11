@@ -4,12 +4,11 @@ import logging
 import threading
 from datetime import datetime, timezone
 
+import config as agent_config
 from pysnmp.carrier.asyncore.dgram import udp
 from pysnmp.entity import config as snmp_config
 from pysnmp.entity.rfc3413 import ntfrcv
 from pysnmp.hlapi import SnmpEngine
-
-import config as agent_config
 
 log = logging.getLogger(__name__)
 
@@ -21,9 +20,7 @@ async def run_trap_listener(agent_id: str, trap_buffer) -> None:
     snmp_config.addTransport(
         snmp_engine,
         udp.domainName,
-        udp.UdpSocketTransport().openServerMode(
-            ("0.0.0.0", agent_config.settings.trap_listen_port)
-        ),
+        udp.UdpSocketTransport().openServerMode(("0.0.0.0", agent_config.settings.trap_listen_port)),
     )
     snmp_config.addV1System(
         snmp_engine,

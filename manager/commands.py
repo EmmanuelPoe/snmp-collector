@@ -2,6 +2,7 @@
 walks for the MIB browser). Agents are outbound-only, so they poll for pending
 commands and post results back. Commands are transient — held in memory with a
 short TTL, never persisted."""
+
 import time
 import uuid
 from threading import Lock
@@ -25,9 +26,14 @@ class CommandStore:
         with self._lock:
             self._expire()
             self._commands[cid] = {
-                "command_id": cid, "agent_id": agent_id, "type": type_,
-                "params": params, "status": "pending", "result": None,
-                "error": None, "created_at": time.monotonic(),
+                "command_id": cid,
+                "agent_id": agent_id,
+                "type": type_,
+                "params": params,
+                "status": "pending",
+                "result": None,
+                "error": None,
+                "created_at": time.monotonic(),
             }
         return cid
 

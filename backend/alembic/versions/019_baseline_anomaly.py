@@ -5,10 +5,11 @@ Revises: 018_add_alert_ack_assign
 Create Date: 2026-06-16
 
 """
+
 from alembic import op
 
-revision = '019_baseline_anomaly'
-down_revision = '018_add_alert_ack_assign'
+revision = "019_baseline_anomaly"
+down_revision = "018_add_alert_ack_assign"
 branch_labels = None
 depends_on = None
 

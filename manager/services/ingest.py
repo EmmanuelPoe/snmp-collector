@@ -3,8 +3,9 @@ import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-import pyarrow.parquet as pq
+
 import config
+import pyarrow.parquet as pq
 from db import query, transactional_ingest
 
 _VALID_TABLES = frozenset({"snmp_polls", "snmp_traps"})
@@ -18,9 +19,7 @@ class DuplicateFileError(Exception):
     pass
 
 
-async def ingest_file(
-    file_id: str, claimed_sha256: str, tmp_path: Path, table: str
-) -> int:
+async def ingest_file(file_id: str, claimed_sha256: str, tmp_path: Path, table: str) -> int:
     if table not in _VALID_TABLES:
         raise ValueError(f"Unknown table: {table!r}")
 
@@ -62,9 +61,12 @@ def _dead_letter(file_id: str, src: Path, error: str) -> None:
         shutil.move(str(src), dest)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     (dl_dir / f"{file_id}.{ts}.error.json").write_text(
-        json.dumps({
-            "file_id": file_id,
-            "error": error,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }, indent=2)
+        json.dumps(
+            {
+                "file_id": file_id,
+                "error": error,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            indent=2,
+        )
     )

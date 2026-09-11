@@ -12,7 +12,10 @@ export default function UserManagementPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
-  const closeModal = () => { setShowModal(false); setForm(EMPTY_FORM); };
+  const closeModal = () => {
+    setShowModal(false);
+    setForm(EMPTY_FORM);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -25,14 +28,16 @@ export default function UserManagementPage() {
     }
   }, [showToast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
       const newUser = await registerUser(form.email, form.password, form.role);
-      setUsers(prev => [...prev, newUser]);
+      setUsers((prev) => [...prev, newUser]);
       showToast('User created', 'success');
       closeModal();
     } catch (err) {
@@ -68,10 +73,12 @@ export default function UserManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map(u => (
+              {users.map((u) => (
                 <tr key={u.id}>
                   <td>{u.email}</td>
-                  <td><span className={`badge badge-${u.role}`}>{u.role}</span></td>
+                  <td>
+                    <span className={`badge badge-${u.role}`}>{u.role}</span>
+                  </td>
                   <td>{u.is_active ? 'Active' : 'Inactive'}</td>
                   <td>{u.force_password_change ? 'Must change' : 'Set'}</td>
                 </tr>
@@ -83,10 +90,12 @@ export default function UserManagementPage() {
 
       {showModal && (
         <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">Add User</h3>
-              <button className="modal-close" onClick={closeModal}>✕</button>
+              <button className="modal-close" onClick={closeModal}>
+                ✕
+              </button>
             </div>
             <form onSubmit={handleCreate}>
               <div className="modal-body">
@@ -96,7 +105,7 @@ export default function UserManagementPage() {
                     className="input"
                     type="email"
                     value={form.email}
-                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                     required
                     autoFocus
                   />
@@ -107,7 +116,7 @@ export default function UserManagementPage() {
                     className="input"
                     type="password"
                     value={form.password}
-                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                     required
                     placeholder="min 8 characters"
                     minLength={8}
@@ -118,7 +127,7 @@ export default function UserManagementPage() {
                   <select
                     className="input"
                     value={form.role}
-                    onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                    onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
                   >
                     <option value="viewer">Viewer</option>
                     <option value="editor">Editor</option>
@@ -127,7 +136,9 @@ export default function UserManagementPage() {
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={closeModal}>
+                  Cancel
+                </button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? 'Creating...' : 'Create User'}
                 </button>

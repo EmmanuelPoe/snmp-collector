@@ -1,0 +1,64 @@
+# Lint / format / type-check config (Step 3.2 / plan Step 21).
+# ruff handles both linting and formatting (no black). mypy starts lenient —
+# ignore_missing_imports, no strict — and ratchets later (see the ratchet plan
+# note under [tool.mypy]).
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+# Each service is its own flat-module root; nothing outside them is our code.
+extend-exclude = [
+    ".claude",
+    "data",
+    "frontend",
+    "worktrees",
+]
+
+[tool.ruff.lint]
+# Ruff defaults (E4/E7/E9, F) + import sorting (I) + pycodestyle warnings (W).
+# Deliberately no E501 and no rule packs that would fight the existing style —
+# widen the selection as debt is paid down.
+select = ["E4", "E7", "E9", "F", "I", "W"]
+# E711/E712: `== None` / `== True` are the SQLAlchemy filter idiom (they build
+# SQL expressions; `is` would not).
+ignore = ["E711", "E712"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests set sys.path/env before importing app modules — imports cannot be at top.
+"**/tests/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+# The three services are flat module layouts (backend/, manager/, agent/ each
+# on sys.path), so their local modules cannot be listed as first-party by
+# package name; imports sort into one third-party block per file.
+combine-as-imports = true
+
+[tool.mypy]
+# Lenient start (Step 3.2): services are flat-module layouts checked one at a
+# time from their own directory:  cd <service> && mypy --config-file ../pyproject.toml .
+# CI runs without service dependencies installed, so ignore_missing_imports is
+# load-bearing.
+#
+# The disabled codes below are all noise from untyped-library patterns today:
+# SQLAlchemy 1.x-style models (Column[...] vs plain values → assignment/
+# arg-type/return-value/attr-defined/union-attr/index/type-var/var-annotated)
+# and pydantic-settings' env-filled constructors (call-arg). Ratchet plan:
+# 1) install service deps + the pydantic mypy plugin in the CI lint job and
+#    re-enable call-arg; 2) migrate models to Mapped[] typing and re-enable the
+#    SQLAlchemy-noise codes; 3) check_untyped_defs, then disallow_untyped_defs
+#    per service as each gets annotated. Do not enable strict wholesale.
+python_version = "3.11"
+ignore_missing_imports = true
+exclude = ["alembic/"]
+disable_error_code = [
+    "annotation-unchecked",
+    "arg-type",
+    "assignment",
+    "attr-defined",
+    "call-arg",
+    "index",
+    "return-value",
+    "type-var",
+    "union-attr",
+    "var-annotated",
+]

@@ -10,10 +10,11 @@ Revises: 013_oid_whitelist_required
 Create Date: 2026-06-16
 
 """
+
 from alembic import op
 
-revision = '014_add_interface_speed_oids'
-down_revision = '013_oid_whitelist_required'
+revision = "014_add_interface_speed_oids"
+down_revision = "013_oid_whitelist_required"
 branch_labels = None
 depends_on = None
 
@@ -32,5 +33,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DELETE FROM collection_configs WHERE oid IN "
-               "('1.3.6.1.2.1.31.1.1.1.15', '1.3.6.1.2.1.2.2.1.5')")
+    op.execute("DELETE FROM collection_configs WHERE oid IN ('1.3.6.1.2.1.31.1.1.1.15', '1.3.6.1.2.1.2.2.1.5')")

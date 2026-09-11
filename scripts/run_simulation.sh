@@ -38,11 +38,25 @@ echo "Waiting for SNMP simulator..."
 sleep 3
 echo -e "${GREEN}✓ SNMP simulator should be ready${NC}"
 
+# Admin credentials: pass SIM_ADMIN_EMAIL/SIM_ADMIN_PASSWORD, or on a fresh
+# install the random one-time bootstrap password is parsed from the backend log
+# ("Bootstrap admin created — login with admin@localhost / <password> ...").
+ADMIN_EMAIL="${SIM_ADMIN_EMAIL:-admin@localhost}"
+ADMIN_PASSWORD="${SIM_ADMIN_PASSWORD:-}"
+if [ -z "$ADMIN_PASSWORD" ]; then
+    ADMIN_PASSWORD=$(docker-compose logs backend 2>/dev/null \
+      | grep -o 'login with admin@localhost / [^ ]*' | tail -n 1 | awk '{print $5}')
+fi
+if [ -z "$ADMIN_PASSWORD" ]; then
+    echo -e "${RED}✗ No admin password: set SIM_ADMIN_PASSWORD (no bootstrap password found in backend logs)${NC}"
+    exit 1
+fi
+
 # Authenticate
-echo "Logging in as admin..."
+echo "Logging in as ${ADMIN_EMAIL}..."
 LOGIN_RESPONSE=$(curl -s -X POST "${API_URL}/auth/login" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=admin@localhost&password=changeme")
+  -d "username=${ADMIN_EMAIL}&password=${ADMIN_PASSWORD}")
 TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.access_token')
 if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
     echo -e "${RED}✗ Failed to authenticate${NC}"
@@ -50,14 +64,19 @@ if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
 fi
 echo -e "${GREEN}✓ Authenticated${NC}"
 
-# Clear force_password_change if set (first boot)
+# Clear force_password_change if set (first boot). Password change invalidates
+# all prior tokens (Step 1.4) and returns a fresh one — adopt it.
 FORCE_CHANGE=$(echo "$LOGIN_RESPONSE" | jq -r '.force_password_change')
 if [ "$FORCE_CHANGE" = "true" ]; then
     echo "Clearing forced password change..."
-    curl -s -X POST "${API_URL}/auth/change-password" \
+    CHANGE_RESPONSE=$(curl -s -X POST "${API_URL}/auth/change-password" \
       -H "Authorization: Bearer ${TOKEN}" \
       -H "Content-Type: application/json" \
-      -d '{"current_password":"changeme","new_password":"changeme"}' > /dev/null
+      -d '{"current_password":"'"${ADMIN_PASSWORD}"'","new_password":"'"${ADMIN_PASSWORD}"'"}')
+    NEW_TOKEN=$(echo "$CHANGE_RESPONSE" | jq -r '.access_token')
+    if [ -n "$NEW_TOKEN" ] && [ "$NEW_TOKEN" != "null" ]; then
+        TOKEN="$NEW_TOKEN"
+    fi
     echo -e "${GREEN}✓ Password change cleared${NC}"
 fi
 AUTH="-H \"Authorization: Bearer ${TOKEN}\""

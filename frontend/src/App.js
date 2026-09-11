@@ -7,13 +7,16 @@ import ConfigurationManager from './components/ConfigurationManager';
 import NotificationSettings from './components/NotificationSettings';
 import MaintenanceWindows from './components/MaintenanceWindows';
 import MibBrowser from './components/MibBrowser';
+import TopologyMap from './components/TopologyMap';
 import AgentsPage from './components/AgentsPage';
 import TrapsPage from './components/TrapsPage';
 import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import UserManagementPage from './pages/UserManagementPage';
+import AuditPage from './pages/AuditPage';
 import PrivateRoute from './components/PrivateRoute';
 import Sidebar from './components/Sidebar';
+import SessionMonitor from './components/SessionMonitor';
 import { ToastProvider } from './hooks/useToast';
 import './App.css';
 
@@ -24,16 +27,102 @@ function AppShell() {
       <div className="app-main">
         <div className="page-content">
           <Routes>
-            <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-            <Route path="/devices" element={<PrivateRoute><DeviceManagement /></PrivateRoute>} />
-            <Route path="/metrics" element={<PrivateRoute><DeviceMetrics /></PrivateRoute>} />
-            <Route path="/agents" element={<PrivateRoute><AgentsPage /></PrivateRoute>} />
-            <Route path="/traps" element={<PrivateRoute><TrapsPage /></PrivateRoute>} />
-            <Route path="/config" element={<PrivateRoute><ConfigurationManager /></PrivateRoute>} />
-            <Route path="/notifications" element={<PrivateRoute><NotificationSettings /></PrivateRoute>} />
-            <Route path="/maintenance" element={<PrivateRoute><MaintenanceWindows /></PrivateRoute>} />
-            <Route path="/mib-browser" element={<PrivateRoute><MibBrowser /></PrivateRoute>} />
-            <Route path="/users" element={<PrivateRoute><UserManagementPage /></PrivateRoute>} />
+            <Route
+              path="/"
+              element={
+                <PrivateRoute>
+                  <Dashboard />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/devices"
+              element={
+                <PrivateRoute>
+                  <DeviceManagement />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/metrics"
+              element={
+                <PrivateRoute>
+                  <DeviceMetrics />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/agents"
+              element={
+                <PrivateRoute>
+                  <AgentsPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/traps"
+              element={
+                <PrivateRoute>
+                  <TrapsPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/config"
+              element={
+                <PrivateRoute>
+                  <ConfigurationManager />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <PrivateRoute>
+                  <NotificationSettings />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/maintenance"
+              element={
+                <PrivateRoute>
+                  <MaintenanceWindows />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/mib-browser"
+              element={
+                <PrivateRoute>
+                  <MibBrowser />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/topology"
+              element={
+                <PrivateRoute>
+                  <TopologyMap />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <PrivateRoute>
+                  <UserManagementPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/audit"
+              element={
+                <PrivateRoute>
+                  <AuditPage />
+                </PrivateRoute>
+              }
+            />
           </Routes>
         </div>
       </div>
@@ -44,6 +133,7 @@ function AppShell() {
 export default function App() {
   return (
     <ToastProvider>
+      <SessionMonitor />
       <Router>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

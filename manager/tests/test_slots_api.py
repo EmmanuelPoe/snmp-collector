@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
@@ -9,6 +10,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def reset_slots():
     import slots as slots_mod
+
     slots_mod.slot_store._slots.clear()
     yield
     slots_mod.slot_store._slots.clear()
@@ -17,6 +19,7 @@ def reset_slots():
 @pytest.fixture
 def client(patch_settings, reset_db, reset_registry, reset_slots):
     from main import app
+
     with TestClient(app) as c:
         yield c
 
@@ -96,11 +99,13 @@ def test_claim_no_auth_succeeds_with_valid_token(client, auth_headers, mock_back
 
 def test_claim_expired_token_returns_404(client, auth_headers):
     """Expired claim tokens should be rejected."""
-    from datetime import datetime, timezone, timedelta
-    create = client.post("/slots", json={"label": "expiring"}  , headers=auth_headers)
+    from datetime import datetime, timedelta, timezone
+
+    create = client.post("/slots", json={"label": "expiring"}, headers=auth_headers)
     slot_id = create.json()["slot_id"]
     token = create.json()["token"]
     import slots as slots_mod
+
     slots_mod.slot_store._slots[slot_id].expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     resp = client.post(
         "/claim",
@@ -113,4 +118,4 @@ def test_install_command_does_not_contain_api_key(client, auth_headers):
     """The install command must never expose the actual MANAGER_API_KEY."""
     resp = client.post("/slots", json={"label": "test"}, headers=auth_headers)
     cmd = resp.json()["install_command"]
-    assert "test-key" not in cmd  # test-key is the MANAGER_API_KEY in tests
+    assert "test-manager-api-key" not in cmd  # the MANAGER_API_KEY used in tests

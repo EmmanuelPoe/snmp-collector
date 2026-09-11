@@ -1,11 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from datetime import datetime, timedelta, timezone
 
-from auth import hash_password, verify_password, create_access_token, get_current_user, get_current_user_unchecked, require_role
+import audit
+from auth import (
+    create_access_token,
+    get_current_user,
+    get_current_user_unchecked,
+    hash_password,
+    oauth2_scheme,
+    require_role,
+    verify_password,
+)
+from config import settings
 from database import get_db
-from models import User, UserRole
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from models import RevokedToken, User, UserRole
+from password_policy import PasswordPolicyError, validate_password
+from pydantic import BaseModel
+from rate_limit import limiter, token_or_ip
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -24,7 +38,7 @@ class TokenResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(..., min_length=8)
+    new_password: str  # strength enforced by password_policy (Step 6.1)
 
 
 class UserResponse(BaseModel):
@@ -38,40 +52,154 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+def _as_utc(dt):
+    """SQLite (tests) returns naive datetimes for DateTime(timezone=True); Postgres returns aware."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 @router.post("/login", response_model=TokenResponse)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit(lambda *_: settings.login_rate_limit)
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form_data.username, User.is_active == True).first()
+    now = datetime.now(timezone.utc)
+
+    # Account lockout (Step 1.3): rejected before password verification so a
+    # locked account leaks no signal about whether the password was correct.
+    if user is not None:
+        locked_until = _as_utc(user.locked_until)
+        if locked_until and locked_until > now:
+            retry_after = int((locked_until - now).total_seconds()) + 1
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail="Account temporarily locked after repeated failed logins",
+                headers={"Retry-After": str(retry_after)},
+            )
+
     if not user or not verify_password(form_data.password, user.hashed_password):
+        if user is not None:
+            user.failed_login_count = (user.failed_login_count or 0) + 1
+            if user.failed_login_count >= settings.login_lockout_threshold:
+                user.locked_until = now + timedelta(minutes=settings.login_lockout_minutes)
+                user.failed_login_count = 0  # fresh threshold once the lockout expires
+        audit.record(db, request, None, "auth.login_failed", actor_email=form_data.username)
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
-    token = create_access_token({"sub": user.email, "role": user.role})
+
+    if user.failed_login_count or user.locked_until is not None:
+        user.failed_login_count = 0
+        user.locked_until = None
+
+    audit.record(db, request, user, "auth.login")
+    db.commit()
+
+    token = create_access_token({"sub": user.email, "role": user.role, "ver": user.token_version or 0})
     return {"access_token": token, "token_type": "bearer", "force_password_change": user.force_password_change}
 
 
-@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(request: Request, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Revoke the presented token (Step 1.4). Requires only a validly signed
+    token — works even mid forced-password-change."""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+    jti = payload.get("jti")
+    if jti:
+        now = datetime.now(timezone.utc)
+        # Opportunistic prune: denylist rows past their token's natural expiry
+        # can never match a live token again.
+        db.query(RevokedToken).filter(RevokedToken.expires_at < now).delete()
+        db.merge(RevokedToken(jti=jti, expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc)))
+    actor = db.query(User).filter(User.email == payload.get("sub")).first()
+    audit.record(db, request, actor, "auth.logout", actor_email=payload.get("sub"))
+    db.commit()
+
+
+@router.post("/change-password", response_model=TokenResponse)
+@limiter.limit(lambda *_: settings.login_rate_limit, key_func=token_or_ip)
 def change_password(
+    request: Request,
     req: ChangePasswordRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_unchecked),
 ):
     if not verify_password(req.current_password, current_user.hashed_password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    try:
+        validate_password(req.new_password, current_user.email)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     current_user.hashed_password = hash_password(req.new_password)
     current_user.force_password_change = False
+    # Step 1.4: invalidate every previously issued token for this user, then
+    # return a fresh one so the current session continues seamlessly.
+    current_user.token_version = (current_user.token_version or 0) + 1
+    audit.record(db, request, current_user, "auth.password_changed", target_type="user", target_id=current_user.id)
     db.commit()
+    token = create_access_token(
+        {"sub": current_user.email, "role": current_user.role, "ver": current_user.token_version}
+    )
+    return {"access_token": token, "token_type": "bearer", "force_password_change": False}
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh(
+    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user_unchecked),
+):
+    """Slide the idle window (Step 6.1). Reissues a token with a fresh idle
+    expiry while preserving the original session start, so activity keeps a
+    session alive only up to the absolute cap. A token already past its idle
+    expiry fails validation upstream (401) — that is the idle timeout."""
+    payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    sst = int(payload.get("sst", int(datetime.now(timezone.utc).timestamp())))
+    cap = datetime.fromtimestamp(sst, tz=timezone.utc) + timedelta(hours=settings.session_absolute_hours)
+    if datetime.now(timezone.utc) >= cap:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired — please sign in again",
+        )
+    new_token = create_access_token(
+        {"sub": current_user.email, "role": current_user.role, "ver": current_user.token_version or 0},
+        session_start=sst,
+    )
+    return {
+        "access_token": new_token,
+        "token_type": "bearer",
+        "force_password_change": current_user.force_password_change,
+    }
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(
+    request: Request,
     req: RegisterRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin")),
 ):
     if db.query(User).filter(User.email == req.email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
     if req.role not in [r.value for r in UserRole]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {req.role}")
+    try:
+        validate_password(req.password, req.email)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     user = User(email=req.email, hashed_password=hash_password(req.password), role=req.role)
     db.add(user)
+    db.flush()  # assign user.id for the audit row
+    audit.record(
+        db,
+        request,
+        current_user,
+        "user.create",
+        target_type="user",
+        target_id=user.id,
+        summary={"email": req.email, "role": req.role},
+    )
     db.commit()
     db.refresh(user)
     return user
