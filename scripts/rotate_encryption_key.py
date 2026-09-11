@@ -24,6 +24,7 @@ Procedure: run this, then update ENCRYPTION_KEY (or its secret file) to the new
 value and restart the backend. Verify a device's credentials still decrypt in the
 UI / via a walk. Full runbook: docs/runbooks/secret-rotation.md.
 """
+
 import argparse
 import base64
 import hashlib
@@ -99,8 +100,10 @@ def main() -> None:
                     cur.execute(f"UPDATE devices SET {', '.join(updates)} WHERE id = %s", params)
         if args.dry_run:
             conn.rollback()
-            print(f"[dry-run] would re-encrypt {rotated} value(s) across {len(rows)} device(s); "
-                  f"{skipped} skipped (not decryptable with the old key).")
+            print(
+                f"[dry-run] would re-encrypt {rotated} value(s) across {len(rows)} device(s); "
+                f"{skipped} skipped (not decryptable with the old key)."
+            )
         else:
             conn.commit()
             print(f"Re-encrypted {rotated} value(s) across {len(rows)} device(s); {skipped} skipped.")

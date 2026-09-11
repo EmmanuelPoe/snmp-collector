@@ -29,7 +29,18 @@ import httpx
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-OID_NAMES = ["ifInOctets", "ifOutOctets", "ifInErrors", "ifOutErrors", "ifOperStatus", "ifSpeed", "ifHCInOctets", "ifHCOutOctets", "ifInDiscards", "ifOutDiscards"]
+OID_NAMES = [
+    "ifInOctets",
+    "ifOutOctets",
+    "ifInErrors",
+    "ifOutErrors",
+    "ifOperStatus",
+    "ifSpeed",
+    "ifHCInOctets",
+    "ifHCOutOctets",
+    "ifInDiscards",
+    "ifOutDiscards",
+]
 
 
 def make_batch(device_start: int, devices_per_batch: int, interfaces: int, oids: int) -> bytes:
