@@ -583,7 +583,23 @@ them.**
 
 # Phase 9 — Compliance & governance (roadmap Tier 6)
 
-## Step 38 — Password + session policy *(roadmap 6.1)*
+## Step 38 — Password + session policy *(roadmap 6.1)* ✅ DONE (2026-09-10)
+
+**Built:** as specced, with the recommended defaults adopted (12 chars / no forced
+classes / 60 min idle / 12h absolute — all configurable via
+`PASSWORD_MIN_LENGTH`, `PASSWORD_REQUIRE_CLASSES`, `SESSION_IDLE_MINUTES`,
+`SESSION_ABSOLUTE_HOURS`). `backend/password_policy.py` (`validate_password`:
+length + bundled common-password rejection + email-local-part rejection + opt-in
+character-class rule) enforced on register and change-password. Sessions: the
+access token carries a session-start `sst` claim; `create_access_token` sets
+`exp = min(now + idle, sst + absolute)`; new `POST /auth/refresh` (gated by the
+Step 16 version/denylist checks) slides the idle window while preserving `sst`,
+so the absolute cap can't be reset. Frontend: `SessionMonitor` owns session
+lifetime — silently refreshes an active session as it nears expiry and shows an
+idle-warning toast before an inactive session lapses; the existing 401 response
+interceptor auto-logs-out. Dead `JWT_EXPIRE_HOURS` removed (config/compose/
+README/.env). Tests: `test_password_policy.py` (5) + `test_session_policy.py`
+(3); backend suite now 207. **Decisions adopted as recommended.** No migration.
 
 **Problem (verified):** password policy is `min_length=8` only ([backend/routers/auth.py:27](../backend/routers/auth.py#L27)); no complexity/common-password check; no idle-session timeout (tokens live a flat 8h regardless of activity).
 

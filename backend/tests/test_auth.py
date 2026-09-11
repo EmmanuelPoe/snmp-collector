@@ -213,7 +213,7 @@ def test_register_creates_user(auth_client):
     token = login.json()["access_token"]
     resp = auth_client.post(
         "/auth/register",
-        json={"email": "editor@x.com", "password": "pw123", "role": "editor"},
+        json={"email": "editor@x.com", "password": "Zx9-Vault-Panda-Meadow", "role": "editor"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 201
@@ -237,7 +237,7 @@ def test_register_rejects_duplicate_email(auth_client):
     # Register once
     auth_client.post(
         "/auth/register",
-        json={"email": "dup@x.com", "password": "pw", "role": "viewer"},
+        json={"email": "dup@x.com", "password": "Zx9-Vault-Panda-Meadow", "role": "viewer"},
         headers={"Authorization": f"Bearer {token}"},
     )
     # Register again with same email

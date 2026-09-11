@@ -24,11 +24,21 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(data: dict) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=settings.jwt_expire_hours)
+def create_access_token(data: dict, session_start: Optional[int] = None) -> str:
+    now = datetime.now(timezone.utc)
+    # Idle window (Step 6.1): the token lives for session_idle_minutes; the
+    # frontend refreshes it on activity, so an inactive session lapses at idle.
+    expire = now + timedelta(minutes=settings.session_idle_minutes)
+    # Absolute cap: sst (session start) is preserved across refreshes, so a
+    # session can never outlive session_absolute_hours regardless of activity.
+    sst = session_start if session_start is not None else int(now.timestamp())
+    absolute_deadline = datetime.fromtimestamp(sst, tz=timezone.utc) + timedelta(
+        hours=settings.session_absolute_hours
+    )
+    expire = min(expire, absolute_deadline)
     # jti (Step 1.4): unique token id so an individual token can be revoked at logout.
     return jwt.encode(
-        {**data, "exp": expire, "jti": uuid.uuid4().hex},
+        {**data, "exp": expire, "sst": sst, "jti": uuid.uuid4().hex},
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )

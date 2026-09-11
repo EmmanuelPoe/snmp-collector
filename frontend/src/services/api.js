@@ -193,6 +193,17 @@ export const changePassword = async (currentPassword, newPassword) => {
     localStorage.setItem('snmp_access_token', response.data.access_token);
   }
 };
+// Session sliding refresh (Step 6.1): reissue the access token with a fresh idle
+// window while preserving the original session start, so activity keeps a session
+// alive only up to the server's absolute cap. Timing/idle-warning live in
+// SessionMonitor; this just performs the call and adopts the new token.
+export const refreshSession = async () => {
+  const resp = await api.post('/auth/refresh');
+  if (resp.data?.access_token) {
+    localStorage.setItem('snmp_access_token', resp.data.access_token);
+  }
+  return resp.data;
+};
 export const logoutServer = async () => {
   // Best effort: revoke the token server-side; local sign-out proceeds regardless.
   try {

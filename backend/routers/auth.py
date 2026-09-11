@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from models import RevokedToken, User, UserRole
-from pydantic import BaseModel, Field
+from password_policy import PasswordPolicyError, validate_password
+from pydantic import BaseModel
 from rate_limit import limiter, token_or_ip
 from sqlalchemy.orm import Session
 
@@ -37,7 +38,7 @@ class TokenResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(..., min_length=8)
+    new_password: str  # strength enforced by password_policy (Step 6.1)
 
 
 class UserResponse(BaseModel):
@@ -127,6 +128,10 @@ def change_password(
 ):
     if not verify_password(req.current_password, current_user.hashed_password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    try:
+        validate_password(req.new_password, current_user.email)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     current_user.hashed_password = hash_password(req.new_password)
     current_user.force_password_change = False
     # Step 1.4: invalidate every previously issued token for this user, then
@@ -140,6 +145,34 @@ def change_password(
     return {"access_token": token, "token_type": "bearer", "force_password_change": False}
 
 
+@router.post("/refresh", response_model=TokenResponse)
+def refresh(
+    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user_unchecked),
+):
+    """Slide the idle window (Step 6.1). Reissues a token with a fresh idle
+    expiry while preserving the original session start, so activity keeps a
+    session alive only up to the absolute cap. A token already past its idle
+    expiry fails validation upstream (401) — that is the idle timeout."""
+    payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    sst = int(payload.get("sst", int(datetime.now(timezone.utc).timestamp())))
+    cap = datetime.fromtimestamp(sst, tz=timezone.utc) + timedelta(hours=settings.session_absolute_hours)
+    if datetime.now(timezone.utc) >= cap:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired — please sign in again",
+        )
+    new_token = create_access_token(
+        {"sub": current_user.email, "role": current_user.role, "ver": current_user.token_version or 0},
+        session_start=sst,
+    )
+    return {
+        "access_token": new_token,
+        "token_type": "bearer",
+        "force_password_change": current_user.force_password_change,
+    }
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(
     request: Request,
@@ -151,6 +184,10 @@ def register(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
     if req.role not in [r.value for r in UserRole]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {req.role}")
+    try:
+        validate_password(req.password, req.email)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     user = User(email=req.email, hashed_password=hash_password(req.password), role=req.role)
     db.add(user)
     db.flush()  # assign user.id for the audit row

@@ -52,7 +52,7 @@ implementation plan (step number in parentheses).
 - [ ] **Step 5.1** — Shared structured logging + correlation IDs *(plan Step 35)*
 - [ ] **Step 5.2** — Observability overlay: dashboards + alert rules as code *(plan Step 36)*
 - [ ] **Step 5.3** — SLO definitions (+ optional OTel) *(plan Step 37)*
-- [ ] **Step 6.1** — Password + session policy *(plan Step 38)*
+- [x] **Step 6.1** — Password + session policy *(plan Step 38, done 2026-09-10 — password_policy.py (min-length + common-password + email-name checks, opt-in classes); sliding idle window via `/auth/refresh` + absolute cap; frontend SessionMonitor with idle-warning toast)*
 - [ ] **Step 6.2** — RBAC gating audit + pagination caps *(plan Step 39)*
 - [ ] **Step 6.3** — Audited data export *(plan Step 40)*
 - [ ] **Step 6.4** — Compliance evidence pack *(plan Step 41)*
@@ -442,7 +442,7 @@ correlation IDs.
 SSO moved out of scope (see Product definition) — these steps make local accounts
 and data handling enterprise-defensible instead.
 
-### Step 6.1 — 🟠 Password and session policy *(plan Step 38)*
+### Step 6.1 — 🟠 Password and session policy *(plan Step 38)* ✅ Done (2026-09-10)
 **Why:** Password policy is `min_length=8` only (`backend/routers/auth.py:27`);
 no complexity rules, no idle-session timeout.
 **What to do:** Enforce configurable password complexity + common-password

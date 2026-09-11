@@ -129,7 +129,7 @@ def test_change_password_recorded(client, session, auth):
 
 def test_register_user_recorded(client, session, auth):
     resp = client.post(
-        "/auth/register", json={"email": "new@test.com", "password": "password1", "role": "viewer"}, headers=auth
+        "/auth/register", json={"email": "new@test.com", "password": "Zx9-Vault-Panda-Meadow", "role": "viewer"}, headers=auth
     )
     assert resp.status_code == 201
     rows = _entries(session, "user.create")

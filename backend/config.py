@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     manager_api_key: str = ""
     jwt_secret: str
     jwt_algorithm: str = "HS256"
-    jwt_expire_hours: int = 8
     # Fernet key for encrypting SNMP credentials at rest. When empty, a stable key
     # is derived from jwt_secret (see crypto.py). Set a dedicated key in production.
     encryption_key: Optional[str] = None
@@ -63,6 +62,14 @@ class Settings(BaseSettings):
     # Audit trail retention (Step 1.5): >1 year so annual reviews always have a
     # full window. Rows are pruned weekly by a background task.
     audit_retention_days: int = 400
+    # Password + session policy (Step 6.1). Complexity is length + common-password
+    # rejection by default; character-class rules are opt-in to avoid the weak
+    # "Password1!" patterns they encourage. Sessions have an idle timeout and an
+    # absolute cap (both derived from the access-token lifetime below).
+    password_min_length: int = 12
+    password_require_classes: bool = False
+    session_idle_minutes: int = 60
+    session_absolute_hours: int = 12
 
     class Config:
         env_file = ".env"

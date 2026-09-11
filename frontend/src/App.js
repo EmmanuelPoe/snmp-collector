@@ -16,6 +16,7 @@ import UserManagementPage from './pages/UserManagementPage';
 import AuditPage from './pages/AuditPage';
 import PrivateRoute from './components/PrivateRoute';
 import Sidebar from './components/Sidebar';
+import SessionMonitor from './components/SessionMonitor';
 import { ToastProvider } from './hooks/useToast';
 import './App.css';
 
@@ -132,6 +133,7 @@ function AppShell() {
 export default function App() {
   return (
     <ToastProvider>
+      <SessionMonitor />
       <Router>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

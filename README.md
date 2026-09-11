@@ -153,7 +153,9 @@ POSTGRES_PORT=5432
 
 # Backend
 FRONTEND_URL=http://localhost   # CORS origin
-JWT_EXPIRE_HOURS=8
+PASSWORD_MIN_LENGTH=12          # min password length; common passwords always rejected
+SESSION_IDLE_MINUTES=60         # session expires after this much inactivity
+SESSION_ABSOLUTE_HOURS=12       # hard cap on session lifetime regardless of activity
 
 # Manager
 MANAGER_PUBLIC_URL=http://your-host:8001  # used in generated docker run one-liners
