@@ -534,7 +534,28 @@ them.**
 
 # Phase 8 — Observability & SRE (roadmap Tier 5)
 
-## Step 35 — Shared structured logging + correlation IDs *(roadmap 5.1)*
+## Step 35 — Shared structured logging + correlation IDs *(roadmap 5.1)* ✅ DONE (2026-09-10)
+
+**Built:** with the recommended distribution decision inverted — **vendored copies
+over build-context widening** (per-service Docker contexts stay `./service` with
+`COPY . .`; the risk of rewriting three Dockerfiles + compose on a logging change
+outweighed the one-source purity, and a CI check recovers drift safety).
+`shared/logging_json.py` is the source of truth, vendored byte-identically into
+`backend/`, `manager/`, `agent/` by `scripts/sync_shared.py`; `scripts/check_shared.py`
+runs in the CI lint job and fails on drift. Schema: `ts, level, service, logger,
+msg, correlation_id` + any `extra={…}` promoted to top-level (e.g. `file_id`,
+`device_ip`). A pure-ASGI `CorrelationMiddleware` (not BaseHTTPMiddleware — so the
+contextvar is visible to endpoints) on backend + manager reads/mints
+`X-Correlation-ID` and echoes it; every cross-service httpx call forwards it
+(backend→manager proxy/evaluator/health, manager→backend device fetch,
+agent→manager register/heartbeat/config/ingest); the agent stamps a fresh id per
+poll/heartbeat/retry cycle. Ingest logs `file_id`+`rows` so one upload is
+traceable end-to-end. The three ad-hoc `_JsonFormatter` copies are removed; the
+remaining `json.dumps` sites (`manager/services/ingest.py` dead-letter file,
+`agent/trap_receiver.py` varbinds) are data serialization, not logging, and were
+left. Tests: `backend/tests/test_structured_logging.py` (schema, extras,
+contextvar roundtrip, vendored-copy identity, middleware echo/propagation);
+suites green (backend 212, manager 103, agent 12). No migration.
 
 **Problem (verified):** JSON logging is ad-hoc `json.dumps` duplicated across seven modules ([backend/main.py](../backend/main.py), `manager/main.py`, `manager/slots.py`, `manager/registry.py`, `manager/services/ingest.py`, `agent/main.py`, `agent/trap_receiver.py`) with no shared schema and no request correlation across backend→manager→agent.
 

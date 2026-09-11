@@ -1,35 +1,18 @@
 import asyncio
-import json
-import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
 import config
 import credentials
 import httpx
+from logging_json import configure_logging, correlation_headers, get_logger, new_correlation_id
 from models import DeviceConfig
 from snmp import walk_device, walk_lldp, walk_oid
 from trap_receiver import run_trap_listener
 from uploader import TrapBuffer, UploadBuffer
 
-
-class _JsonFormatter(logging.Formatter):
-    def format(self, record):
-        return json.dumps(
-            {
-                "time": self.formatTime(record),
-                "level": record.levelname,
-                "service": "agent",
-                "logger": record.name,
-                "message": record.getMessage(),
-            }
-        )
-
-
-_handler = logging.StreamHandler()
-_handler.setFormatter(_JsonFormatter())
-logging.basicConfig(level=logging.INFO, handlers=[_handler], force=True)
-log = logging.getLogger(__name__)
+configure_logging("agent")
+log = get_logger(__name__)
 
 _agent_id: str | None = None
 _agent_secret: str | None = None
@@ -43,7 +26,7 @@ def _auth_token() -> str:
 
 
 def _auth_headers() -> dict:
-    return {"Authorization": f"Bearer {_auth_token()}"}
+    return {"Authorization": f"Bearer {_auth_token()}", **correlation_headers()}
 
 
 async def _register() -> tuple[str, str | None]:
@@ -152,6 +135,7 @@ async def _heartbeat_loop() -> None:
     while True:
         await asyncio.sleep(30)
         _touch_liveness()
+        new_correlation_id()  # one trace per heartbeat (Step 5.1)
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
@@ -194,6 +178,9 @@ async def _poll_device(device: DeviceConfig) -> None:
 
 async def _poll_loop() -> None:
     while True:
+        # Fresh correlation id per poll cycle: the device fetch, SNMP walks, and
+        # the resulting upload(s) share one trace across agent → manager (Step 5.1).
+        new_correlation_id()
         try:
             devices = await _fetch_devices()
         except Exception as exc:
@@ -213,6 +200,7 @@ async def _poll_loop() -> None:
 async def _retry_loop() -> None:
     while True:
         await asyncio.sleep(60)
+        new_correlation_id()  # one trace per retry sweep (Step 5.1)
         await _buffer.flush_retry_queue()
         await _buffer.tick()
         if _trap_buffer:

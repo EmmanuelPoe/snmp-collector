@@ -6,9 +6,11 @@ import config
 import db
 from auth import require_agent_auth
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
+from logging_json import get_logger
 from services.ingest import ChecksumError, DuplicateFileError, ingest_file
 
 router = APIRouter(tags=["ingest"])
+logger = get_logger(__name__)
 
 _VALID_TYPES = {"polls": "snmp_polls", "traps": "snmp_traps"}
 
@@ -52,10 +54,12 @@ async def ingest(
 
     try:
         rows = await ingest_file(x_file_id, x_sha256, tmp_path, table)
+        logger.info("ingest accepted", extra={"file_id": x_file_id, "table": table, "rows": rows})
         return {"ok": True, "rows_ingested": rows}
     except ChecksumError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except DuplicateFileError:
+        logger.info("ingest duplicate ignored", extra={"file_id": x_file_id, "table": table})
         return {"ok": True, "rows_ingested": 0, "duplicate": True}
     finally:
         tmp_path.unlink(missing_ok=True)

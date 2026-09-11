@@ -28,6 +28,8 @@ jobs:
         run: ruff check .
       - name: ruff format check
         run: ruff format --check .
+      - name: shared/ vendored copies in sync
+        run: python scripts/check_shared.py
       - name: mypy (per service)
         run: |
           for svc in backend manager agent; do

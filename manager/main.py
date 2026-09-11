@@ -1,40 +1,18 @@
 import asyncio
-import json
-import logging
 from contextlib import asynccontextmanager
 
 import config
 import db as db_mod
 from db import close_db, get_db, purge_old_metrics
 from fastapi import FastAPI, Response, status
+from logging_json import CorrelationMiddleware, configure_logging, get_logger
 from prometheus_fastapi_instrumentator import Instrumentator
 from routers import backup, commands, ingest, metrics, registration, slots
 
-logger = logging.getLogger(__name__)
+configure_logging("manager")
+logger = get_logger(__name__)
 
 _RETENTION_INTERVAL_SECONDS = 7 * 24 * 3600  # weekly
-
-
-class _JsonFormatter(logging.Formatter):
-    def format(self, record):
-        return json.dumps(
-            {
-                "time": self.formatTime(record),
-                "level": record.levelname,
-                "service": "manager",
-                "logger": record.name,
-                "message": record.getMessage(),
-            }
-        )
-
-
-def _setup_logging():
-    handler = logging.StreamHandler()
-    handler.setFormatter(_JsonFormatter())
-    logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
-
-
-_setup_logging()
 
 
 async def _retention_loop():
@@ -63,6 +41,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+
+# Adopt/mint a correlation id per request so an agent's upload can be followed
+# from the agent's log through the manager's (Step 5.1).
+app.add_middleware(CorrelationMiddleware)
 
 Instrumentator().instrument(app).expose(app)
 

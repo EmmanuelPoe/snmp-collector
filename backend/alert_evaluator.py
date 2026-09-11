@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import httpx
 from config import settings
 from database import SessionLocal
+from logging_json import correlation_headers, new_correlation_id
 from models import (
     Alert,
     AlertRule,
@@ -39,7 +40,7 @@ def _is_virtual_iface(name: str) -> bool:
 
 
 def _headers():
-    return {"Authorization": f"Bearer {settings.manager_api_key}"}
+    return {"Authorization": f"Bearer {settings.manager_api_key}", **correlation_headers()}
 
 
 def _open_alert_exists(db, alert_type: AlertType, device_id=None, agent_id=None) -> bool:
@@ -540,6 +541,9 @@ def run_evaluation():
 async def evaluation_loop():
     while True:
         await asyncio.sleep(30)
+        # Fresh correlation id per loop so this run's manager calls and logs share
+        # one trace (Step 5.1).
+        new_correlation_id()
         # Step 2.5: the run must fit inside its 30s cadence at the 1000-device
         # target — emit the duration so the load test (and operators) see drift.
         started = time.monotonic()

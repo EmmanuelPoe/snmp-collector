@@ -4,6 +4,7 @@ import config
 import httpx
 from auth import ensure_same_agent, require_agent_auth, require_api_key
 from fastapi import APIRouter, Depends, HTTPException
+from logging_json import correlation_headers
 from models import ClaimRequest, ClaimResponse, DeviceConfig, HeartbeatRequest, RegisterRequest, RegisterResponse
 from registry import AgentInfo, hash_secret, new_secret, registry
 from slots import slot_store
@@ -106,7 +107,10 @@ async def _devices_for(agent_id: str) -> list[DeviceConfig]:
             resp = await client.get(
                 f"{config.settings.backend_url}/internal/devices",
                 params={"agent_id": agent_id},
-                headers={"Authorization": f"Bearer {config.settings.manager_api_key}"},
+                headers={
+                    "Authorization": f"Bearer {config.settings.manager_api_key}",
+                    **correlation_headers(),
+                },
                 timeout=10.0,
             )
             resp.raise_for_status()

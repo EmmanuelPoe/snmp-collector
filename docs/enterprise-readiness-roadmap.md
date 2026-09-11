@@ -49,7 +49,7 @@ implementation plan (step number in parentheses).
 - [x] **Step 4.2** — Resource limits *(plan Step 33 overlay, done 2026-08-16 — per-service CPU/mem sized from the 2.5 numbers)*
 - [x] **Step 4.3** — Production compose profile + install/upgrade runbooks *(plan Step 33, done 2026-08-16 — docker-compose.prod.yml + dev/prod port split via override.yml; install/upgrade/rollback runbooks)*
 - [x] **Step 4.4** — Single-host secrets handling *(plan Step 34, done 2026-08-16 — `*_FILE` config support + compose `secrets:` + secret-rotation runbook + ENCRYPTION_KEY rotation script)*
-- [ ] **Step 5.1** — Shared structured logging + correlation IDs *(plan Step 35)*
+- [x] **Step 5.1** — Shared structured logging + correlation IDs *(plan Step 35, done 2026-09-10 — shared/logging_json.py vendored into all 3 services (CI drift-check); JSON schema ts/level/service/logger/msg/correlation_id/+extras; ASGI CorrelationMiddleware on backend+manager; X-Correlation-ID forwarded on every cross-service httpx call; agent stamps one per poll/heartbeat/retry cycle)*
 - [ ] **Step 5.2** — Observability overlay: dashboards + alert rules as code *(plan Step 36)*
 - [ ] **Step 5.3** — SLO definitions (+ optional OTel) *(plan Step 37)*
 - [x] **Step 6.1** — Password + session policy *(plan Step 38, done 2026-09-10 — password_policy.py (min-length + common-password + email-name checks, opt-in classes); sliding idle window via `/auth/refresh` + absolute cap; frontend SessionMonitor with idle-warning toast)*
@@ -404,7 +404,7 @@ files; each documented rotation procedure works without data loss.
 
 ## Tier 5 — Observability & SRE
 
-### Step 5.1 — 🟠 Shared structured logging + correlation IDs *(plan Step 35)*
+### Step 5.1 — 🟠 Shared structured logging + correlation IDs *(plan Step 35)* ✅ Done (2026-09-10)
 **Why:** JSON logging exists but is ad-hoc `json.dumps` duplicated across seven
 modules in three services, with no shared schema and no way to follow one request
 across backend→manager→agent.

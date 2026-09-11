@@ -9,6 +9,7 @@ import config
 import httpx
 import pyarrow as pa
 import pyarrow.parquet as pq
+from logging_json import correlation_headers
 
 log = logging.getLogger(__name__)
 
@@ -98,6 +99,7 @@ class UploadBuffer:
                             "Authorization": f"Bearer {self._token}",
                             "X-File-ID": file_id,
                             "X-SHA256": sha256,
+                            **correlation_headers(),
                         },
                         timeout=30.0,
                     )
@@ -159,6 +161,7 @@ class TrapBuffer:
                             "Authorization": f"Bearer {self._token}",
                             "X-File-ID": file_id,
                             "X-SHA256": sha256,
+                            **correlation_headers(),
                         },
                         timeout=30.0,
                     )

@@ -1,6 +1,4 @@
 import asyncio
-import json
-import logging
 import secrets
 from contextlib import asynccontextmanager
 
@@ -12,6 +10,7 @@ from config import check_required_secrets, settings
 from database import SessionLocal
 from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from logging_json import CorrelationMiddleware, configure_logging, correlation_headers, get_logger
 from models import User, UserRole
 from prometheus_fastapi_instrumentator import Instrumentator
 from rate_limit import limiter
@@ -34,28 +33,8 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
-
-class _JsonFormatter(logging.Formatter):
-    def format(self, record):
-        return json.dumps(
-            {
-                "time": self.formatTime(record),
-                "level": record.levelname,
-                "service": "backend",
-                "logger": record.name,
-                "message": record.getMessage(),
-            }
-        )
-
-
-def _setup_logging():
-    handler = logging.StreamHandler()
-    handler.setFormatter(_JsonFormatter())
-    logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
-
-
-_setup_logging()
-logger = logging.getLogger(__name__)
+configure_logging("backend")
+logger = get_logger(__name__)
 
 
 # Weekly, mirroring the manager's metrics retention loop.
@@ -126,6 +105,10 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Adopt/mint a correlation id per request so a single upload can be followed
+# across backend → manager → agent logs (Step 5.1).
+app.add_middleware(CorrelationMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],
@@ -182,7 +165,7 @@ def health_ready(response: Response):
 
     manager_status = "ok"
     try:
-        httpx.get(f"{settings.manager_url}/health", timeout=2)
+        httpx.get(f"{settings.manager_url}/health", headers=correlation_headers(), timeout=2)
     except httpx.HTTPError:
         manager_status = "unreachable"
     return {"status": "ready", "postgres": "ok", "manager": manager_status}
