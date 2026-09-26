@@ -1,5 +1,8 @@
 FROM alpine:latest
 
+# Patch OS packages (fixable HIGH findings block the trivy gate in CI).
+RUN apk upgrade --no-cache
+
 # Install snmpd (SNMP daemon)
 RUN apk add --no-cache net-snmp net-snmp-tools
 

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import audit
+import jwt
 from auth import (
     create_access_token,
     get_current_user,
@@ -14,7 +15,7 @@ from config import settings
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from jose import JWTError, jwt
+from jwt import InvalidTokenError
 from models import RevokedToken, User, UserRole
 from password_policy import PasswordPolicyError, validate_password
 from pydantic import BaseModel
@@ -104,7 +105,7 @@ def logout(request: Request, token: str = Depends(oauth2_scheme), db: Session = 
     token — works even mid forced-password-change."""
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
     jti = payload.get("jti")
     if jti:

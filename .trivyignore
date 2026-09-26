@@ -8,4 +8,12 @@
 # Format:
 #   CVE-XXXX-YYYY  # <reason> — expires YYYY-MM-DD
 #
-# (empty — no exceptions currently)
+# pyasn1 0.4.8 in the agent image. The fixes need pyasn1>=0.6, which breaks the
+# pinned pysnmp 4.4.12; clearing them requires migrating the agent to a
+# maintained pysnmp and re-running `make simulation`. Same deferral as the
+# pip-audit --ignore-vuln entries in .github/workflows/ci.yml
+# (PYSEC-2026-2263 / -3455 / -3456 / -3457).
+CVE-2026-30922  # pyasn1 0.4.8, needs >=0.6.3 — expires 2026-10-31
+CVE-2026-59884  # pyasn1 0.4.8, needs >=0.6.4 — expires 2026-10-31
+CVE-2026-59885  # pyasn1 0.4.8, needs >=0.6.4 — expires 2026-10-31
+CVE-2026-59886  # pyasn1 0.4.8, needs >=0.6.4 — expires 2026-10-31

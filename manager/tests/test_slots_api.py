@@ -36,9 +36,9 @@ def test_create_slot_returns_token_and_command(client, auth_headers):
     assert "expires_at" in data
 
 
-def test_create_slot_no_auth_returns_403(client):
+def test_create_slot_no_auth_returns_401(client):
     resp = client.post("/slots", json={"label": "test"})
-    assert resp.status_code == 403
+    assert resp.status_code == 401
 
 
 def test_delete_slot_removes_it(client, auth_headers):

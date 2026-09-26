@@ -43,4 +43,4 @@ def test_baseline_excludes_counter_reset(client, auth_headers):
 
 
 def test_baseline_requires_auth(client):
-    assert client.get("/internal/metrics/baseline", params={"device_ip": "x"}).status_code == 403
+    assert client.get("/internal/metrics/baseline", params={"device_ip": "x"}).status_code == 401

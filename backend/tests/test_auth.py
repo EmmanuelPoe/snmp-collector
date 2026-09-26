@@ -18,6 +18,7 @@ from sqlalchemy.orm import sessionmaker
 config.settings.database_url = "sqlite:///:memory:"
 config.settings.jwt_secret = "test-secret-for-unit-tests"
 
+import jwt
 from auth import (
     create_access_token,
     get_current_user,
@@ -28,7 +29,6 @@ from auth import (
 )
 from database import get_db
 from fastapi import HTTPException
-from jose import jwt
 from models import User, UserRole
 
 
@@ -95,7 +95,7 @@ def test_get_current_user_rejects_invalid_token(db):
 def test_get_current_user_rejects_expired_token(db):
     from datetime import datetime, timedelta, timezone
 
-    from jose import jwt
+    import jwt
 
     expired_payload = {"sub": "user@test.com", "exp": datetime.now(timezone.utc) - timedelta(hours=1)}
     expired_token = jwt.encode(expired_payload, "test-secret-for-unit-tests", algorithm="HS256")

@@ -83,4 +83,4 @@ def test_rates_unknown_device_returns_empty(client, auth_headers):
 
 def test_rates_requires_auth(client):
     resp = client.get("/internal/metrics/rates?device_ip=10.0.0.1")
-    assert resp.status_code == 403
+    assert resp.status_code == 401

@@ -56,5 +56,5 @@ def test_get_unknown_command_404(client, auth_headers):
 
 
 def test_commands_require_auth(client):
-    assert client.get("/agents/a/commands").status_code == 403
-    assert client.post("/agents/a/commands", json={"type": "walk", "params": {}}).status_code == 403
+    assert client.get("/agents/a/commands").status_code == 401
+    assert client.post("/agents/a/commands", json={"type": "walk", "params": {}}).status_code == 401

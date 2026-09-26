@@ -82,11 +82,16 @@ jobs:
         run: pip-audit -r manager/requirements.txt
       - name: pip-audit agent
         # Allowlist (re-evaluate at expiry, then treat as a failure):
-        # - PYSEC-2026-2263 (pyasn1 0.4.8): fix needs pyasn1>=0.6, which breaks
-        #   the pinned pysnmp 4.4.12. Clearing it requires migrating the agent
-        #   to a maintained pysnmp and re-running `make simulation`.
-        #   Expires 2026-10-31.
-        run: pip-audit -r agent/requirements.txt --ignore-vuln PYSEC-2026-2263
+        # - PYSEC-2026-2263 / -3455 / -3456 / -3457 (pyasn1 0.4.8): the fixes
+        #   need pyasn1>=0.6, which breaks the pinned pysnmp 4.4.12. Clearing
+        #   them requires migrating the agent to a maintained pysnmp and
+        #   re-running `make simulation`. Expires 2026-10-31.
+        run: |
+          pip-audit -r agent/requirements.txt \
+            --ignore-vuln PYSEC-2026-2263 \
+            --ignore-vuln PYSEC-2026-3455 \
+            --ignore-vuln PYSEC-2026-3456 \
+            --ignore-vuln PYSEC-2026-3457
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -146,8 +151,8 @@ jobs:
         run: npm run test:ci --prefix frontend
 
   manager-tests:
-    # The manager container is authoritative for these tests (pinned Starlette;
-    # newer local versions produce spurious 401-vs-403 failures).
+    # The manager container is authoritative for these tests — it runs the
+    # exact pinned dependency set from manager/requirements.txt.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -183,10 +188,12 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
           curl -sfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sudo sh -s -- -b /usr/local/bin
+      # `config --images <svc>` also lists that service's *dependencies'* images
+      # (and in no fixed order), so read the service's own `image:` key instead.
       - name: Trivy scan built images
         run: |
           for svc in backend frontend manager agent snmp-simulator; do
-            img=$(docker compose config --images "$svc")
+            img=$(docker compose config --format json | jq -er ".services[\"$svc\"].image")
             echo "== $img =="
             trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
               --ignorefile .trivyignore "$img"
@@ -195,7 +202,7 @@ jobs:
         run: |
           mkdir -p sboms
           for svc in backend frontend manager agent snmp-simulator; do
-            img=$(docker compose config --images "$svc")
+            img=$(docker compose config --format json | jq -er ".services[\"$svc\"].image")
             syft "$img" -o spdx-json > "sboms/${svc}.spdx.json"
           done
       - name: Upload SBOM artifacts

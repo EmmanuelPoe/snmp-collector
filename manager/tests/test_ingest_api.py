@@ -75,7 +75,7 @@ def test_ingest_invalid_file_id_format_returns_400(client, auth_headers, sample_
     assert resp.status_code == 400
 
 
-def test_ingest_no_auth_returns_403(client, sample_polls_parquet):
+def test_ingest_no_auth_returns_401(client, sample_polls_parquet):
     sha = _sha256(sample_polls_parquet)
     with open(sample_polls_parquet, "rb") as f:
         resp = client.post(
@@ -83,4 +83,4 @@ def test_ingest_no_auth_returns_403(client, sample_polls_parquet):
             headers={"x-file-id": "agent-01_1003_polls", "x-sha256": sha},
             files={"file": ("polls.parquet", f, "application/octet-stream")},
         )
-    assert resp.status_code == 403
+    assert resp.status_code == 401

@@ -6,9 +6,9 @@ def test_register_returns_agent_id(client, auth_headers):
     assert "devices" in data
 
 
-def test_register_no_auth_returns_403(client):
+def test_register_no_auth_returns_401(client):
     resp = client.post("/register", json={"hostname": "nyc-01", "ip": "10.0.0.1"})
-    assert resp.status_code == 403
+    assert resp.status_code == 401
 
 
 def test_register_wrong_key_returns_401(client):

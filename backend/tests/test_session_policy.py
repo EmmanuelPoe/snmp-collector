@@ -7,9 +7,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from datetime import datetime, timezone
 
+import jwt
 from auth import create_access_token, hash_password
 from config import settings
-from jose import jwt
 from models import User, UserRole
 
 EMAIL = "session@test.com"

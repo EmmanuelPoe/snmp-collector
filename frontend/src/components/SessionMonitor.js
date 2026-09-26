@@ -59,7 +59,10 @@ export default function SessionMonitor() {
         warnedRef.current = false; // plenty of time left; re-arm the warning
       } else if (!warnedRef.current) {
         warnedRef.current = true;
-        showToast('Your session is about to expire — move the mouse or press a key to stay signed in.', 'warning');
+        showToast(
+          'Your session is about to expire — move the mouse or press a key to stay signed in.',
+          'warning',
+        );
       }
     };
 

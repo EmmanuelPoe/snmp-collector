@@ -17,4 +17,8 @@ regexes = [
     '''test-secret-for-unit-tests''',
     '''test-manager-api-key''',
     '''change-me-in-production''',
+    # backend/tests/{test_auth,test_audit}.py registration fixtures. Long enough
+    # to satisfy the Step 6.1 password policy, which is what trips the
+    # generic-api-key entropy rule. Never used outside the test suite.
+    '''Zx9-Vault-Panda-Meadow''',
 ]

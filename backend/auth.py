@@ -3,11 +3,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import jwt
 from config import settings
 from database import get_db
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from jwt import InvalidTokenError
 from models import RevokedToken, User
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -53,7 +54,7 @@ def _resolve_user(token: str, db: Session) -> User:
         email: Optional[str] = payload.get("sub")
         if not email:
             raise exc
-    except JWTError:
+    except InvalidTokenError:
         raise exc
     user = db.query(User).filter(User.email == email, User.is_active == True).first()
     if not user:

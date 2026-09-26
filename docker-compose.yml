@@ -24,6 +24,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: snmp-collector-backend
     container_name: snmp-backend
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -61,6 +62,7 @@ services:
       args:
         - NODE_ENV=production
         - REACT_APP_API_URL=/api
+    image: snmp-collector-frontend
     container_name: snmp-frontend
     networks:
       - snmp-network
@@ -94,6 +96,7 @@ services:
 
   manager:
     build: ./manager
+    image: snmp-collector-manager
     container_name: snmp-manager
     # Host port publishing for the manager lives in docker-compose.override.yml
     # (dev-only, auto-loaded). Production reaches the manager over the internal
@@ -128,6 +131,7 @@ services:
 
   agent:
     build: ./agent
+    image: snmp-collector-agent
     container_name: snmp-agent
     environment:
       - MANAGER_URL=http://manager:8000
@@ -169,6 +173,7 @@ services:
     build:
       context: ./snmp-simulator
       dockerfile: Dockerfile
+    image: snmp-collector-snmp-simulator
     container_name: snmp-simulator
     ports:
       - "1161:161/udp"

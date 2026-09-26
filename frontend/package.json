@@ -7,7 +7,7 @@
         "@emotion/styled": "^11.11.0",
         "@mui/icons-material": "^5.15.0",
         "@mui/material": "^5.15.0",
-        "axios": "^1.6.2",
+        "axios": "^1.20.0",
         "cytoscape": "^3.34.0",
         "react": "^18.2.0",
         "react-cytoscapejs": "^2.0.0",
@@ -25,10 +25,10 @@
     "jest": {
         "coverageThreshold": {
             "global": {
-                "statements": 22,
-                "branches": 15,
-                "functions": 13,
-                "lines": 23
+                "statements": 26,
+                "branches": 18,
+                "functions": 15,
+                "lines": 27
             }
         }
     },
