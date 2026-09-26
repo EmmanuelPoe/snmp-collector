@@ -59,6 +59,7 @@ Device registered in Backend (Postgres)
 
 - **Backend owns device config** (Postgres), but does **no SNMP polling**.
 - **Manager owns DuckDB** (`data/db/metrics.db`). Backend mounts it read-only. Never open DuckDB for writing from the backend.
+- **The `duckdb` pin must move in lockstep** across `manager/requirements.txt` and `backend/requirements.txt`. One process writes that file and the other reads it, so a version skew risks a storage-format mismatch that only shows up at runtime — unit tests pass either way. Dependabot watches the two directories separately and will propose one-sided bumps (it did in #30); bump both in a single PR or not at all.
 - **Manager has no public API docs** (`docs_url=None`). All endpoints require `Authorization: Bearer <MANAGER_API_KEY>`.
 - **Agent is mostly stateless**: its only on-disk state is an agent ID file (`data/agent-id/`) and a retry queue for failed uploads (`data/agent-queue/`).
 - Metrics are keyed by `device_ip` (not `device_id`). The backend resolves `device_id → ip_address` (from Postgres) before querying DuckDB.

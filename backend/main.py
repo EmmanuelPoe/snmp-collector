@@ -31,7 +31,7 @@ from routers.auth import router as auth_router
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 configure_logging("backend")
 logger = get_logger(__name__)
@@ -73,12 +73,24 @@ async def lifespan(app: FastAPI):
                 force_password_change=True,
             )
             db.add(admin)
-            db.commit()
-            logger.warning(
-                "Bootstrap admin created — login with admin@localhost / %s then change your password. "
-                "This one-time password is not shown again.",
-                password,
-            )
+            try:
+                db.commit()
+            except IntegrityError:
+                # This lifespan runs once per uvicorn worker (the image starts
+                # --workers 2), so the count()-then-insert above is a race on a
+                # fresh database. The users_email_key constraint is the arbiter:
+                # the loser rolls back and carries on, because the winner has
+                # already created the account and logged its one-time password.
+                # Raising here would abort worker startup and take the whole
+                # backend down with it.
+                db.rollback()
+                logger.info("Bootstrap admin already created by another worker — continuing")
+            else:
+                logger.warning(
+                    "Bootstrap admin created — login with admin@localhost / %s then change your password. "
+                    "This one-time password is not shown again.",
+                    password,
+                )
     except OperationalError:
         logger.error("Postgres is unreachable at startup — aborting (database_url host: %s)", settings.postgres_host)
         raise
