@@ -34,11 +34,11 @@ implementation plan (step number in parentheses).
 - [x] **Step 1.5** — Audit logging *(plan Step 17, done 2026-07-15)*
 - [x] **Step 1.6** — CORS tightening + TLS/HSTS/security headers *(plan Step 18, done 2026-07-15 — `nginx -t` + curl verification pending, needs the Docker stack)*
 - [x] **Step 1.7** — Per-agent credentials (retire shared bearer for agents) *(plan Step 19, done 2026-07-15 — grace mode on; flip `AGENT_AUTH_ENFORCE=true` once all agents re-enrolled)*
-- [x] **Step 3.1** — CI pipeline *(plan Step 20, done 2026-07-09 — enable branch protection on GitHub to make it merge-blocking)*
+- [x] **Step 3.1** — CI pipeline *(plan Step 20, done 2026-07-09 — branch protection enabled on `main` 2026-09-26; all 9 checks required)*
 - [x] **Step 3.2** — Lint / format / type-check gates *(plan Step 21, done 2026-07-15)*
 - [x] **Step 3.3** — Dependency + image scanning, SBOM *(plan Step 22, done 2026-07-19)*
 - [x] **Step 3.4** — Secret scanning *(plan Step 23, done 2026-07-19 — history clean, no rotation needed)*
-- [x] **Step 3.5** — Frontend + E2E test coverage *(plan Step 24, done 2026-07-19 — Playwright live run pending first CI pass)*
+- [x] **Step 3.5** — Frontend + E2E test coverage *(plan Step 24, done 2026-07-19 — first live Playwright run green 2026-09-26)*
 - [x] **Step 2.1** — Agent registry into Postgres *(plan Step 25, done 2026-07-19 — live-stack verification pending Docker)*
 - [x] **Step 2.2** — Harden silent failure paths *(plan Step 26, done 2026-07-19)*
 - [x] **Step 2.3** — Liveness/readiness + ingest backpressure *(plan Step 27, done 2026-07-19)*
@@ -200,8 +200,10 @@ been silently broken by Steps 1.2/1.4 (hardcoded `changeme` password; discarded
 the fresh post-password-change token) — it now parses the one-time bootstrap
 password from the backend log or accepts `SIM_ADMIN_EMAIL`/`SIM_ADMIN_PASSWORD`,
 and adopts the fresh token. Verified locally end-to-end.
-**Remaining manual step:** enable branch protection on `main` in GitHub settings
-requiring these five checks, to make CI merge-blocking.
+**Branch protection enabled 2026-09-26**: `main` requires all 9 checks (lint,
+secret-scan, dependency-audit, backend/agent/manager/frontend tests,
+build-images, e2e-simulation), requires a PR and an up-to-date branch, and
+blocks force-pushes and deletion. CI is now merge-blocking.
 
 ### Step 3.2 — 🟠 Linting, formatting, and type checking as gates ✅ Done (2026-07-15)
 Root `pyproject.toml`: ruff for lint **and** format (defaults + isort + W;
@@ -228,10 +230,19 @@ docker ×5, github-actions, weekly. **Existing findings fixed by bumping pins**
 fastapi 0.109.1, cryptography 48.0.1, python-multipart 0.0.31 (backend);
 pyarrow 23.0.1, python-multipart 0.0.31, jinja2 3.1.6, pytest 9.0.3,
 pytest-asyncio 1.3.0 (manager/agent); `npm audit fix` (form-data, react-router).
-One allowlist entry: PYSEC-2026-2263 (pyasn1 0.4.8 — fix breaks pysnmp 4.4.12;
-expires 2026-10-31; clearing it = agent pysnmp migration + `make simulation`).
-**Pending on CI/Docker:** Trivy/syft run (needs built images), in-container
-manager suite + e2e under the bumped pins, Dependabot PRs appearing.
+Allowlist: the pyasn1 0.4.8 advisories (PYSEC-2026-2263/-3455/-3456/-3457 and
+the matching CVE-2026-30922/-59884/-59885/-59886 in `.trivyignore`) — the fixes
+need pyasn1>=0.6, which breaks pysnmp 4.4.12; **expires 2026-10-31**, clearing
+it = agent pysnmp migration + `make simulation`. Dependabot is configured to
+`ignore` pyasn1 so it stops proposing a bump that cannot be taken.
+**Verified on CI 2026-09-26** (first green `build-images`): the Trivy gate had
+never actually run — `docker compose config --images <svc>` also emits the
+service's dependency images, so Trivy got a multi-line reference and errored.
+Fixed by declaring explicit `image:` names and reading each service's own key.
+The working scan then found real fixable HIGH/CRITICAL findings, resolved by
+patching OS packages at build time in all five images and stripping
+setuptools/wheel from the runtime images (upgrading them only relocates the
+findings into pip's vendored tree).
 
 ### Step 3.4 — 🟡 Secret scanning ✅ Done (2026-07-19)
 gitleaks v8.24.3 as a pre-commit hook and a CI `secret-scan` job (full-history
@@ -248,18 +259,21 @@ rotate-don't-rewrite policy).
 
 ### Step 3.5 — 🟡 Frontend and integration test coverage ✅ Done (2026-07-19)
 Testing-library added (react 14 / jest-dom 6 / user-event 14, pinned).
-10 component tests across the three critical flows: login
+25 component tests (10 at Step 3.5; SessionMonitor and ChangePasswordPage
+added 2026-09-26) across the critical flows: login
 (success/failure/lockout-423/forced password change), device modal (create,
 create-with-thresholds → alert-rule upsert, edit) and the dashboard alert feed
 (render + viewer gating, acknowledge, assign) — API mocked at the
 `services/api` boundary. Coverage floor enforced via jest `coverageThreshold`
-in `frontend/package.json` (starts at 22/15/13/23 %stmts/branch/func/lines —
-ratchet up, never down) through the new CI `frontend-tests` job. Playwright
+in `frontend/package.json` (started at 22/15/13/23 %stmts/branch/func/lines;
+ratcheted to 26/18/15/27 on 2026-09-26 — ratchet up, never down) through the new
+CI `frontend-tests` job. Playwright
 happy-path E2E (`e2e/smoke.spec.js`): bootstrap login → forced password change
 → add simulator device → poll until metrics arrive → chart renders; wired into
 the CI e2e job *before* `run_simulation.sh` (Playwright consumes the one-time
 bootstrap password, sets a known one, the simulation reuses it).
-**Pending on CI/Docker:** first live Playwright run against the compose stack.
+**First live run green 2026-09-26** against the compose stack in CI
+(`e2e-simulation`, 6m46s).
 
 ---
 

@@ -18,8 +18,8 @@ jobs:
     # the lenient baseline from pyproject.toml.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install lint tools
@@ -36,7 +36,7 @@ jobs:
             echo "== $svc =="
             (cd "$svc" && mypy --config-file ../pyproject.toml .)
           done
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -55,7 +55,7 @@ jobs:
     # per-PR diff scans. Also runs locally as a pre-commit hook.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Install gitleaks
@@ -70,8 +70,8 @@ jobs:
     # unfixable ones get an --ignore-vuln entry below with a reason + expiry.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install pip-audit
@@ -92,7 +92,7 @@ jobs:
             --ignore-vuln PYSEC-2026-3455 \
             --ignore-vuln PYSEC-2026-3456 \
             --ignore-vuln PYSEC-2026-3457
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -106,8 +106,8 @@ jobs:
   backend-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -121,8 +121,8 @@ jobs:
   agent-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -139,8 +139,8 @@ jobs:
     # up as coverage grows, never down.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -155,7 +155,7 @@ jobs:
     # exact pinned dependency set from manager/requirements.txt.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Provide docker-compose shim
         run: |
           if ! command -v docker-compose >/dev/null; then
@@ -174,7 +174,7 @@ jobs:
   build-images:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Generate .env
         run: make ensure-env
       - name: Build all images
@@ -206,7 +206,7 @@ jobs:
             syft "$img" -o spdx-json > "sboms/${svc}.spdx.json"
           done
       - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: image-sboms
           path: sboms/
@@ -215,7 +215,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Provide docker-compose shim
         run: |
           if ! command -v docker-compose >/dev/null; then
@@ -241,7 +241,7 @@ jobs:
           fi
           echo "::add-mask::$PW"
           echo "E2E_BOOTSTRAP_PASSWORD=$PW" >> "$GITHUB_ENV"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -256,7 +256,7 @@ jobs:
         run: npm test --prefix e2e
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: e2e/playwright-report/
@@ -270,7 +270,7 @@ jobs:
         run: docker compose logs --no-color > compose-logs.txt
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: compose-logs
           path: compose-logs.txt
