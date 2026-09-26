@@ -1,5 +1,5 @@
 pysnmp==4.4.12
-pyasn1==0.4.8
+pyasn1==0.6.4
 pyarrow==23.0.1
 httpx==0.27.2
 pydantic-settings==2.5.2
