@@ -1,5 +1,6 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
 
 
 def _insert_poll(conn, collected_at):
@@ -21,12 +22,13 @@ def _insert_trap(conn, received_at):
 @pytest.mark.asyncio
 async def test_purge_deletes_old_keeps_recent(reset_db):
     import db
+
     conn = db.get_db()
     now = datetime.now(timezone.utc)
-    _insert_poll(conn, now - timedelta(days=120))   # old
-    _insert_poll(conn, now - timedelta(days=10))     # recent
-    _insert_trap(conn, now - timedelta(days=200))    # old
-    _insert_trap(conn, now - timedelta(days=1))      # recent
+    _insert_poll(conn, now - timedelta(days=120))  # old
+    _insert_poll(conn, now - timedelta(days=10))  # recent
+    _insert_trap(conn, now - timedelta(days=200))  # old
+    _insert_trap(conn, now - timedelta(days=1))  # recent
 
     result = await db.purge_old_metrics(90)
 
@@ -40,6 +42,7 @@ async def test_purge_deletes_old_keeps_recent(reset_db):
 @pytest.mark.asyncio
 async def test_purge_noop_when_all_recent(reset_db):
     import db
+
     conn = db.get_db()
     now = datetime.now(timezone.utc)
     _insert_poll(conn, now - timedelta(days=5))
@@ -51,6 +54,7 @@ async def test_purge_noop_when_all_recent(reset_db):
 @pytest.mark.asyncio
 async def test_purge_respects_retention_days(reset_db):
     import db
+
     conn = db.get_db()
     now = datetime.now(timezone.utc)
     _insert_poll(conn, now - timedelta(days=15))

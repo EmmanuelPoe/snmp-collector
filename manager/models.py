@@ -1,6 +1,7 @@
-from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+
+from pydantic import BaseModel
 
 
 class DeviceConfig(BaseModel):
@@ -25,6 +26,9 @@ class RegisterRequest(BaseModel):
 
 class RegisterResponse(BaseModel):
     agent_id: str
+    # Per-agent credential (Step 1.7) — returned exactly once; only its hash is
+    # stored server-side.
+    agent_secret: str
     devices: list[DeviceConfig]
 
 
@@ -78,4 +82,6 @@ class ClaimRequest(BaseModel):
 
 class ClaimResponse(BaseModel):
     agent_id: str
+    # Per-agent credential (Step 1.7) — returned exactly once.
+    agent_secret: str
     devices: list[DeviceConfig]

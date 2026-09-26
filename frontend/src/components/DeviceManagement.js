@@ -1,6 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDevices, createDevice, updateDevice, deleteDevice, getModules, getAgents, getDeviceCredentials, getAlertRules, saveAlertRules, getDeviceTags } from '../services/api';
+import {
+  getDevices,
+  createDevice,
+  updateDevice,
+  deleteDevice,
+  getModules,
+  getAgents,
+  getDeviceCredentials,
+  getAlertRules,
+  saveAlertRules,
+  getDeviceTags,
+} from '../services/api';
 import { useToast } from '../hooks/useToast';
 
 export default function DeviceManagement() {
@@ -15,21 +26,34 @@ export default function DeviceManagement() {
   const [sort, setSort] = useState({ col: 'name', dir: 'asc' });
   const [editingDevice, setEditingDevice] = useState(null);
   const [formData, setFormData] = useState({
-    name: '', ip_address: '', snmp_version: '2c', snmp_community: 'public',
-    snmp_port: 161, snmp_modules: ['if_mib'], device_type: 'switch',
-    description: '', enabled: true,
-    username: '', auth_protocol: 'SHA', auth_password: '',
-    priv_protocol: 'AES', priv_password: '', assigned_agent_id: '',
+    name: '',
+    ip_address: '',
+    snmp_version: '2c',
+    snmp_community: 'public',
+    snmp_port: 161,
+    snmp_modules: ['if_mib'],
+    device_type: 'switch',
+    description: '',
+    enabled: true,
+    username: '',
+    auth_protocol: 'SHA',
+    auth_password: '',
+    priv_protocol: 'AES',
+    priv_password: '',
+    assigned_agent_id: '',
   });
 
-  const [thresholds, setThresholds] = useState({ bandwidth_in_pct: '', bandwidth_out_pct: '', error_rate: '', enabled: true });
+  const [thresholds, setThresholds] = useState({
+    bandwidth_in_pct: '',
+    bandwidth_out_pct: '',
+    error_rate: '',
+    enabled: true,
+  });
   const [allTags, setAllTags] = useState([]);
   const [tagInput, setTagInput] = useState('');
   const [tagFilter, setTagFilter] = useState('');
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [devicesData, modulesData, agentsData, tagsData] = await Promise.all([
         getDevices(),
@@ -46,15 +70,22 @@ export default function DeviceManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const payload = { ...formData };
       if (payload.snmp_version === '2c') {
-        payload.username = null; payload.auth_protocol = null;
-        payload.auth_password = null; payload.priv_protocol = null; payload.priv_password = null;
+        payload.username = null;
+        payload.auth_protocol = null;
+        payload.auth_password = null;
+        payload.priv_protocol = null;
+        payload.priv_password = null;
       }
       if (!payload.assigned_agent_id) payload.assigned_agent_id = null;
       let savedDevice;
@@ -65,13 +96,16 @@ export default function DeviceManagement() {
         savedDevice = await createDevice(payload);
         showToast(`Device "${payload.name}" created`, 'success');
       }
-      const hasThreshold = thresholds.bandwidth_in_pct !== '' ||
+      const hasThreshold =
+        thresholds.bandwidth_in_pct !== '' ||
         thresholds.bandwidth_out_pct !== '' ||
         thresholds.error_rate !== '';
       if (hasThreshold) {
         await saveAlertRules(savedDevice.id, {
-          bandwidth_in_pct: thresholds.bandwidth_in_pct !== '' ? Number(thresholds.bandwidth_in_pct) : null,
-          bandwidth_out_pct: thresholds.bandwidth_out_pct !== '' ? Number(thresholds.bandwidth_out_pct) : null,
+          bandwidth_in_pct:
+            thresholds.bandwidth_in_pct !== '' ? Number(thresholds.bandwidth_in_pct) : null,
+          bandwidth_out_pct:
+            thresholds.bandwidth_out_pct !== '' ? Number(thresholds.bandwidth_out_pct) : null,
           error_rate: thresholds.error_rate !== '' ? Number(thresholds.error_rate) : null,
           enabled: thresholds.enabled,
         });
@@ -87,13 +121,20 @@ export default function DeviceManagement() {
   const handleEdit = async (device) => {
     setEditingDevice(device);
     setFormData({
-      name: device.name, ip_address: device.ip_address,
-      snmp_version: device.snmp_version, snmp_community: 'public',
-      snmp_port: device.snmp_port, snmp_modules: device.snmp_modules || ['if_mib'],
-      device_type: device.device_type || 'switch', description: device.description || '',
-      enabled: device.enabled, username: '',
-      auth_protocol: 'SHA', auth_password: '',
-      priv_protocol: 'AES', priv_password: '',
+      name: device.name,
+      ip_address: device.ip_address,
+      snmp_version: device.snmp_version,
+      snmp_community: 'public',
+      snmp_port: device.snmp_port,
+      snmp_modules: device.snmp_modules || ['if_mib'],
+      device_type: device.device_type || 'switch',
+      description: device.description || '',
+      enabled: device.enabled,
+      username: '',
+      auth_protocol: 'SHA',
+      auth_password: '',
+      priv_protocol: 'AES',
+      priv_password: '',
       assigned_agent_id: device.assigned_agent_id || '',
       tags: device.tags || [],
     });
@@ -102,7 +143,7 @@ export default function DeviceManagement() {
     setShowModal(true);
     try {
       const creds = await getDeviceCredentials(device.id);
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         snmp_community: creds.snmp_community || 'public',
         username: creds.username || '',
@@ -137,17 +178,30 @@ export default function DeviceManagement() {
   };
 
   const handleModuleChange = (e) => {
-    setFormData({ ...formData, snmp_modules: Array.from(e.target.selectedOptions, o => o.value) });
+    setFormData({
+      ...formData,
+      snmp_modules: Array.from(e.target.selectedOptions, (o) => o.value),
+    });
   };
 
   const resetForm = () => {
     setEditingDevice(null);
     setFormData({
-      name: '', ip_address: '', snmp_version: '2c', snmp_community: 'public',
-      snmp_port: 161, snmp_modules: ['if_mib'], device_type: 'switch',
-      description: '', enabled: true,
-      username: '', auth_protocol: 'SHA', auth_password: '',
-      priv_protocol: 'AES', priv_password: '', assigned_agent_id: '',
+      name: '',
+      ip_address: '',
+      snmp_version: '2c',
+      snmp_community: 'public',
+      snmp_port: 161,
+      snmp_modules: ['if_mib'],
+      device_type: 'switch',
+      description: '',
+      enabled: true,
+      username: '',
+      auth_protocol: 'SHA',
+      auth_password: '',
+      priv_protocol: 'AES',
+      priv_password: '',
+      assigned_agent_id: '',
       tags: [],
     });
     setThresholds({ bandwidth_in_pct: '', bandwidth_out_pct: '', error_rate: '', enabled: true });
@@ -157,31 +211,29 @@ export default function DeviceManagement() {
   const addTag = (tag) => {
     const normalized = tag.trim().toLowerCase().replace(/\s+/g, '-');
     if (normalized && !formData.tags?.includes(normalized)) {
-      setFormData(f => ({ ...f, tags: [...(f.tags || []), normalized] }));
+      setFormData((f) => ({ ...f, tags: [...(f.tags || []), normalized] }));
     }
     setTagInput('');
   };
 
   const removeTag = (tag) => {
-    setFormData(f => ({ ...f, tags: (f.tags || []).filter(t => t !== tag) }));
+    setFormData((f) => ({ ...f, tags: (f.tags || []).filter((t) => t !== tag) }));
   };
 
   const filtered = devices
-    .filter(d =>
-      (!tagFilter || d.tags?.includes(tagFilter)) &&
-      (d.name.toLowerCase().includes(search.toLowerCase()) ||
-       d.ip_address.includes(search))
+    .filter(
+      (d) =>
+        (!tagFilter || d.tags?.includes(tagFilter)) &&
+        (d.name.toLowerCase().includes(search.toLowerCase()) || d.ip_address.includes(search)),
     )
     .sort((a, b) => {
       const valA = (a[sort.col] || '').toString().toLowerCase();
       const valB = (b[sort.col] || '').toString().toLowerCase();
-      return sort.dir === 'asc'
-        ? valA.localeCompare(valB)
-        : valB.localeCompare(valA);
+      return sort.dir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     });
 
   function toggleSort(col) {
-    setSort(prev => ({ col, dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc' }));
+    setSort((prev) => ({ col, dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc' }));
   }
 
   function sortIndicator(col) {
@@ -189,7 +241,12 @@ export default function DeviceManagement() {
     return sort.dir === 'asc' ? ' ↑' : ' ↓';
   }
 
-  if (loading) return <div className="loading-center"><div className="spinner" /></div>;
+  if (loading)
+    return (
+      <div className="loading-center">
+        <div className="spinner" />
+      </div>
+    );
 
   return (
     <div className="fade-in">
@@ -204,22 +261,30 @@ export default function DeviceManagement() {
             type="search"
             placeholder="Search by name or IP…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
           />
           {allTags.length > 0 && (
             <select
               className="input"
               value={tagFilter}
-              onChange={e => setTagFilter(e.target.value)}
+              onChange={(e) => setTagFilter(e.target.value)}
               style={{ width: 'auto' }}
             >
               <option value="">All tags</option>
-              {allTags.map(tag => (
-                <option key={tag} value={tag}>{tag}</option>
+              {allTags.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
+                </option>
               ))}
             </select>
           )}
-          <button className="btn btn-primary" onClick={() => { resetForm(); setShowModal(true); }}>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+          >
             + Add Device
           </button>
         </div>
@@ -229,35 +294,58 @@ export default function DeviceManagement() {
         <table className="data-table">
           <thead>
             <tr>
-              <th className="sortable" onClick={() => toggleSort('name')}>Name{sortIndicator('name')}</th>
-              <th className="sortable" onClick={() => toggleSort('ip_address')}>IP Address{sortIndicator('ip_address')}</th>
+              <th className="sortable" onClick={() => toggleSort('name')}>
+                Name{sortIndicator('name')}
+              </th>
+              <th className="sortable" onClick={() => toggleSort('ip_address')}>
+                IP Address{sortIndicator('ip_address')}
+              </th>
               <th>Type</th>
               <th>SNMP Version</th>
               <th>Agent</th>
-              <th className="sortable" onClick={() => toggleSort('enabled')}>Status{sortIndicator('enabled')}</th>
+              <th className="sortable" onClick={() => toggleSort('enabled')}>
+                Status{sortIndicator('enabled')}
+              </th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-text-faint)' }}>
-                  {search ? `No devices match "${search}"` : 'No devices found. Click "+ Add Device" to get started.'}
+                <td
+                  colSpan="7"
+                  style={{
+                    textAlign: 'center',
+                    padding: '2.5rem',
+                    color: 'var(--color-text-faint)',
+                  }}
+                >
+                  {search
+                    ? `No devices match "${search}"`
+                    : 'No devices found. Click "+ Add Device" to get started.'}
                 </td>
               </tr>
             ) : (
-              filtered.map(device => (
+              filtered.map((device) => (
                 <tr key={device.id}>
                   <td>
                     <strong>{device.name}</strong>
                     {device.tags?.length > 0 && (
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
-                        {device.tags.map(tag => (
-                          <span key={tag} style={{
-                            fontSize: 10, padding: '1px 6px', borderRadius: 3,
-                            background: 'rgba(99,102,241,0.15)', color: 'var(--color-accent)',
-                            border: '1px solid rgba(99,102,241,0.3)',
-                          }}>{tag}</span>
+                        {device.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            style={{
+                              fontSize: 10,
+                              padding: '1px 6px',
+                              borderRadius: 3,
+                              background: 'rgba(99,102,241,0.15)',
+                              color: 'var(--color-accent)',
+                              border: '1px solid rgba(99,102,241,0.3)',
+                            }}
+                          >
+                            {tag}
+                          </span>
                         ))}
                       </div>
                     )}
@@ -266,9 +354,13 @@ export default function DeviceManagement() {
                   <td className="text-muted">{device.device_type || '—'}</td>
                   <td className="font-mono text-sm">{device.snmp_version}</td>
                   <td>
-                    {device.assigned_agent_id
-                      ? <code className="font-mono text-xs text-muted">{device.assigned_agent_id.slice(0, 12)}…</code>
-                      : <span className="text-faint">—</span>}
+                    {device.assigned_agent_id ? (
+                      <code className="font-mono text-xs text-muted">
+                        {device.assigned_agent_id.slice(0, 12)}…
+                      </code>
+                    ) : (
+                      <span className="text-faint">—</span>
+                    )}
                   </td>
                   <td>
                     <span className={`badge ${device.enabled ? 'badge-success' : 'badge-danger'}`}>
@@ -277,9 +369,24 @@ export default function DeviceManagement() {
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(device)}>Edit</button>
-                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(device)}>Delete</button>
-                      <button className="btn btn-sm" onClick={() => navigate(`/metrics?device_id=${device.id}`)}>Charts</button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleEdit(device)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => handleDelete(device)}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => navigate(`/metrics?device_id=${device.id}`)}
+                      >
+                        Charts
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -291,47 +398,76 @@ export default function DeviceManagement() {
 
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{editingDevice ? 'Edit Device' : 'Add Device'}</h3>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              <button className="modal-close" onClick={() => setShowModal(false)}>
+                ×
+              </button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">Device Name *</label>
-                <input className="input" type="text" value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  required placeholder="e.g., Router-01" />
+                <input
+                  className="input"
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                  placeholder="e.g., Router-01"
+                />
               </div>
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">IP Address *</label>
-                  <input className="input" type="text" value={formData.ip_address}
-                    onChange={e => setFormData({ ...formData, ip_address: e.target.value })}
-                    required placeholder="192.168.1.1" />
+                  <input
+                    className="input"
+                    type="text"
+                    value={formData.ip_address}
+                    onChange={(e) => setFormData({ ...formData, ip_address: e.target.value })}
+                    required
+                    placeholder="192.168.1.1"
+                  />
                 </div>
                 <div className="form-group">
                   <label className="form-label">SNMP Port</label>
-                  <input className="input" type="number" value={formData.snmp_port}
-                    onChange={e => setFormData({ ...formData, snmp_port: parseInt(e.target.value) })}
-                    placeholder="161" />
+                  <input
+                    className="input"
+                    type="number"
+                    value={formData.snmp_port}
+                    onChange={(e) =>
+                      setFormData({ ...formData, snmp_port: parseInt(e.target.value) })
+                    }
+                    placeholder="161"
+                  />
                 </div>
               </div>
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">SNMP Version</label>
-                  <select className="select" value={formData.snmp_version}
-                    onChange={e => setFormData({ ...formData, snmp_version: e.target.value })}>
+                  <select
+                    className="select"
+                    value={formData.snmp_version}
+                    onChange={(e) => setFormData({ ...formData, snmp_version: e.target.value })}
+                  >
                     <option value="2c">v2c</option>
                     <option value="3">v3</option>
                   </select>
                 </div>
                 <div className="form-group">
                   <label className="form-label">SNMP Modules</label>
-                  <select className="select" multiple size="3" value={formData.snmp_modules}
-                    onChange={handleModuleChange} style={{ height: 'auto' }}>
-                    {availableModules.map(mod => (
-                      <option key={mod} value={mod}>{mod}</option>
+                  <select
+                    className="select"
+                    multiple
+                    size="3"
+                    value={formData.snmp_modules}
+                    onChange={handleModuleChange}
+                    style={{ height: 'auto' }}
+                  >
+                    {availableModules.map((mod) => (
+                      <option key={mod} value={mod}>
+                        {mod}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -339,24 +475,38 @@ export default function DeviceManagement() {
               {formData.snmp_version === '2c' && (
                 <div className="form-group">
                   <label className="form-label">SNMP Community</label>
-                  <input className="input" type="text" value={formData.snmp_community}
-                    onChange={e => setFormData({ ...formData, snmp_community: e.target.value })}
-                    placeholder="public" />
+                  <input
+                    className="input"
+                    type="text"
+                    value={formData.snmp_community}
+                    onChange={(e) => setFormData({ ...formData, snmp_community: e.target.value })}
+                    placeholder="public"
+                  />
                 </div>
               )}
               {formData.snmp_version === '3' && (
                 <>
                   <div className="form-group">
                     <label className="form-label">Username *</label>
-                    <input className="input" type="text" value={formData.username}
-                      onChange={e => setFormData({ ...formData, username: e.target.value })}
-                      required placeholder="snmpv3user" />
+                    <input
+                      className="input"
+                      type="text"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      required
+                      placeholder="snmpv3user"
+                    />
                   </div>
                   <div className="form-row">
                     <div className="form-group">
                       <label className="form-label">Auth Protocol</label>
-                      <select className="select" value={formData.auth_protocol}
-                        onChange={e => setFormData({ ...formData, auth_protocol: e.target.value })}>
+                      <select
+                        className="select"
+                        value={formData.auth_protocol}
+                        onChange={(e) =>
+                          setFormData({ ...formData, auth_protocol: e.target.value })
+                        }
+                      >
                         <option value="SHA">SHA</option>
                         <option value="SHA256">SHA-256</option>
                         <option value="MD5">MD5</option>
@@ -364,16 +514,28 @@ export default function DeviceManagement() {
                     </div>
                     <div className="form-group">
                       <label className="form-label">Auth Password *</label>
-                      <input className="input" type="password" value={formData.auth_password}
-                        onChange={e => setFormData({ ...formData, auth_password: e.target.value })}
-                        required placeholder="min 8 chars" />
+                      <input
+                        className="input"
+                        type="password"
+                        value={formData.auth_password}
+                        onChange={(e) =>
+                          setFormData({ ...formData, auth_password: e.target.value })
+                        }
+                        required
+                        placeholder="min 8 chars"
+                      />
                     </div>
                   </div>
                   <div className="form-row">
                     <div className="form-group">
                       <label className="form-label">Priv Protocol</label>
-                      <select className="select" value={formData.priv_protocol}
-                        onChange={e => setFormData({ ...formData, priv_protocol: e.target.value })}>
+                      <select
+                        className="select"
+                        value={formData.priv_protocol}
+                        onChange={(e) =>
+                          setFormData({ ...formData, priv_protocol: e.target.value })
+                        }
+                      >
                         <option value="AES">AES</option>
                         <option value="AES256">AES-256</option>
                         <option value="DES">DES</option>
@@ -381,29 +543,47 @@ export default function DeviceManagement() {
                     </div>
                     <div className="form-group">
                       <label className="form-label">Priv Password *</label>
-                      <input className="input" type="password" value={formData.priv_password}
-                        onChange={e => setFormData({ ...formData, priv_password: e.target.value })}
-                        required placeholder="min 8 chars" />
+                      <input
+                        className="input"
+                        type="password"
+                        value={formData.priv_password}
+                        onChange={(e) =>
+                          setFormData({ ...formData, priv_password: e.target.value })
+                        }
+                        required
+                        placeholder="min 8 chars"
+                      />
                     </div>
                   </div>
                 </>
               )}
               <div className="form-group">
                 <label className="form-label">Assigned Agent</label>
-                <select className="select" value={formData.assigned_agent_id}
-                  onChange={e => setFormData({ ...formData, assigned_agent_id: e.target.value })}>
+                <select
+                  className="select"
+                  value={formData.assigned_agent_id}
+                  onChange={(e) => setFormData({ ...formData, assigned_agent_id: e.target.value })}
+                >
                   <option value="">— Unassigned —</option>
-                  {[...agents].sort((a, b) => (a.status === 'online' ? -1 : 1) - (b.status === 'online' ? -1 : 1)).map(agent => (
-                    <option key={agent.agent_id} value={agent.agent_id}>
-                      {agent.status === 'online' ? '● ' : '○ '}{agent.hostname} ({agent.agent_id})
-                    </option>
-                  ))}
+                  {[...agents]
+                    .sort(
+                      (a, b) => (a.status === 'online' ? -1 : 1) - (b.status === 'online' ? -1 : 1),
+                    )
+                    .map((agent) => (
+                      <option key={agent.agent_id} value={agent.agent_id}>
+                        {agent.status === 'online' ? '● ' : '○ '}
+                        {agent.hostname} ({agent.agent_id})
+                      </option>
+                    ))}
                 </select>
               </div>
               <div className="form-group">
                 <label className="form-label">Device Type</label>
-                <select className="select" value={formData.device_type}
-                  onChange={e => setFormData({ ...formData, device_type: e.target.value })}>
+                <select
+                  className="select"
+                  value={formData.device_type}
+                  onChange={(e) => setFormData({ ...formData, device_type: e.target.value })}
+                >
                   <option value="router">Router</option>
                   <option value="switch">Switch</option>
                   <option value="firewall">Firewall</option>
@@ -412,23 +592,48 @@ export default function DeviceManagement() {
               </div>
               <div className="form-group">
                 <label className="form-label">Description</label>
-                <input className="input" type="text" value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Optional" />
+                <input
+                  className="input"
+                  type="text"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Optional"
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">Tags</label>
                 {(formData.tags || []).length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                    {(formData.tags || []).map(tag => (
-                      <span key={tag} style={{
-                        background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)',
-                        borderRadius: 4, padding: '2px 8px', fontSize: 12,
-                        display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-accent)',
-                      }}>
+                    {(formData.tags || []).map((tag) => (
+                      <span
+                        key={tag}
+                        style={{
+                          background: 'rgba(99,102,241,0.15)',
+                          border: '1px solid rgba(99,102,241,0.3)',
+                          borderRadius: 4,
+                          padding: '2px 8px',
+                          fontSize: 12,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          color: 'var(--color-accent)',
+                        }}
+                      >
                         {tag}
-                        <button type="button" onClick={() => removeTag(tag)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-faint)', padding: 0, lineHeight: 1 }}>×</button>
+                        <button
+                          type="button"
+                          onClick={() => removeTag(tag)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--color-text-faint)',
+                            padding: 0,
+                            lineHeight: 1,
+                          }}
+                        >
+                          ×
+                        </button>
                       </span>
                     ))}
                   </div>
@@ -439,32 +644,86 @@ export default function DeviceManagement() {
                     type="text"
                     placeholder="Add tag… (Enter or comma to add)"
                     value={tagInput}
-                    onChange={e => setTagInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); }
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ',') {
+                        e.preventDefault();
+                        addTag(tagInput);
+                      }
                     }}
                   />
-                  <button type="button" className="btn btn-secondary" onClick={() => addTag(tagInput)}>Add</button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => addTag(tagInput)}
+                  >
+                    Add
+                  </button>
                 </div>
-                {allTags.filter(t => !formData.tags?.includes(t)).length > 0 && (
+                {allTags.filter((t) => !formData.tags?.includes(t)).length > 0 && (
                   <div className="form-hint">
                     Existing:{' '}
-                    {allTags.filter(t => !formData.tags?.includes(t)).map(t => (
-                      <button key={t} type="button" onClick={() => setFormData(f => ({ ...f, tags: [...(f.tags || []), t] }))}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-accent)', padding: '0 4px', fontSize: 12 }}>{t}</button>
-                    ))}
+                    {allTags
+                      .filter((t) => !formData.tags?.includes(t))
+                      .map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() =>
+                            setFormData((f) => ({ ...f, tags: [...(f.tags || []), t] }))
+                          }
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--color-accent)',
+                            padding: '0 4px',
+                            fontSize: 12,
+                          }}
+                        >
+                          {t}
+                        </button>
+                      ))}
                   </div>
                 )}
               </div>
               <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={formData.enabled}
-                    onChange={e => setFormData({ ...formData, enabled: e.target.checked })} />
-                  <span className="form-label" style={{ margin: 0 }}>Enabled</span>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.enabled}
+                    onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
+                  />
+                  <span className="form-label" style={{ margin: 0 }}>
+                    Enabled
+                  </span>
                 </label>
               </div>
-              <div style={{ marginTop: 20, borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
-                <div className="form-section-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+              <div
+                style={{
+                  marginTop: 20,
+                  borderTop: '1px solid var(--color-border)',
+                  paddingTop: 16,
+                }}
+              >
+                <div
+                  className="form-section-label"
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: 'var(--color-text-muted)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    marginBottom: 12,
+                  }}
+                >
                   Alert Thresholds (optional)
                 </div>
                 <div className="form-row">
@@ -477,7 +736,9 @@ export default function DeviceManagement() {
                       max="100"
                       placeholder="e.g. 80"
                       value={thresholds.bandwidth_in_pct}
-                      onChange={e => setThresholds(prev => ({ ...prev, bandwidth_in_pct: e.target.value }))}
+                      onChange={(e) =>
+                        setThresholds((prev) => ({ ...prev, bandwidth_in_pct: e.target.value }))
+                      }
                     />
                   </div>
                   <div className="form-group">
@@ -489,7 +750,9 @@ export default function DeviceManagement() {
                       max="100"
                       placeholder="e.g. 80"
                       value={thresholds.bandwidth_out_pct}
-                      onChange={e => setThresholds(prev => ({ ...prev, bandwidth_out_pct: e.target.value }))}
+                      onChange={(e) =>
+                        setThresholds((prev) => ({ ...prev, bandwidth_out_pct: e.target.value }))
+                      }
                     />
                   </div>
                 </div>
@@ -502,14 +765,24 @@ export default function DeviceManagement() {
                       min="0"
                       placeholder="e.g. 10"
                       value={thresholds.error_rate}
-                      onChange={e => setThresholds(prev => ({ ...prev, error_rate: e.target.value }))}
+                      onChange={(e) =>
+                        setThresholds((prev) => ({ ...prev, error_rate: e.target.value }))
+                      }
                     />
                   </div>
                 </div>
               </div>
               <div className="action-buttons">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">{editingDevice ? 'Update' : 'Create'}</button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowModal(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  {editingDevice ? 'Update' : 'Create'}
+                </button>
               </div>
             </form>
           </div>

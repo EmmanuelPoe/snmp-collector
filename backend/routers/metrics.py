@@ -1,16 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import datetime
 import csv
 import io
-import httpx
+from datetime import datetime
+from typing import List, Optional
 
+import httpx
 from auth import get_current_user
+from config import settings
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Response
 from models import Device, User
 from schemas import MetricResponse
-from config import settings
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
@@ -120,12 +120,15 @@ def get_interface_history(
     _: User = Depends(get_current_user),
 ):
     device_ip = _device_ip(device_id, db)
-    return _manager_get("/history", {
-        "device_ip": device_ip,
-        "interface_name": interface_name,
-        "hours": hours,
-        "buckets": buckets,
-    })
+    return _manager_get(
+        "/history",
+        {
+            "device_ip": device_ip,
+            "interface_name": interface_name,
+            "hours": hours,
+            "buckets": buckets,
+        },
+    )
 
 
 @router.get("/traps")
@@ -147,8 +150,15 @@ def get_traps(
 
 
 _CSV_COLUMNS = [
-    "interface", "max_in_bps", "avg_in_bps", "max_out_bps", "avg_out_bps",
-    "speed_bps", "max_utilization_pct", "avg_utilization_pct", "samples",
+    "interface",
+    "max_in_bps",
+    "avg_in_bps",
+    "max_out_bps",
+    "avg_out_bps",
+    "speed_bps",
+    "max_utilization_pct",
+    "avg_utilization_pct",
+    "samples",
 ]
 
 
@@ -169,13 +179,19 @@ def export_csv(
     writer = csv.writer(buf)
     writer.writerow(_CSV_COLUMNS)
     for name, s in sorted(interfaces.items()):
-        writer.writerow([
-            name, s["max_in_bps"], s["avg_in_bps"], s["max_out_bps"], s["avg_out_bps"],
-            s.get("speed_bps") if s.get("speed_bps") is not None else "",
-            s.get("max_utilization_pct") if s.get("max_utilization_pct") is not None else "",
-            s.get("avg_utilization_pct") if s.get("avg_utilization_pct") is not None else "",
-            s.get("samples", 0),
-        ])
+        writer.writerow(
+            [
+                name,
+                s["max_in_bps"],
+                s["avg_in_bps"],
+                s["max_out_bps"],
+                s["avg_out_bps"],
+                s.get("speed_bps") if s.get("speed_bps") is not None else "",
+                s.get("max_utilization_pct") if s.get("max_utilization_pct") is not None else "",
+                s.get("avg_utilization_pct") if s.get("avg_utilization_pct") is not None else "",
+                s.get("samples", 0),
+            ]
+        )
 
     safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in device.name)
     filename = f"{safe_name}_bandwidth_{int(hours)}h.csv"
@@ -195,16 +211,20 @@ def get_interface_stats(
     _: User = Depends(get_current_user),
 ):
     from datetime import timedelta, timezone
+
     device_ip = _device_ip(device_id, db)
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(hours=hours)
-    rows = _manager_get("", {
-        "device_ip": device_ip,
-        "interface_name": interface_name,
-        "start_time": start_time.isoformat(),
-        "end_time": end_time.isoformat(),
-        "limit": 10000,
-    })
+    rows = _manager_get(
+        "",
+        {
+            "device_ip": device_ip,
+            "interface_name": interface_name,
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "limit": 10000,
+        },
+    )
     return {
         "device_id": device_id,
         "interface_name": interface_name,

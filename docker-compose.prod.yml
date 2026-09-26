@@ -1,0 +1,139 @@
+# Production overlay (Step 4.3). Compose it on top of the base + TLS files; it is
+# NOT auto-loaded, so dev stays zero-config:
+#
+#   docker-compose -f docker-compose.yml -f docker-compose.tls.yml \
+#                  -f docker-compose.prod.yml up -d
+#
+# What it adds on top of base:
+#   - restart: unless-stopped everywhere (survives host reboot / crashes)
+#   - json-file log rotation (50m x 5) so logs can't fill the disk
+#   - resource limits (Step 4.2) sized from docs/scale-benchmark.md measured RSS
+#     at the 1000-device load + headroom; a runaway service can't starve the host
+#   - least privilege (Step 4.1): cap_drop ALL, read_only rootfs + tmpfs where the
+#     service writes nothing but /tmp
+#   - file-based secrets (Step 4.4): JWT_SECRET/MANAGER_API_KEY/ENCRYPTION_KEY/
+#     POSTGRES_PASSWORD come from root-owned files, not the environment
+#
+# Before first `up`: create the secret files (see docs/runbooks/install.md) and
+# pin image tags (replace `build:` with `image: ghcr.io/…:vX.Y` released by CI —
+# never :latest in production).
+
+secrets:
+  jwt_secret:
+    file: /etc/snmp-collector/secrets/jwt_secret
+  manager_api_key:
+    file: /etc/snmp-collector/secrets/manager_api_key
+  encryption_key:
+    file: /etc/snmp-collector/secrets/encryption_key
+  postgres_password:
+    file: /etc/snmp-collector/secrets/postgres_password
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+services:
+  postgres:
+    restart: unless-stopped
+    logging: *default-logging
+    # The official image reads the password from POSTGRES_PASSWORD_FILE; the base
+    # file's POSTGRES_PASSWORD env is cleared here so only the file is used.
+    environment:
+      POSTGRES_PASSWORD: ""
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1g
+
+  manager:
+    restart: unless-stopped
+    logging: *default-logging
+    # Manager holds DuckDB + the write lock; measured 809 MiB RSS after ingesting
+    # 61M rows, so 1.5g gives ~85% headroom. It is the ingest ceiling — give it CPU.
+    environment:
+      MANAGER_API_KEY_FILE: /run/secrets/manager_api_key
+    secrets:
+      - manager_api_key
+    cap_drop: [ALL]
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1536m
+
+  backend:
+    restart: unless-stopped
+    logging: *default-logging
+    # Measured ~229 MiB RSS; 512m is generous headroom.
+    environment:
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      MANAGER_API_KEY_FILE: /run/secrets/manager_api_key
+      ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - jwt_secret
+      - manager_api_key
+      - encryption_key
+      - postgres_password
+    cap_drop: [ALL]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 512m
+
+  agent:
+    restart: unless-stopped
+    logging: *default-logging
+    # Measured ~72 MiB RSS; 256m headroom. Writes only /data (mount) + /tmp.
+    environment:
+      MANAGER_API_KEY_FILE: /run/secrets/manager_api_key
+    secrets:
+      - manager_api_key
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256m
+
+  frontend:
+    restart: unless-stopped
+    logging: *default-logging
+    cap_drop: [ALL]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64m
+
+  nginx:
+    restart: unless-stopped
+    logging: *default-logging
+    # Binds 80/443, so it keeps NET_BIND_SERVICE after dropping everything else.
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128m
+
+  # The SNMP simulator is a dev/test fixture. It has no place in a real
+  # deployment — remove it from the prod compose invocation (or scale to 0).
+  snmp-simulator:
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64m

@@ -59,11 +59,11 @@ Access the app at **http://localhost**.
 On first startup, a bootstrap admin account is created:
 
 - **Email:** `admin@localhost`
-- **Password:** `changeme`
+- **Password:** a random one-time password printed once in the backend log — find it with `make logs-backend` (look for "Bootstrap admin created").
 
 You will be prompted to set a new password on first login.
 
-> **Before deploying to production:** set `JWT_SECRET` and `MANAGER_API_KEY` to strong random values in `.env`.
+> **Secrets are enforced:** the backend and manager refuse to start if `JWT_SECRET` or `MANAGER_API_KEY` is unset, a known placeholder, or shorter than 16 characters. `make up` generates strong values into `.env` automatically; set your own (and a dedicated `ENCRYPTION_KEY`) for production.
 
 ## Using the UI
 
@@ -140,7 +140,8 @@ curl -X POST http://localhost/api/auth/register \
 ### Environment variables
 
 ```bash
-# Required — startup fails without these
+# Required — startup fails if unset, a known placeholder, or shorter than 16 chars.
+# `make up` generates strong values automatically; the values below are placeholders.
 JWT_SECRET=replace-with-a-long-random-secret
 MANAGER_API_KEY=change-me-in-production
 
@@ -152,7 +153,9 @@ POSTGRES_PORT=5432
 
 # Backend
 FRONTEND_URL=http://localhost   # CORS origin
-JWT_EXPIRE_HOURS=8
+PASSWORD_MIN_LENGTH=12          # min password length; common passwords always rejected
+SESSION_IDLE_MINUTES=60         # session expires after this much inactivity
+SESSION_ABSOLUTE_HOURS=12       # hard cap on session lifetime regardless of activity
 
 # Manager
 MANAGER_PUBLIC_URL=http://your-host:8001  # used in generated docker run one-liners
@@ -189,7 +192,23 @@ make shell-db          # psql into postgres
 
 make dev-frontend      # Run frontend locally (npm start)
 make dev-backend       # Run backend locally (uvicorn --reload)
+
+make observability-up    # Start the Prometheus/Grafana/Loki overlay
+make observability-down  # Stop the observability overlay
+make observability-token # Enable the token-gated per-device metrics scrape
 ```
+
+## Observability
+
+An opt-in overlay adds Prometheus, Grafana (with provisioned dashboards + alert
+rules as code), Loki, Promtail, and node-exporter:
+
+```bash
+make observability-up   # Grafana http://localhost:3001, Prometheus http://localhost:9090
+```
+
+Set `GF_SECURITY_ADMIN_PASSWORD` in `.env` first. Logs are queryable in Grafana by
+`correlation_id` (Step 5.1 schema). See [observability/README.md](observability/README.md).
 
 ## API reference
 
@@ -331,6 +350,28 @@ The agent persists its ID in `data/agent-id/`. If this volume is missing, the ag
 
 **History chart shows no data:**
 The history endpoint requires at least two poll samples within the requested time window to compute a rate delta. Wait one full poll cycle (60s) after the agent starts, then try the 1h range.
+
+---
+
+## Production deployment
+
+`make up` targets local dev. For a hardened single-host deployment, layer the
+production overlay on top of the base + TLS files:
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.tls.yml -f docker-compose.prod.yml up -d
+```
+
+The overlay (`docker-compose.prod.yml`) adds restart policies, log rotation,
+per-service resource limits (sized from [docs/scale-benchmark.md](docs/scale-benchmark.md)),
+least-privilege hardening (non-root, `cap_drop`, read-only rootfs where feasible),
+and file-based secrets (`*_FILE`) so no secret material sits in the environment.
+Internal ports (5432, 8001) are published only by the dev-auto-loaded
+`docker-compose.override.yml`, so production leaves them closed.
+
+Runbooks: [install](docs/runbooks/install.md) · [upgrade](docs/runbooks/upgrade.md) ·
+[rollback](docs/runbooks/rollback.md) · [backup/restore](docs/runbooks/restore.md) ·
+[secret rotation](docs/runbooks/secret-rotation.md) · [TLS](docs/runbooks/tls.md).
 
 ---
 

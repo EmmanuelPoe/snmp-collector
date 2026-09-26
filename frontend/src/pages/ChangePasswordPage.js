@@ -46,7 +46,9 @@ export default function ChangePasswordPage() {
       <div className="login-form-panel">
         <div className="login-form-card">
           <h2>Change Password</h2>
-          {forced && <p className="login-form-subtext">You must set a new password before continuing.</p>}
+          {forced && (
+            <p className="login-form-subtext">You must set a new password before continuing.</p>
+          )}
 
           {error && <div className="alert alert-danger">{error}</div>}
 
@@ -57,7 +59,7 @@ export default function ChangePasswordPage() {
                 className="input"
                 type="password"
                 value={currentPassword}
-                onChange={e => setCurrentPassword(e.target.value)}
+                onChange={(e) => setCurrentPassword(e.target.value)}
                 required
                 autoFocus
               />
@@ -68,7 +70,7 @@ export default function ChangePasswordPage() {
                 className="input"
                 type="password"
                 value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
+                onChange={(e) => setNewPassword(e.target.value)}
                 required
                 placeholder="min 8 characters"
               />
@@ -79,15 +81,11 @@ export default function ChangePasswordPage() {
                 className="input"
                 type="password"
                 value={confirm}
-                onChange={e => setConfirm(e.target.value)}
+                onChange={(e) => setConfirm(e.target.value)}
                 required
               />
             </div>
-            <button
-              type="submit"
-              className="btn btn-primary login-submit"
-              disabled={loading}
-            >
+            <button type="submit" className="btn btn-primary login-submit" disabled={loading}>
               {loading ? 'Saving...' : 'Set New Password'}
             </button>
           </form>

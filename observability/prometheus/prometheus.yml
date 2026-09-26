@@ -1,0 +1,44 @@
+# Prometheus scrape config for the SNMP collector platform (Step 5.2).
+# All targets are on the internal snmp-network. Platform metrics (ingest
+# freshness, queue depth, evaluator duration, DuckDB size, agent uploads) ride
+# the unauthenticated /internal/prometheus (backend) and /metrics (manager)
+# endpoints; per-device business metrics need the scrape token (see the
+# backend-device-metrics job below).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: backend
+    metrics_path: /internal/prometheus
+    static_configs:
+      - targets: ["backend:8000"]
+
+  - job_name: manager
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["manager:8000"]
+
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Per-device/interface business metrics (snmp_interface_*, snmp_device_up).
+  # Token-gated: generate the credentials file with `make observability-token`
+  # (writes PROMETHEUS_SCRAPE_TOKEN to observability/prometheus/scrape_token,
+  # which is gitignored). Without it this one job is DOWN; platform metrics and
+  # all alerts still work.
+  - job_name: backend-device-metrics
+    metrics_path: /metrics/prometheus
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/scrape_token
+    static_configs:
+      - targets: ["backend:8000"]

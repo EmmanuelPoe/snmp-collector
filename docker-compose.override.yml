@@ -1,0 +1,16 @@
+# Dev-only overrides (Step 4.3). docker-compose auto-loads this file, so `make up`
+# and all local tooling get these conveniences. Production does NOT load it —
+# it runs `docker-compose -f docker-compose.yml -f docker-compose.tls.yml
+# -f docker-compose.prod.yml …`, which leaves these internal ports closed.
+#
+# These host ports are published for local tools only:
+#   - postgres 5432 → psql / GUI clients
+#   - manager  8001 → scripts/loadtest/ingest_load.py, scripts/backup.sh
+services:
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  manager:
+    ports:
+      - "8001:8000"

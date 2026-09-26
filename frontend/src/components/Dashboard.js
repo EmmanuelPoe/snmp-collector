@@ -1,21 +1,40 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getDevices, getAgents, getMetrics, getInterfaceRates, getAlerts, getDeviceTags,
-  acknowledgeAlert, assignAlert, setAlertNote, getAssignableUsers } from '../services/api';
+import {
+  getDevices,
+  getAgents,
+  getInterfaceRates,
+  getAlerts,
+  getDeviceTags,
+  acknowledgeAlert,
+  assignAlert,
+  setAlertNote,
+  getAssignableUsers,
+} from '../services/api';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../hooks/useAuth';
 import {
-  LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
 } from 'recharts';
 
 const DEVICE_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
-const TIME_RANGES = [{ label: '1h', hours: 1 }, { label: '6h', hours: 6 }, { label: '24h', hours: 24 }];
+const TIME_RANGES = [
+  { label: '1h', hours: 1 },
+  { label: '6h', hours: 6 },
+  { label: '24h', hours: 24 },
+];
 
 const STATUS_BADGE = {
-  online:   'badge-success',
+  online: 'badge-success',
   degraded: 'badge-warning',
-  offline:  'badge-danger',
+  offline: 'badge-danger',
 };
 
 function formatTime(ts) {
@@ -69,11 +88,13 @@ export default function Dashboard() {
       setDevices(devicesRes);
       setAgents(agentsRes);
       const ratesResults = await Promise.all(
-        devicesRes.map(d => getInterfaceRates(d.id, trafficHours).catch(() => null))
+        devicesRes.map((d) => getInterfaceRates(d.id, trafficHours).catch(() => null)),
       );
       const ratesMap = {};
-      devicesRes.forEach((d, i) => { if (ratesResults[i]) ratesMap[d.name] = ratesResults[i]; });
-      setDeviceNames(devicesRes.map(d => d.name));
+      devicesRes.forEach((d, i) => {
+        if (ratesResults[i]) ratesMap[d.name] = ratesResults[i];
+      });
+      setDeviceNames(devicesRes.map((d) => d.name));
       setTrafficData(buildPerDeviceSeries(ratesMap));
       setLastUpdated(new Date());
     } catch (err) {
@@ -94,8 +115,8 @@ export default function Dashboard() {
       try {
         const data = await getAlerts();
         setAlerts(data);
-        const newIds = new Set(data.map(a => a.id));
-        data.forEach(a => {
+        const newIds = new Set(data.map((a) => a.id));
+        data.forEach((a) => {
           if (!prevAlertIds.current.has(a.id)) showToast(a.message, 'error');
         });
         prevAlertIds.current = newIds;
@@ -110,61 +131,78 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!canManageAlerts) return;
-    getAssignableUsers().then(setAssignableUsers).catch(() => {});
+    getAssignableUsers()
+      .then(setAssignableUsers)
+      .catch(() => {});
   }, [canManageAlerts]);
 
   const _applyAlertUpdate = (updated) =>
-    setAlerts(prev => prev.map(a => a.id === updated.id ? updated : a));
+    setAlerts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
 
   const handleAck = async (alert) => {
-    try { _applyAlertUpdate(await acknowledgeAlert(alert.id)); }
-    catch { showToast('Failed to acknowledge alert', 'error'); }
+    try {
+      _applyAlertUpdate(await acknowledgeAlert(alert.id));
+    } catch {
+      showToast('Failed to acknowledge alert', 'error');
+    }
   };
 
   const handleAssign = async (alert, value) => {
-    try { _applyAlertUpdate(await assignAlert(alert.id, value === '' ? null : Number(value))); }
-    catch { showToast('Failed to assign alert', 'error'); }
+    try {
+      _applyAlertUpdate(await assignAlert(alert.id, value === '' ? null : Number(value)));
+    } catch {
+      showToast('Failed to assign alert', 'error');
+    }
   };
 
   const handleNote = async (alert) => {
     const note = window.prompt('Note for this alert:', alert.note || '');
     if (note === null) return;
-    try { _applyAlertUpdate(await setAlertNote(alert.id, note)); }
-    catch { showToast('Failed to save note', 'error'); }
+    try {
+      _applyAlertUpdate(await setAlertNote(alert.id, note));
+    } catch {
+      showToast('Failed to save note', 'error');
+    }
   };
 
   useEffect(() => {
     if (!lastUpdated) return;
     setSecsAgo(0);
-    const iv = setInterval(() => setSecsAgo(s => s + 1), 1000);
+    const iv = setInterval(() => setSecsAgo((s) => s + 1), 1000);
     return () => clearInterval(iv);
   }, [lastUpdated]);
 
   useEffect(() => {
     if (agents.length === 0) return;
-    const degraded = agents.filter(a => a.status !== 'online');
+    const degraded = agents.filter((a) => a.status !== 'online');
     if (degraded.length > 0) {
-      setEvents(prev => [
-        {
-          time: new Date(),
-          text: `${degraded[0].hostname || degraded[0].agent_id} status: ${degraded[0].status}`,
-        },
-        ...prev,
-      ].slice(0, 8));
+      setEvents((prev) =>
+        [
+          {
+            time: new Date(),
+            text: `${degraded[0].hostname || degraded[0].agent_id} status: ${degraded[0].status}`,
+          },
+          ...prev,
+        ].slice(0, 8),
+      );
     }
   }, [agents]);
 
   if (loading) {
-    return <div className="loading-center"><div className="spinner" /></div>;
+    return (
+      <div className="loading-center">
+        <div className="spinner" />
+      </div>
+    );
   }
 
   const visibleDeviceNames = tagFilter
-    ? devices.filter(d => d.tags?.includes(tagFilter)).map(d => d.name)
+    ? devices.filter((d) => d.tags?.includes(tagFilter)).map((d) => d.name)
     : deviceNames;
 
   const totalDevices = devices.length;
-  const activeDevices = devices.filter(d => d.enabled).length;
-  const onlineAgents = agents.filter(a => a.status === 'online').length;
+  const activeDevices = devices.filter((d) => d.enabled).length;
+  const onlineAgents = agents.filter((a) => a.status === 'online').length;
 
   const deviceStatusData = [
     { label: 'Active', count: activeDevices },
@@ -187,16 +225,21 @@ export default function Dashboard() {
             <select
               className="input"
               value={tagFilter}
-              onChange={e => setTagFilter(e.target.value)}
+              onChange={(e) => setTagFilter(e.target.value)}
               style={{ width: 'auto' }}
             >
               <option value="">All devices</option>
-              {allTags.map(tag => (
-                <option key={tag} value={tag}>{tag}</option>
+              {allTags.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
+                </option>
               ))}
             </select>
           )}
-          <span className="live-badge"><span className="live-dot" />LIVE</span>
+          <span className="live-badge">
+            <span className="live-dot" />
+            LIVE
+          </span>
         </div>
       </div>
 
@@ -214,19 +257,27 @@ export default function Dashboard() {
         <div className="stat-card">
           <div className="stat-label">Agents Online</div>
           <div className="stat-value white">
-            {onlineAgents} <span style={{ fontSize: 13, color: 'var(--color-text-faint)' }}>/ {agents.length}</span>
+            {onlineAgents}{' '}
+            <span style={{ fontSize: 13, color: 'var(--color-text-faint)' }}>
+              / {agents.length}
+            </span>
           </div>
           <div className="stat-sub">
             {onlineAgents === agents.length && agents.length > 0 ? (
               <span className="text-success">all healthy</span>
-            ) : agents.length === 0 ? 'none registered' : (
+            ) : agents.length === 0 ? (
+              'none registered'
+            ) : (
               <span className="text-error">{agents.length - onlineAgents} degraded/offline</span>
             )}
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Open Alerts</div>
-          <div className="stat-value" style={{ color: alerts.length > 0 ? 'var(--color-error)' : 'var(--color-success)' }}>
+          <div
+            className="stat-value"
+            style={{ color: alerts.length > 0 ? 'var(--color-error)' : 'var(--color-success)' }}
+          >
             {alerts.length}
           </div>
           <div className="stat-sub">
@@ -237,28 +288,85 @@ export default function Dashboard() {
 
       <div className="charts-row">
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 8,
+            }}
+          >
             <div className="chart-title">Network Traffic · Per Device</div>
             <div style={{ display: 'flex', gap: 4 }}>
               {TIME_RANGES.map(({ label, hours }) => (
-                <button key={label} onClick={() => setTrafficHours(hours)} style={{ background: trafficHours === hours ? 'var(--color-accent)' : 'var(--color-bg)', color: trafficHours === hours ? '#fff' : 'var(--color-text-muted)', border: `1px solid ${trafficHours === hours ? 'var(--color-accent)' : 'var(--color-border)'}`, padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>{label}</button>
+                <button
+                  key={label}
+                  onClick={() => setTrafficHours(hours)}
+                  style={{
+                    background: trafficHours === hours ? 'var(--color-accent)' : 'var(--color-bg)',
+                    color: trafficHours === hours ? '#fff' : 'var(--color-text-muted)',
+                    border: `1px solid ${trafficHours === hours ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    fontSize: 11,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {label}
+                </button>
               ))}
             </div>
           </div>
           {trafficData.length > 0 && visibleDeviceNames.length > 0 ? (
             <ResponsiveContainer width="100%" height={90}>
               <LineChart data={trafficData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'var(--color-text-faint)', fontFamily: 'IBM Plex Mono' }} tickLine={false} axisLine={false} />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-border)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="time"
+                  tick={{
+                    fontSize: 9,
+                    fill: 'var(--color-text-faint)',
+                    fontFamily: 'IBM Plex Mono',
+                  }}
+                  tickLine={false}
+                  axisLine={false}
+                />
                 <YAxis hide />
-                <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 11 }} formatter={v => formatBytes(v)} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    fontSize: 11,
+                  }}
+                  formatter={(v) => formatBytes(v)}
+                />
                 {visibleDeviceNames.map((name, i) => (
-                  <Line key={name} type="monotone" dataKey={name} stroke={DEVICE_COLORS[i % DEVICE_COLORS.length]} strokeWidth={1.5} dot={false} connectNulls />
+                  <Line
+                    key={name}
+                    type="monotone"
+                    dataKey={name}
+                    stroke={DEVICE_COLORS[i % DEVICE_COLORS.length]}
+                    strokeWidth={1.5}
+                    dot={false}
+                    connectNulls
+                  />
                 ))}
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div style={{ height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div
+              style={{
+                height: 90,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <span className="text-faint text-xs">No traffic data collected yet</span>
             </div>
           )}
@@ -269,7 +377,12 @@ export default function Dashboard() {
           <ResponsiveContainer width="100%" height={90}>
             <BarChart data={deviceStatusData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f1f24" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#3f3f46', fontFamily: 'IBM Plex Mono' }} tickLine={false} axisLine={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 9, fill: '#3f3f46', fontFamily: 'IBM Plex Mono' }}
+                tickLine={false}
+                axisLine={false}
+              />
               <YAxis hide />
               <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
               <Bar dataKey="count" fill="#fbbf24" radius={[2, 2, 0, 0]} maxBarSize={40} />
@@ -287,68 +400,119 @@ export default function Dashboard() {
               <span className="text-faint text-xs">All clear</span>
             </div>
           ) : (
-            alerts.map(alert => {
-              const sevColor = { critical: 'var(--color-error)', warning: 'var(--color-warning, #d97706)', info: 'var(--color-text-faint)' }[alert.severity] || 'var(--color-error)';
+            alerts.map((alert) => {
+              const sevColor =
+                {
+                  critical: 'var(--color-error)',
+                  warning: 'var(--color-warning, #d97706)',
+                  info: 'var(--color-text-faint)',
+                }[alert.severity] || 'var(--color-error)';
               return (
-              <div key={alert.id} className="agent-row">
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {alert.severity && (
-                      <span className="badge" style={{ background: sevColor, color: '#fff', fontSize: 10, textTransform: 'uppercase', padding: '1px 6px' }}>
-                        {alert.severity}
-                      </span>
-                    )}
-                    <span className="agent-name" style={{ color: sevColor, fontSize: 12 }}>
-                      {alert.alert_type.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                  <div className="agent-meta">{alert.message}</div>
-                  {canManageAlerts && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                      {alert.acknowledged_by_email ? (
-                        <span className="badge badge-success" style={{ fontSize: 10 }}>✓ ack {alert.acknowledged_by_email}</span>
-                      ) : (
-                        <button className="btn btn-sm btn-secondary" onClick={() => handleAck(alert)}>Acknowledge</button>
+                <div key={alert.id} className="agent-row">
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {alert.severity && (
+                        <span
+                          className="badge"
+                          style={{
+                            background: sevColor,
+                            color: '#fff',
+                            fontSize: 10,
+                            textTransform: 'uppercase',
+                            padding: '1px 6px',
+                          }}
+                        >
+                          {alert.severity}
+                        </span>
                       )}
-                      <select className="input" style={{ height: 24, fontSize: 11, padding: '0 4px', width: 'auto' }}
-                        value={alert.assigned_to || ''} onChange={e => handleAssign(alert, e.target.value)}>
-                        <option value="">Unassigned</option>
-                        {assignableUsers.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}
-                      </select>
-                      <button className="btn btn-sm btn-secondary" onClick={() => handleNote(alert)}>
-                        {alert.note ? 'Note ✎' : '+ Note'}
-                      </button>
-                      {alert.note && <span className="text-faint text-xs" title={alert.note}>“{alert.note.length > 40 ? alert.note.slice(0, 40) + '…' : alert.note}”</span>}
+                      <span className="agent-name" style={{ color: sevColor, fontSize: 12 }}>
+                        {alert.alert_type.replace(/_/g, ' ')}
+                      </span>
                     </div>
-                  )}
+                    <div className="agent-meta">{alert.message}</div>
+                    {canManageAlerts && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          marginTop: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        {alert.acknowledged_by_email ? (
+                          <span className="badge badge-success" style={{ fontSize: 10 }}>
+                            ✓ ack {alert.acknowledged_by_email}
+                          </span>
+                        ) : (
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => handleAck(alert)}
+                          >
+                            Acknowledge
+                          </button>
+                        )}
+                        <select
+                          className="input"
+                          style={{ height: 24, fontSize: 11, padding: '0 4px', width: 'auto' }}
+                          value={alert.assigned_to || ''}
+                          onChange={(e) => handleAssign(alert, e.target.value)}
+                        >
+                          <option value="">Unassigned</option>
+                          {assignableUsers.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.email}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => handleNote(alert)}
+                        >
+                          {alert.note ? 'Note ✎' : '+ Note'}
+                        </button>
+                        {alert.note && (
+                          <span className="text-faint text-xs" title={alert.note}>
+                            “{alert.note.length > 40 ? alert.note.slice(0, 40) + '…' : alert.note}”
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-faint text-xs">
+                    {Math.round((Date.now() - new Date(alert.triggered_at)) / 60000)}m ago
+                  </span>
                 </div>
-                <span className="text-faint text-xs">
-                  {Math.round((Date.now() - new Date(alert.triggered_at)) / 60000)}m ago
-                </span>
-              </div>
-            );})
+              );
+            })
           )}
         </div>
 
         <div className="card">
           <div className="chart-title">Agent Status</div>
           {agents.length === 0 ? (
-            <p className="text-faint text-xs" style={{ paddingTop: 8 }}>No agents registered.</p>
+            <p className="text-faint text-xs" style={{ paddingTop: 8 }}>
+              No agents registered.
+            </p>
           ) : (
-            [...agents].sort((a, b) => {
-              const order = { online: 0, degraded: 1, offline: 2 };
-              return (order[a.status] ?? 3) - (order[b.status] ?? 3);
-            }).map(agent => (
-              <div className="agent-row" key={agent.agent_id}>
-                <div>
-                  <div className="agent-name">{agent.hostname || agent.agent_id}</div>
-                  <div className="agent-meta">{agent.ip} · {agent.agent_id?.slice(0, 12)}…</div>
+            [...agents]
+              .sort((a, b) => {
+                const order = { online: 0, degraded: 1, offline: 2 };
+                return (order[a.status] ?? 3) - (order[b.status] ?? 3);
+              })
+              .map((agent) => (
+                <div className="agent-row" key={agent.agent_id}>
+                  <div>
+                    <div className="agent-name">{agent.hostname || agent.agent_id}</div>
+                    <div className="agent-meta">
+                      {agent.ip} · {agent.agent_id?.slice(0, 12)}…
+                    </div>
+                  </div>
+                  <span className={`badge ${STATUS_BADGE[agent.status] || 'badge-info'}`}>
+                    {agent.status}
+                  </span>
                 </div>
-                <span className={`badge ${STATUS_BADGE[agent.status] || 'badge-info'}`}>
-                  {agent.status}
-                </span>
-              </div>
-            ))
+              ))
           )}
         </div>
 
@@ -357,7 +521,9 @@ export default function Dashboard() {
           {events.length === 0 ? (
             <div className="event-row">
               <span className="event-time">{lastUpdated ? formatTime(lastUpdated) : '—'}</span>
-              <span className="event-text">System loaded — {totalDevices} devices, {agents.length} agents</span>
+              <span className="event-text">
+                System loaded — {totalDevices} devices, {agents.length} agents
+              </span>
             </div>
           ) : (
             events.slice(0, 5).map((ev, i) => (
@@ -378,7 +544,7 @@ function buildPerDeviceSeries(ratesMap) {
   for (const [deviceName, ratesData] of Object.entries(ratesMap)) {
     if (!ratesData?.interfaces) continue;
     for (const ifaceData of Object.values(ratesData.interfaces)) {
-      for (const pt of (ifaceData.sparkline || [])) {
+      for (const pt of ifaceData.sparkline || []) {
         const d = new Date(pt.timestamp);
         const bucket = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
         if (!buckets[bucket]) buckets[bucket] = { time: bucket };

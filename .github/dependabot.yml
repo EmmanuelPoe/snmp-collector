@@ -1,0 +1,34 @@
+# Dependency update PRs (Step 3.3 / plan Step 22). Each PR runs the full CI
+# pipeline (tests ×3, lint, dependency-audit, image scan, e2e simulation), so
+# merging a green Dependabot PR is the sanctioned upgrade path.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /manager
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /agent
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /frontend
+      - /manager
+      - /agent
+      - /snmp-simulator
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

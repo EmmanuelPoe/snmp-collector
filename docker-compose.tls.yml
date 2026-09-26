@@ -1,0 +1,23 @@
+# TLS overlay (Step 1.6 / plan Step 18). Dev compose stays plain HTTP so
+# `make up` is zero-config; enable TLS with:
+#
+#   docker-compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+#
+# Requires certs at nginx/certs/server.crt + server.key — see
+# docs/runbooks/tls.md (self-signed bootstrap: scripts/gen_self_signed_cert.sh).
+# The prod compose profile (plan Step 33) will fold this in and stop
+# publishing the manager's direct :8001 port.
+services:
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d-tls:/etc/nginx/conf.d:ro
+      - ./nginx/security_headers.inc:/etc/nginx/security_headers.inc:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+      - frontend
+      - manager

@@ -1,0 +1,70 @@
+# Platform alert rules as code (Step 5.2). These watch the collector itself, not
+# the monitored devices. View state at http://localhost:9090/alerts.
+groups:
+  - name: snmp-collector-platform
+    rules:
+      - alert: IngestFreshnessStalled
+        # No successful ingest for 3 min while the pipeline was previously live —
+        # the > 0 guard skips a never-yet-ingested fresh start. Stopping the agent
+        # trips this (the Step 5.2 verify case).
+        expr: snmp_ingest_last_success_timestamp_seconds > 0 and (time() - snmp_ingest_last_success_timestamp_seconds) > 180
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ingest pipeline stalled"
+          description: "No successful ingest for {{ $value | humanizeDuration }} — agents may be down or the manager cannot write DuckDB."
+
+      - alert: EvaluatorOverrun
+        expr: snmp_alert_eval_last_duration_seconds > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alert evaluator overruns its 30s cadence"
+          description: "Last evaluation took {{ $value }}s — at the 1000-device target it must stay under 30s."
+
+      - alert: IngestQueueDepthHigh
+        expr: snmp_ingest_queue_depth > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ingest write queue backing up"
+          description: "Queue depth {{ $value }} — DuckDB writes are not keeping up with uploads."
+
+      - alert: AgentPendingUploadsHigh
+        expr: snmp_agent_pending_uploads > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent {{ $labels.agent_id }} is buffering uploads"
+          description: "{{ $value }} pending uploads — the agent cannot reach the manager or ingest is deferring it."
+
+      - alert: NodeDiskHigh
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"})) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} over 80% full"
+          description: "{{ $value | printf \"%.1f\" }}% used — metrics/backups growth may fill the host."
+
+      - alert: BackupAgeExceedsRPO
+        expr: snmp_backup_age_seconds > 93600
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Newest backup older than the 26h RPO"
+          description: "Latest backup is {{ $value | humanizeDuration }} old — the daily backup may be failing."
+
+      - alert: TargetDown
+        expr: up{job!="backend-device-metrics"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus target {{ $labels.job }} is down"
+          description: "{{ $labels.instance }} ({{ $labels.job }}) has been unreachable for 5 min."

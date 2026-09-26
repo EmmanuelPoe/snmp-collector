@@ -2,9 +2,9 @@ import React from 'react';
 
 const ICONS = {
   success: '✓',
-  error:   '✕',
+  error: '✕',
   warning: '⚠',
-  info:    'ℹ',
+  info: 'ℹ',
 };
 
 export default function ToastContainer({ toasts, onDismiss }) {
@@ -12,13 +12,15 @@ export default function ToastContainer({ toasts, onDismiss }) {
 
   return (
     <div className="toast-container">
-      {toasts.map(toast => (
+      {toasts.map((toast) => (
         <div key={toast.id} className={`toast toast-${toast.type}`}>
           <span style={{ color: typeColor(toast.type), fontSize: 13, flexShrink: 0 }}>
             {ICONS[toast.type]}
           </span>
           <span className="toast-message">{toast.message}</span>
-          <button className="toast-dismiss" onClick={() => onDismiss(toast.id)}>×</button>
+          <button className="toast-dismiss" onClick={() => onDismiss(toast.id)}>
+            ×
+          </button>
         </div>
       ))}
     </div>
@@ -28,9 +30,9 @@ export default function ToastContainer({ toasts, onDismiss }) {
 function typeColor(type) {
   const map = {
     success: 'var(--color-success)',
-    error:   'var(--color-error)',
+    error: 'var(--color-error)',
     warning: 'var(--color-warning)',
-    info:    'var(--color-info)',
+    info: 'var(--color-info)',
   };
   return map[type] || 'var(--color-text-secondary)';
 }

@@ -1,4 +1,27 @@
-.PHONY: help setup build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend restart-exporter dev-frontend dev-backend
+.PHONY: loadtest backup restore help setup ensure-env ensure-dirs build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend observability-up observability-down observability-token dev-frontend dev-backend
+
+# Create .env from the example on first run, generating strong random secrets so
+# the stack starts securely out of the box (the services refuse to start with the
+# placeholder secrets shipped in .env.example). ENCRYPTION_KEY is left empty and
+# derived from JWT_SECRET; set a dedicated one for production.
+ensure-env:
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		python3 -c "import secrets, re, pathlib; p = pathlib.Path('.env'); t = p.read_text(); sub = lambda t, k: re.sub(r'(?m)^' + k + r'=.*', k + '=' + secrets.token_urlsafe(32), t); t = sub(t, 'JWT_SECRET'); t = sub(t, 'MANAGER_API_KEY'); p.write_text(t)" \
+			&& echo "Created .env with generated JWT_SECRET and MANAGER_API_KEY" \
+			|| echo "Created .env — set JWT_SECRET and MANAGER_API_KEY to strong random values before starting"; \
+	fi
+
+# Pre-create bind-mounted data dirs. Without this, Docker creates them root-owned
+# on a fresh Linux checkout and the manager (non-root uid 100) cannot open DuckDB
+# ("Permission denied"). Only newly created dirs are chmod'd; existing ones are
+# left untouched. Revisit with named volumes in the production overlay (Step 4.3).
+ensure-dirs:
+	@for d in data/db data/dead-letter data/registry data/agent-queue data/agent-id; do \
+		if [ ! -d $$d ]; then \
+			mkdir -p $$d && chmod 777 $$d; \
+		fi; \
+	done
 
 # Default target
 help:
@@ -26,15 +49,14 @@ help:
 	@echo ""
 
 # First-time setup: build, start, and migrate in one command
-setup:
-	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env — set JWT_SECRET and MANAGER_API_KEY before production use"; fi
+setup: ensure-env ensure-dirs
 	docker-compose build
 	docker-compose up -d
 	@echo "Waiting for backend to be ready..."
 	@until docker-compose exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" >/dev/null 2>&1; do sleep 2; done
 	docker-compose exec -T backend alembic upgrade head
 	@echo ""
-	@echo "Ready at http://localhost  (admin@localhost / changeme — you will be prompted to change your password)"
+	@echo "Ready at http://localhost  (login as admin@localhost — the one-time password is printed in 'make logs-backend')"
 
 # Build all containers
 build:
@@ -42,9 +64,8 @@ build:
 	docker-compose build
 
 # Start the application
-up:
+up: ensure-env ensure-dirs
 	@echo "Starting SNMP Collector application..."
-	@cp -n .env.example .env 2>/dev/null || true
 	docker-compose up -d
 	@echo ""
 	@echo "✅ Application started successfully!"
@@ -53,9 +74,9 @@ up:
 	@echo "  App:         http://localhost"
 	@echo "  Manager API: http://localhost:8001"
 	@echo ""
-	@echo "Default credentials (first login only):"
-	@echo "  Email:    admin@localhost"
-	@echo "  Password: changeme  ← you will be prompted to change this"
+	@echo "First login (admin@localhost):"
+	@echo "  The one-time password is printed once in the backend log — run 'make logs-backend'"
+	@echo "  You will be prompted to change it on first login"
 	@echo ""
 	@echo "View logs: make logs"
 	@echo "Stop application: make down"
@@ -125,8 +146,19 @@ restart-backend:
 restart-frontend:
 	docker-compose restart frontend
 
-restart-exporter:
-	docker-compose restart snmp-exporter
+# Observability overlay (Step 5.2): Prometheus + Grafana + Loki + Promtail.
+observability-up: ensure-env
+	docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+	@echo "Grafana: http://localhost:3001  Prometheus: http://localhost:9090"
+
+observability-down:
+	docker-compose -f docker-compose.yml -f docker-compose.observability.yml down
+
+# Write PROMETHEUS_SCRAPE_TOKEN (from .env) to the gitignored file Prometheus
+# reads for the token-gated per-device metrics job.
+observability-token: ensure-env
+	@grep '^PROMETHEUS_SCRAPE_TOKEN=' .env | cut -d= -f2- > observability/prometheus/scrape_token
+	@echo "Wrote observability/prometheus/scrape_token"
 
 # Run simulation test
 simulation:
@@ -154,3 +186,22 @@ clean-simulation:
 	docker-compose exec -T postgres psql -U snmpuser -d snmp_metrics -c \
 		"DELETE FROM devices WHERE name = 'Test-Simulator';" || true
 	@echo "✓ Simulation data cleaned"
+
+# Backup + restore (Step 2.4) — artifacts in ./backups; see docs/runbooks/restore.md
+backup:
+	@./scripts/backup.sh
+
+restore:
+	@test -n "$(BACKUP)" || (echo "usage: make restore BACKUP=<timestamp>  (see ls backups/)" && exit 1)
+	@./scripts/restore.sh $(BACKUP)
+
+# Load test at the 1000-device target (Step 2.5) — see docs/scale-benchmark.md
+loadtest:
+	@echo "🏋️  Load test: synthetic ingest (120s) + query fleet (60s)"
+	@set -a && . ./.env && set +a && \
+	python3 scripts/loadtest/ingest_load.py --devices 1000 --duration 120 --concurrency 4 --api-key "$$MANAGER_API_KEY" && \
+	echo "" && \
+	python3 scripts/loadtest/query_load.py --password "$${SIM_ADMIN_PASSWORD:?set SIM_ADMIN_PASSWORD to the admin password}" --duration 60
+	@echo ""
+	@echo "Container resource snapshot (feeds Step 4.2 limits):"
+	@docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' || true

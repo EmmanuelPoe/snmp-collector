@@ -1,11 +1,9 @@
+from datetime import datetime, datetime as _dt, timedelta, timezone
 from typing import Optional
-from datetime import datetime, timedelta, timezone
-from datetime import datetime as _dt
-
-from fastapi import APIRouter, Depends, Query
 
 from auth import require_api_key
 from db import query
+from fastapi import APIRouter, Depends, Query
 
 router = APIRouter(prefix="/internal/metrics", tags=["metrics"])
 
@@ -44,8 +42,13 @@ async def query_metrics(
     )
     return [
         {
-            "agent_id": r[0], "device_ip": r[1], "interface_name": r[2],
-            "oid_name": r[3], "oid": r[4], "value": r[5], "collected_at": r[6],
+            "agent_id": r[0],
+            "device_ip": r[1],
+            "interface_name": r[2],
+            "oid_name": r[3],
+            "oid": r[4],
+            "value": r[5],
+            "collected_at": r[6],
         }
         for r in rows
     ]
@@ -57,13 +60,11 @@ async def available_metrics(
     _: str = Depends(require_api_key),
 ):
     ifaces = await query(
-        "SELECT DISTINCT interface_name FROM snmp_polls "
-        "WHERE device_ip = ? AND interface_name IS NOT NULL",
+        "SELECT DISTINCT interface_name FROM snmp_polls WHERE device_ip = ? AND interface_name IS NOT NULL",
         [device_ip],
     )
     oids = await query(
-        "SELECT DISTINCT oid_name FROM snmp_polls "
-        "WHERE device_ip = ? AND oid_name IS NOT NULL",
+        "SELECT DISTINCT oid_name FROM snmp_polls WHERE device_ip = ? AND oid_name IS NOT NULL",
         [device_ip],
     )
     return {
@@ -123,7 +124,7 @@ async def interface_rates(
         for i in range(n):
             in_val = in_d[i][0] * 8 if i < len(in_d) else 0.0
             out_val = out_d[i][0] * 8 if i < len(out_d) else 0.0
-            ts = (in_d[i][1] if i < len(in_d) else out_d[i][1])
+            ts = in_d[i][1] if i < len(in_d) else out_d[i][1]
             sparkline.append({"timestamp": ts.isoformat(), "in_bps": in_val, "out_bps": out_val})
 
         status = None
@@ -329,7 +330,6 @@ async def interface_history(
     out_err_rates = _rates(oid_series.get("ifOutErrors", []))
 
     bucket_sec = (hours * 3600) / buckets
-    now = _dt.now(timezone.utc)
 
     def _bucket(rate_pts: list, start: _dt, bsec: float, n: int) -> list:
         result = []

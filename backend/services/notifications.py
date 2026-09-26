@@ -4,10 +4,10 @@ Fired fire-and-forget from the alert evaluator when a new alert is created. A
 slow or dead channel must never block or crash evaluation, so every send is
 wrapped and bounded by a short timeout.
 """
+
 import logging
 
 import httpx
-
 from models import NotificationChannel, NotificationChannelType
 
 logger = logging.getLogger(__name__)
@@ -58,5 +58,4 @@ def dispatch_alert(db, alert) -> None:
         try:
             httpx.post(channel.url, json=payload, timeout=_TIMEOUT_SECONDS)
         except Exception as exc:
-            logger.warning("notification to channel %s (%s) failed: %s",
-                           channel.id, channel.name, exc)
+            logger.warning("notification to channel %s (%s) failed: %s", channel.id, channel.name, exc)

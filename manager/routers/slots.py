@@ -1,8 +1,8 @@
+import config
+from auth import require_api_key
 from fastapi import APIRouter, Depends
 from models import SlotCreateRequest, SlotResponse
 from slots import slot_store
-from auth import require_api_key
-import config
 
 router = APIRouter(tags=["slots"])
 

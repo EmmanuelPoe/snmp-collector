@@ -1,28 +1,33 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
 
 
 @pytest.fixture(autouse=True)
 def patch_settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("MANAGER_API_KEY", "test-key")
+    monkeypatch.setenv("MANAGER_API_KEY", "test-manager-api-key")
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("REGISTRY_PATH", str(tmp_path / "registry.json"))
     monkeypatch.setenv("SLOTS_PATH", str(tmp_path / "slots.json"))
     monkeypatch.setenv("DEAD_LETTER_PATH", str(tmp_path / "dead-letter"))
     monkeypatch.setenv("BACKEND_URL", "http://backend-mock:8000")
     import config
+
     config.settings = config.Settings()
 
 
 @pytest.fixture
 def store(tmp_path):
     import config
+
     config.settings.slots_path = str(tmp_path / "slots.json")
     from slots import SlotStore
+
     return SlotStore()
 
 
@@ -61,6 +66,7 @@ def test_expired_slots_are_purged(store):
     store._slots[slot.slot_id].expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
     store._persist()
     from slots import SlotStore
+
     fresh = SlotStore()
     assert len(fresh.all()) == 0
 
@@ -80,5 +86,6 @@ def test_all_excludes_expired(store):
 def test_persistence_survives_reload(store, tmp_path):
     slot = store.create("persisted")
     from slots import SlotStore
+
     reloaded = SlotStore()
     assert reloaded.get_by_token(slot.token) is not None

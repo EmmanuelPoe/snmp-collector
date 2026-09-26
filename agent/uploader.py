@@ -1,27 +1,59 @@
-import asyncio
 import hashlib
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
+import config
 import httpx
 import pyarrow as pa
 import pyarrow.parquet as pq
-
-import config
+from logging_json import correlation_headers
 
 log = logging.getLogger(__name__)
 
 
+def _log_upload_failure(file_id: str, exc: Exception) -> None:
+    """Step 2.2: upload failures are never silent. Permanent-looking 4xx
+    (bad credential, oversized payload …) logs ERROR — the retry queue will
+    never drain without operator action; everything else logs WARNING."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if code == 503:
+            # Manager shed load (Step 2.3 backpressure) — expected deferral,
+            # the retry loop drains the queue once it recovers.
+            log.info("Upload %s deferred — manager busy (503), queued for retry", file_id)
+        elif 400 <= code < 500 and code != 429:
+            log.error(
+                "Upload %s rejected with HTTP %d — retrying from queue, but this needs operator attention (auth/config): %s",
+                file_id,
+                code,
+                exc,
+            )
+        else:
+            log.warning("Upload %s failed with HTTP %d — queued for retry", file_id, code)
+    else:
+        log.warning("Upload %s failed (%s) — queued for retry", file_id, exc)
+
+
 class UploadBuffer:
-    def __init__(self, agent_id: str):
+    def __init__(self, agent_id: str, token: str | None = None):
         self._agent_id = agent_id
+        # Per-agent credential ("<agent_id>:<secret>", Step 1.7); falls back to
+        # the shared key for pre-1.7 enrollments (manager grace mode).
+        self._token = token or config.settings.manager_api_key
         self._rows: list[dict] = []
         self._first_row_at: float | None = None
         self._queue = Path(config.settings.queue_path)
         self._queue.mkdir(parents=True, exist_ok=True)
+
+    def update_identity(self, agent_id: str, token: str | None) -> None:
+        """Adopt a new identity after the agent re-registers (Step 2.1 self-heal).
+        Buffered rows already carry the old agent_id and are left as-is; only
+        future uploads use the new auth token."""
+        self._agent_id = agent_id
+        self._token = token or config.settings.manager_api_key
 
     def add(self, row: dict) -> None:
         if self._first_row_at is None:
@@ -31,10 +63,7 @@ class UploadBuffer:
     async def add_and_maybe_flush(self, row: dict) -> None:
         self.add(row)
         age = time.monotonic() - (self._first_row_at or time.monotonic())
-        if (
-            len(self._rows) >= config.settings.upload_max_rows
-            or age >= config.settings.upload_max_age_seconds
-        ):
+        if len(self._rows) >= config.settings.upload_max_rows or age >= config.settings.upload_max_age_seconds:
             await self._flush()
 
     async def tick(self) -> None:
@@ -67,16 +96,17 @@ class UploadBuffer:
                         f"{config.settings.manager_url}/ingest",
                         files={"file": (path.name, f, "application/octet-stream")},
                         headers={
-                            "Authorization": f"Bearer {config.settings.manager_api_key}",
+                            "Authorization": f"Bearer {self._token}",
                             "X-File-ID": file_id,
                             "X-SHA256": sha256,
+                            **correlation_headers(),
                         },
                         timeout=30.0,
                     )
                     resp.raise_for_status()
             path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log_upload_failure(file_id, exc)
 
     async def flush_retry_queue(self) -> None:
         now = time.time()
@@ -90,11 +120,17 @@ class UploadBuffer:
 
 
 class TrapBuffer:
-    def __init__(self, agent_id: str):
+    def __init__(self, agent_id: str, token: str | None = None):
         self._agent_id = agent_id
+        self._token = token or config.settings.manager_api_key
         self._rows: list[dict] = []
         self._queue = Path(config.settings.queue_path) / "traps"
         self._queue.mkdir(parents=True, exist_ok=True)
+
+    def update_identity(self, agent_id: str, token: str | None) -> None:
+        """Adopt a new identity after the agent re-registers (Step 2.1 self-heal)."""
+        self._agent_id = agent_id
+        self._token = token or config.settings.manager_api_key
 
     async def add(self, row: dict) -> None:
         self._rows.append(row)
@@ -122,45 +158,50 @@ class TrapBuffer:
                         f"{config.settings.manager_url}/ingest",
                         files={"file": (path.name, f, "application/octet-stream")},
                         headers={
-                            "Authorization": f"Bearer {config.settings.manager_api_key}",
+                            "Authorization": f"Bearer {self._token}",
                             "X-File-ID": file_id,
                             "X-SHA256": sha256,
+                            **correlation_headers(),
                         },
                         timeout=30.0,
                     )
                     resp.raise_for_status()
             path.unlink(missing_ok=True)
         except Exception as exc:
-            log.warning("Trap upload failed: %s", exc)
+            _log_upload_failure(file_id, exc)
 
 
 def _write_parquet(rows: list[dict], path: Path) -> None:
-    table = pa.table({
-        "agent_id":       pa.array([r["agent_id"] for r in rows]),
-        "device_ip":      pa.array([r["device_ip"] for r in rows]),
-        "interface_name": pa.array([r["interface_name"] for r in rows]),
-        "oid_name":       pa.array([r["oid_name"] for r in rows]),
-        "oid":            pa.array([r["oid"] for r in rows]),
-        "value":          pa.array([r["value"] for r in rows]),
-        "collected_at":   pa.array(
-            [datetime.fromisoformat(r["collected_at"]) for r in rows],
-            type=pa.timestamp("us", tz="UTC"),
-        ),
-    })
+    table = pa.table(
+        {
+            "agent_id": pa.array([r["agent_id"] for r in rows]),
+            "device_ip": pa.array([r["device_ip"] for r in rows]),
+            "interface_name": pa.array([r["interface_name"] for r in rows]),
+            "oid_name": pa.array([r["oid_name"] for r in rows]),
+            "oid": pa.array([r["oid"] for r in rows]),
+            "value": pa.array([r["value"] for r in rows]),
+            "collected_at": pa.array(
+                [datetime.fromisoformat(r["collected_at"]) for r in rows],
+                type=pa.timestamp("us", tz="UTC"),
+            ),
+        }
+    )
     pq.write_table(table, path)
 
 
 def _write_traps_parquet(rows: list[dict], path: Path) -> None:
-    table = pa.table({
-        "agent_id":    pa.array([r["agent_id"] for r in rows]),
-        "device_ip":   pa.array([r["device_ip"] for r in rows]),
-        "trap_oid":    pa.array([r["trap_oid"] for r in rows]),
-        "varbinds":    pa.array([r["varbinds"] for r in rows]),
-        "received_at": pa.array(
-            [datetime.fromisoformat(r["received_at"]) for r in rows],
-            type=pa.timestamp("us", tz="UTC"),
-        ),
-    })
+    table = pa.table(
+        {
+            "agent_id": pa.array([r["agent_id"] for r in rows]),
+            "device_ip": pa.array([r["device_ip"] for r in rows]),
+            "trap_oid": pa.array([r["trap_oid"] for r in rows]),
+            "varbinds": pa.array([r["varbinds"] for r in rows]),
+            "received_at": pa.array(
+                [datetime.fromisoformat(r["received_at"]) for r in rows],
+                type=pa.timestamp("us", tz="UTC"),
+            ),
+        }
+    )
     pq.write_table(table, path)
 
 

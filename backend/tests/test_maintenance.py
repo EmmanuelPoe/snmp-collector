@@ -1,12 +1,18 @@
 """Tests for maintenance windows (router CRUD + evaluator suppression)."""
+
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 import alert_evaluator
+import pytest
 from auth import hash_password
 from models import (
-    Alert, AlertStatus, AlertType, Device, MaintenanceWindow, User, UserRole,
+    Alert,
+    AlertStatus,
+    AlertType,
+    Device,
+    MaintenanceWindow,
+    User,
+    UserRole,
 )
 
 
@@ -24,6 +30,7 @@ def _iso(dt):
 
 # --- router ---
 
+
 def test_list_windows_empty(client, admin_headers):
     r = client.get("/maintenance-windows", headers=admin_headers)
     assert r.status_code == 200
@@ -32,9 +39,15 @@ def test_list_windows_empty(client, admin_headers):
 
 def test_create_global_window(client, admin_headers):
     now = datetime.now(timezone.utc)
-    r = client.post("/maintenance-windows", json={
-        "start_at": _iso(now), "end_at": _iso(now + timedelta(hours=1)), "reason": "patching",
-    }, headers=admin_headers)
+    r = client.post(
+        "/maintenance-windows",
+        json={
+            "start_at": _iso(now),
+            "end_at": _iso(now + timedelta(hours=1)),
+            "reason": "patching",
+        },
+        headers=admin_headers,
+    )
     assert r.status_code == 201
     assert r.json()["device_id"] is None
     assert r.json()["reason"] == "patching"
@@ -42,17 +55,28 @@ def test_create_global_window(client, admin_headers):
 
 def test_create_window_end_before_start_rejected(client, admin_headers):
     now = datetime.now(timezone.utc)
-    r = client.post("/maintenance-windows", json={
-        "start_at": _iso(now), "end_at": _iso(now - timedelta(hours=1)),
-    }, headers=admin_headers)
+    r = client.post(
+        "/maintenance-windows",
+        json={
+            "start_at": _iso(now),
+            "end_at": _iso(now - timedelta(hours=1)),
+        },
+        headers=admin_headers,
+    )
     assert r.status_code == 422
 
 
 def test_create_window_unknown_device_rejected(client, admin_headers):
     now = datetime.now(timezone.utc)
-    r = client.post("/maintenance-windows", json={
-        "device_id": 9999, "start_at": _iso(now), "end_at": _iso(now + timedelta(hours=1)),
-    }, headers=admin_headers)
+    r = client.post(
+        "/maintenance-windows",
+        json={
+            "device_id": 9999,
+            "start_at": _iso(now),
+            "end_at": _iso(now + timedelta(hours=1)),
+        },
+        headers=admin_headers,
+    )
     assert r.status_code == 404
 
 
@@ -75,14 +99,23 @@ def test_delete_window(client, admin_headers, db_session):
 
 
 def test_viewer_cannot_create_window(client, db_session):
-    db_session.add(User(email="v@test.com", hashed_password=hash_password("pw"),
-                        role=UserRole.viewer, is_active=True, force_password_change=False))
+    db_session.add(
+        User(
+            email="v@test.com",
+            hashed_password=hash_password("pw"),
+            role=UserRole.viewer,
+            is_active=True,
+            force_password_change=False,
+        )
+    )
     db_session.commit()
     token = client.post("/auth/login", data={"username": "v@test.com", "password": "pw"}).json()["access_token"]
     now = datetime.now(timezone.utc)
-    r = client.post("/maintenance-windows",
-                    json={"start_at": _iso(now), "end_at": _iso(now + timedelta(hours=1))},
-                    headers={"Authorization": f"Bearer {token}"})
+    r = client.post(
+        "/maintenance-windows",
+        json={"start_at": _iso(now), "end_at": _iso(now + timedelta(hours=1))},
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert r.status_code == 403
 
 
@@ -91,6 +124,7 @@ def test_windows_require_auth(client):
 
 
 # --- evaluator suppression ---
+
 
 def _open_count(db, device_id=None):
     q = db.query(Alert).filter(Alert.status == AlertStatus.open)
@@ -104,9 +138,9 @@ def test_device_window_suppresses_new_alert(db_session):
     db_session.add(device)
     db_session.commit()
     now = datetime.now(timezone.utc)
-    db_session.add(MaintenanceWindow(device_id=device.id,
-                                     start_at=now - timedelta(minutes=1),
-                                     end_at=now + timedelta(hours=1)))
+    db_session.add(
+        MaintenanceWindow(device_id=device.id, start_at=now - timedelta(minutes=1), end_at=now + timedelta(hours=1))
+    )
     db_session.commit()
 
     alert_evaluator._load_suppression(db_session)
@@ -121,9 +155,9 @@ def test_device_window_does_not_suppress_other_devices(db_session):
     db_session.add_all([d1, d2])
     db_session.commit()
     now = datetime.now(timezone.utc)
-    db_session.add(MaintenanceWindow(device_id=d1.id,
-                                     start_at=now - timedelta(minutes=1),
-                                     end_at=now + timedelta(hours=1)))
+    db_session.add(
+        MaintenanceWindow(device_id=d1.id, start_at=now - timedelta(minutes=1), end_at=now + timedelta(hours=1))
+    )
     db_session.commit()
 
     alert_evaluator._load_suppression(db_session)
@@ -134,9 +168,9 @@ def test_device_window_does_not_suppress_other_devices(db_session):
 
 def test_global_window_suppresses_agent_alert(db_session):
     now = datetime.now(timezone.utc)
-    db_session.add(MaintenanceWindow(device_id=None,
-                                     start_at=now - timedelta(minutes=1),
-                                     end_at=now + timedelta(hours=1)))
+    db_session.add(
+        MaintenanceWindow(device_id=None, start_at=now - timedelta(minutes=1), end_at=now + timedelta(hours=1))
+    )
     db_session.commit()
 
     alert_evaluator._load_suppression(db_session)
@@ -150,9 +184,9 @@ def test_expired_window_does_not_suppress(db_session):
     db_session.add(device)
     db_session.commit()
     now = datetime.now(timezone.utc)
-    db_session.add(MaintenanceWindow(device_id=device.id,
-                                     start_at=now - timedelta(hours=2),
-                                     end_at=now - timedelta(hours=1)))
+    db_session.add(
+        MaintenanceWindow(device_id=device.id, start_at=now - timedelta(hours=2), end_at=now - timedelta(hours=1))
+    )
     db_session.commit()
 
     alert_evaluator._load_suppression(db_session)
@@ -166,12 +200,13 @@ def test_suppression_blocks_creation_not_resolution(db_session):
     device = Device(name="d1", ip_address="10.0.0.1", enabled=True)
     db_session.add(device)
     db_session.commit()
-    db_session.add(Alert(alert_type=AlertType.interface_down, message="old",
-                         device_id=device.id, status=AlertStatus.open))
+    db_session.add(
+        Alert(alert_type=AlertType.interface_down, message="old", device_id=device.id, status=AlertStatus.open)
+    )
     now = datetime.now(timezone.utc)
-    db_session.add(MaintenanceWindow(device_id=device.id,
-                                     start_at=now - timedelta(minutes=1),
-                                     end_at=now + timedelta(hours=1)))
+    db_session.add(
+        MaintenanceWindow(device_id=device.id, start_at=now - timedelta(minutes=1), end_at=now + timedelta(hours=1))
+    )
     db_session.commit()
 
     alert_evaluator._load_suppression(db_session)

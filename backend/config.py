@@ -1,5 +1,25 @@
-from pydantic_settings import BaseSettings
+import os
+from pathlib import Path
 from typing import Optional
+
+from pydantic_settings import BaseSettings
+
+
+# Docker/compose secrets (Step 4.4): if <NAME>_FILE points at a readable file,
+# load its contents into <NAME> before Settings() reads the environment — unless
+# <NAME> is already set explicitly. Keeps secret material in root-owned files
+# instead of the process environment (invisible to `docker inspect`), while
+# check_required_secrets() still validates whatever value results.
+def _hydrate_file_secrets(*names: str) -> None:
+    for name in names:
+        if os.environ.get(name):
+            continue
+        path = os.environ.get(f"{name}_FILE")
+        if path and Path(path).is_file():
+            os.environ[name] = Path(path).read_text().strip()
+
+
+_hydrate_file_secrets("JWT_SECRET", "MANAGER_API_KEY", "ENCRYPTION_KEY", "POSTGRES_PASSWORD")
 
 
 class Settings(BaseSettings):
@@ -12,10 +32,12 @@ class Settings(BaseSettings):
     manager_url: str = "http://manager:8000"
     api_title: str = "SNMP Metrics Collector API"
     api_version: str = "1.0.0"
-    manager_api_key: str = "change-me-in-production"
+    manager_api_key: str = ""
     jwt_secret: str
     jwt_algorithm: str = "HS256"
-    jwt_expire_hours: int = 8
+    # Fernet key for encrypting SNMP credentials at rest. When empty, a stable key
+    # is derived from jwt_secret (see crypto.py). Set a dedicated key in production.
+    encryption_key: Optional[str] = None
     frontend_url: str = "http://localhost"
     # Dedicated bearer token for the Prometheus scrape endpoint. Empty disables
     # the endpoint (503) so it is never unintentionally exposed unauthenticated.
@@ -25,6 +47,29 @@ class Settings(BaseSettings):
     baseline_multiplier: float = 1.5
     baseline_min_samples: int = 100
     baseline_window_days: float = 7.0
+    # Topology dependency suppression: when a device on a child's only path to the
+    # topology root(s) is down, suppress the child's (collateral) alerts. Off by
+    # default so it never changes alerting behaviour on upgrade without opt-in.
+    topology_suppression_enabled: bool = False
+    # Rate limiting + login lockout (Step 1.3 / plan Step 15). Limits use the
+    # slowapi/limits string format ("N/minute"). The in-process limiter state is
+    # per uvicorn worker; the DB-backed account lockout is the authoritative brake.
+    rate_limit_enabled: bool = True
+    login_rate_limit: str = "10/minute"
+    walk_rate_limit: str = "6/minute"
+    login_lockout_threshold: int = 10
+    login_lockout_minutes: int = 15
+    # Audit trail retention (Step 1.5): >1 year so annual reviews always have a
+    # full window. Rows are pruned weekly by a background task.
+    audit_retention_days: int = 400
+    # Password + session policy (Step 6.1). Complexity is length + common-password
+    # rejection by default; character-class rules are opt-in to avoid the weak
+    # "Password1!" patterns they encourage. Sessions have an idle timeout and an
+    # absolute cap (both derived from the access-token lifetime below).
+    password_min_length: int = 12
+    password_require_classes: bool = False
+    session_idle_minutes: int = 60
+    session_absolute_hours: int = 12
 
     class Config:
         env_file = ".env"
@@ -40,3 +85,48 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# Secrets that ship as defaults/placeholders in config or .env.example. Starting
+# with any of these means the deployment is using a publicly known secret.
+_PLACEHOLDER_SECRETS = {
+    "change-me-in-production",
+    "replace-with-a-long-random-secret",
+    "changeme",
+    "change-me",
+    "secret",
+    "password",
+    "replace-me",
+    "your-secret-here",
+}
+_MIN_SECRET_LENGTH = 16
+
+
+def _secret_problems(name: str, value: Optional[str]) -> list[str]:
+    if not value:
+        return [f"{name} is not set"]
+    if value.strip().lower() in _PLACEHOLDER_SECRETS:
+        return [f"{name} is set to a known placeholder/default value"]
+    if len(value) < _MIN_SECRET_LENGTH:
+        return [f"{name} must be at least {_MIN_SECRET_LENGTH} characters"]
+    return []
+
+
+def check_required_secrets() -> None:
+    """Fail fast if any required secret is unset, a known placeholder, or too short.
+
+    Called at application startup so an insecure deployment aborts with a clear
+    message instead of silently running with a publicly known secret.
+    """
+    problems = _secret_problems("JWT_SECRET", settings.jwt_secret)
+    problems += _secret_problems("MANAGER_API_KEY", settings.manager_api_key)
+    # ENCRYPTION_KEY may be empty (a key is derived from JWT_SECRET); only reject a
+    # placeholder value. Its Fernet format is validated on first use in crypto.py.
+    if settings.encryption_key and settings.encryption_key.strip().lower() in _PLACEHOLDER_SECRETS:
+        problems.append("ENCRYPTION_KEY is set to a known placeholder value")
+    if problems:
+        raise RuntimeError(
+            "Insecure secret configuration — refusing to start:\n  - "
+            + "\n  - ".join(problems)
+            + "\nSet strong, unique values for these (see .env.example)."
+        )

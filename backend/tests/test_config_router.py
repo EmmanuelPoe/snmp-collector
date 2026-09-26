@@ -1,39 +1,49 @@
-import sys, os
+import os
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("POSTGRES_USER", "test")
 os.environ.setdefault("POSTGRES_PASSWORD", "test")
 os.environ.setdefault("POSTGRES_DB", "test")
-os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
-import pytest
 import config
-config.settings.database_url = "sqlite:///:memory:"
-config.settings.jwt_secret = "test-secret"
+import pytest
 
+config.settings.database_url = "sqlite:///:memory:"
+config.settings.jwt_secret = "test-secret-for-unit-tests"
+
+from auth import hash_password
+from database import Base, get_db
+from fastapi.testclient import TestClient
+from models import CollectionConfig, User, UserRole
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from fastapi.testclient import TestClient
-from database import Base, get_db
-from auth import hash_password
-from models import User, UserRole, CollectionConfig
 
 
 @pytest.fixture(scope="function")
 def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(config.settings, "jwt_secret", "test-secret")
-    monkeypatch.setattr(config.settings, "manager_api_key", "mgr-key")
+    monkeypatch.setattr(config.settings, "jwt_secret", "test-secret-for-unit-tests")
+    monkeypatch.setattr(config.settings, "manager_api_key", "mgr-test-key-1234567")
     monkeypatch.setattr(config.settings, "frontend_url", "http://localhost")
     engine = create_engine(f"sqlite:///{tmp_path}/cfg.db", connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    admin = User(email="admin@test.com", hashed_password=hash_password("pw"), role=UserRole.admin, is_active=True, force_password_change=False)
+    admin = User(
+        email="admin@test.com",
+        hashed_password=hash_password("pw"),
+        role=UserRole.admin,
+        is_active=True,
+        force_password_change=False,
+    )
     session.add(admin)
     session.commit()
 
     from main import app
+
     app.dependency_overrides[get_db] = lambda: session
     with TestClient(app) as c:
         yield c
@@ -59,12 +69,16 @@ def test_list_configs_empty(client, auth):
 
 
 def test_create_config(client, auth):
-    resp = client.post("/config/configs", json={
-        "oid": "1.3.6.1.2.1.2.2.1.10",
-        "oid_name": "ifInOctets",
-        "description": "Inbound octets",
-        "enabled": True,
-    }, headers=auth)
+    resp = client.post(
+        "/config/configs",
+        json={
+            "oid": "1.3.6.1.2.1.2.2.1.10",
+            "oid_name": "ifInOctets",
+            "description": "Inbound octets",
+            "enabled": True,
+        },
+        headers=auth,
+    )
     assert resp.status_code == 201
     data = resp.json()
     assert data["oid"] == "1.3.6.1.2.1.2.2.1.10"
@@ -74,13 +88,19 @@ def test_create_config(client, auth):
 
 
 def test_create_config_duplicate_oid_rejected(client, auth):
-    client.post("/config/configs", json={"oid": "1.3.6.1.2.1.1.1.0", "oid_name": "sysDescr", "enabled": True}, headers=auth)
-    resp = client.post("/config/configs", json={"oid": "1.3.6.1.2.1.1.1.0", "oid_name": "sysDescr", "enabled": True}, headers=auth)
+    client.post(
+        "/config/configs", json={"oid": "1.3.6.1.2.1.1.1.0", "oid_name": "sysDescr", "enabled": True}, headers=auth
+    )
+    resp = client.post(
+        "/config/configs", json={"oid": "1.3.6.1.2.1.1.1.0", "oid_name": "sysDescr", "enabled": True}, headers=auth
+    )
     assert resp.status_code == 409
 
 
 def test_update_config_enabled(client, auth):
-    create = client.post("/config/configs", json={"oid": "1.3.6.1.2.1.2.2.1.10", "oid_name": "ifInOctets", "enabled": True}, headers=auth)
+    create = client.post(
+        "/config/configs", json={"oid": "1.3.6.1.2.1.2.2.1.10", "oid_name": "ifInOctets", "enabled": True}, headers=auth
+    )
     config_id = create.json()["id"]
     resp = client.put(f"/config/configs/{config_id}", json={"enabled": False}, headers=auth)
     assert resp.status_code == 200
@@ -93,7 +113,9 @@ def test_update_config_not_found(client, auth):
 
 
 def test_delete_config(client, auth):
-    create = client.post("/config/configs", json={"oid": "1.3.6.1.2.1.2.2.1.10", "oid_name": "ifInOctets", "enabled": True}, headers=auth)
+    create = client.post(
+        "/config/configs", json={"oid": "1.3.6.1.2.1.2.2.1.10", "oid_name": "ifInOctets", "enabled": True}, headers=auth
+    )
     config_id = create.json()["id"]
     resp = client.delete(f"/config/configs/{config_id}", headers=auth)
     assert resp.status_code == 204
@@ -120,8 +142,7 @@ def test_config_requires_auth(client):
 
 def _seed_required(client):
     db = client.app.dependency_overrides[get_db]()
-    cfg = CollectionConfig(oid="1.3.6.1.2.1.2.2.1.14", oid_name="ifInErrors",
-                           enabled=True, required=True)
+    cfg = CollectionConfig(oid="1.3.6.1.2.1.2.2.1.14", oid_name="ifInErrors", enabled=True, required=True)
     db.add(cfg)
     db.commit()
     db.refresh(cfg)
@@ -148,5 +169,7 @@ def test_required_config_cannot_be_deleted(client, auth):
 
 
 def test_config_response_exposes_required_flag(client, auth):
-    create = client.post("/config/configs", json={"oid": "1.3.6.1.2.1.1.5.0", "oid_name": "sysName", "enabled": True}, headers=auth)
+    create = client.post(
+        "/config/configs", json={"oid": "1.3.6.1.2.1.1.5.0", "oid_name": "sysName", "enabled": True}, headers=auth
+    )
     assert create.json()["required"] is False

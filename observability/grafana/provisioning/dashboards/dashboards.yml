@@ -1,0 +1,15 @@
+# Auto-load dashboards from disk (Step 5.2). JSON files in the mounted
+# dashboards dir are imported on startup and kept in sync.
+apiVersion: 1
+
+providers:
+  - name: SNMP Collector
+    orgId: 1
+    folder: SNMP Collector
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

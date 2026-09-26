@@ -17,9 +17,16 @@ COPY . .
 EXPOSE 3000
 CMD ["npm", "start"]
 
-# Stage 3: Production — serve built files via nginx
-FROM nginx:alpine AS production
+# Stage 3: Production — serve built files via unprivileged nginx (Step 4.1).
+# nginxinc/nginx-unprivileged runs as a non-root user (uid 101) and listens on
+# 8080 (an unprivileged port); temp/pid paths are already non-root-writable.
+FROM nginxinc/nginx-unprivileged:alpine AS production
+# Patch OS packages (fixable HIGH findings block the trivy gate in CI).
+# The base image already dropped to uid 101, so apk needs root briefly.
+USER root
+RUN apk upgrade --no-cache
+USER 101
 COPY --from=build /app/build /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+EXPOSE 8080
 CMD ["nginx", "-g", "daemon off;"]

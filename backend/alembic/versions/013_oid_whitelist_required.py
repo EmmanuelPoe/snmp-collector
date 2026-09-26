@@ -11,19 +11,20 @@ Revises: 012_add_error_rate_alert_type
 Create Date: 2026-06-08
 
 """
-from alembic import op
-import sqlalchemy as sa
 
-revision = '013_oid_whitelist_required'
-down_revision = '012_add_error_rate_alert_type'
+import sqlalchemy as sa
+from alembic import op
+
+revision = "013_oid_whitelist_required"
+down_revision = "012_add_error_rate_alert_type"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
     op.add_column(
-        'collection_configs',
-        sa.Column('required', sa.Boolean(), nullable=False, server_default='false'),
+        "collection_configs",
+        sa.Column("required", sa.Boolean(), nullable=False, server_default="false"),
     )
     # Reseed/upsert the full set the pipeline needs. Required = pipeline-critical.
     op.execute("""
@@ -49,4 +50,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column('collection_configs', 'required')
+    op.drop_column("collection_configs", "required")
