@@ -1,4 +1,4 @@
-pysnmp==4.4.12
+pysnmp==7.1.29
 pyasn1==0.4.8
 pyarrow==25.0.1
 httpx==0.28.1
