@@ -3,7 +3,7 @@ starlette==1.7.0
 uvicorn[standard]==0.53.0
 duckdb==1.1.0
 pyarrow==25.0.1
-pytz==2026.3.post1
+pytz==2026.4
 pydantic-settings==2.15.0
 python-multipart==0.0.32
 jinja2==3.1.6
