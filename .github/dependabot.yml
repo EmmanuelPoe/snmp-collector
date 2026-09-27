@@ -22,6 +22,17 @@ updates:
     # instead; pip-audit and Trivy still surface any duckdb CVE.
     ignore:
       - dependency-name: duckdb
+      # bcrypt is held below 5.0: passlib 1.7.4 detects its bcrypt backend via
+      # `bcrypt.__about__.__version__`, which 4.1 removed (hence the trapped
+      # "error reading bcrypt version" warning in the logs) and 5.0 breaks
+      # outright — passlib falls through to _stub_requires_backend and every
+      # password hash raises. #37 proposed exactly this bump and failed
+      # backend-tests and e2e-simulation for that reason. Clearing it means
+      # migrating off the unmaintained passlib (last release 2020) to bcrypt
+      # directly or pwdlib, keeping verification of existing $2b$ hashes so no
+      # one is locked out. Majors only — 4.x patches still flow.
+      - dependency-name: bcrypt
+        update-types: ["version-update:semver-major"]
     groups:
       backend-pip:
         patterns: ["*"]
