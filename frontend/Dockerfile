@@ -1,5 +1,5 @@
 # Stage 1: Build React app
-FROM node:20-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -9,7 +9,7 @@ ENV REACT_APP_API_URL=$REACT_APP_API_URL
 RUN npm run build
 
 # Stage 2: Development server
-FROM node:20-alpine AS development
+FROM node:26-alpine AS development
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
