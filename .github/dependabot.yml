@@ -13,6 +13,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    # duckdb is deliberately held: the manager writes data/db/metrics.db and the
+    # backend mounts it read-only, so the pin must move in LOCKSTEP across both
+    # services (see CLAUDE.md). Dependabot watches the two directories
+    # independently and cannot group across them, so it can only ever propose a
+    # one-sided bump (it did, in #30) — a skew risks a storage-format mismatch
+    # that no unit test catches. Bump both requirements.txt files in one PR
+    # instead; pip-audit and Trivy still surface any duckdb CVE.
+    ignore:
+      - dependency-name: duckdb
     groups:
       backend-pip:
         patterns: ["*"]
@@ -23,6 +32,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    # duckdb is deliberately held: the manager writes data/db/metrics.db and the
+    # backend mounts it read-only, so the pin must move in LOCKSTEP across both
+    # services (see CLAUDE.md). Dependabot watches the two directories
+    # independently and cannot group across them, so it can only ever propose a
+    # one-sided bump (it did, in #30) — a skew risks a storage-format mismatch
+    # that no unit test catches. Bump both requirements.txt files in one PR
+    # instead; pip-audit and Trivy still surface any duckdb CVE.
+    ignore:
+      - dependency-name: duckdb
     groups:
       manager-pip:
         patterns: ["*"]
