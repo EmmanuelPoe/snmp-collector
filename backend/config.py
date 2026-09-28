@@ -79,7 +79,10 @@ class Settings(BaseSettings):
     def model_post_init(self, __context):
         if not self.database_url:
             self.database_url = (
-                f"postgresql://{self.postgres_user}:{self.postgres_password}"
+                # Name the DBAPI explicitly: SQLAlchemy 2.1 moved the bare
+                # postgresql:// default from psycopg2 to psycopg (v3), and this
+                # project installs psycopg2-binary.
+                f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
                 f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
             )
 

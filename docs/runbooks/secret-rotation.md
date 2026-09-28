@@ -49,7 +49,7 @@ encrypted with this key. Rotating requires re-encrypting them in the same step.
    docker compose exec \
      -e OLD_ENCRYPTION_KEY="$(sudo cat /etc/snmp-collector/secrets/encryption_key)" \
      -e NEW_ENCRYPTION_KEY="<new key>" \
-     -e DATABASE_URL="postgresql://$POSTGRES_USER:<pw>@postgres:5432/$POSTGRES_DB" \
+     -e DATABASE_URL="postgresql+psycopg2://$POSTGRES_USER:<pw>@postgres:5432/$POSTGRES_DB" \
      backend python /tmp/rot.py --dry-run     # then re-run without --dry-run
    ```
    If the current key is JWT-derived, pass `OLD_JWT_SECRET` instead of

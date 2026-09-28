@@ -11,7 +11,7 @@ read each value with the OLD key, write it back with the NEW key.
 
     OLD_ENCRYPTION_KEY='<current fernet key>' \
     NEW_ENCRYPTION_KEY='<new fernet key>'     \
-    DATABASE_URL='postgresql://user:pass@localhost:5432/snmp_metrics' \
+    DATABASE_URL='postgresql+psycopg2://user:pass@localhost:5432/snmp_metrics' \
         python3 scripts/rotate_encryption_key.py [--dry-run]
 
 If the deployment currently DERIVES its key from JWT_SECRET (no ENCRYPTION_KEY
