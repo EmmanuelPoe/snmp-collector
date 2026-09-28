@@ -62,14 +62,6 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
-    # pyasn1 is held at 0.4.8 by the pinned pysnmp 4.4.12 (which requires
-    # pyasn1<0.5). Its advisories are consciously deferred to 2026-10-31 in
-    # .trivyignore and the pip-audit --ignore-vuln list in workflows/ci.yml;
-    # clearing them means migrating the agent to a maintained pysnmp and
-    # re-running `make simulation`, not taking a bump. Drop this ignore as part
-    # of that migration.
-    ignore:
-      - dependency-name: pyasn1
     groups:
       agent-pip:
         patterns: ["*"]

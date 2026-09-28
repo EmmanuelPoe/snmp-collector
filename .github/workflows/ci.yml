@@ -81,17 +81,7 @@ jobs:
       - name: pip-audit manager
         run: pip-audit -r manager/requirements.txt
       - name: pip-audit agent
-        # Allowlist (re-evaluate at expiry, then treat as a failure):
-        # - PYSEC-2026-2263 / -3455 / -3456 / -3457 (pyasn1 0.4.8): the fixes
-        #   need pyasn1>=0.6, which breaks the pinned pysnmp 4.4.12. Clearing
-        #   them requires migrating the agent to a maintained pysnmp and
-        #   re-running `make simulation`. Expires 2026-10-31.
-        run: |
-          pip-audit -r agent/requirements.txt \
-            --ignore-vuln PYSEC-2026-2263 \
-            --ignore-vuln PYSEC-2026-3455 \
-            --ignore-vuln PYSEC-2026-3456 \
-            --ignore-vuln PYSEC-2026-3457
+        run: pip-audit -r agent/requirements.txt
       - uses: actions/setup-node@v7
         with:
           node-version: "20"

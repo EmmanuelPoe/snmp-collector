@@ -1,28 +1,27 @@
 import asyncio
 import json
 import logging
-import threading
 from datetime import datetime, timezone
 
 import config as agent_config
-from pysnmp.carrier.asyncore.dgram import udp
+import pysnmp.carrier.asyncio.dgram.udp as udp
 from pysnmp.entity import config as snmp_config
 from pysnmp.entity.rfc3413 import ntfrcv
-from pysnmp.hlapi import SnmpEngine
+from pysnmp.hlapi.v3arch.asyncio import SnmpEngine
 
 log = logging.getLogger(__name__)
 
 
 async def run_trap_listener(agent_id: str, trap_buffer) -> None:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     snmp_engine = SnmpEngine()
 
-    snmp_config.addTransport(
+    snmp_config.add_transport(
         snmp_engine,
-        udp.domainName,
-        udp.UdpSocketTransport().openServerMode(("0.0.0.0", agent_config.settings.trap_listen_port)),
+        udp.DOMAIN_NAME,
+        udp.UdpTransport().open_server_mode(("0.0.0.0", agent_config.settings.trap_listen_port)),
     )
-    snmp_config.addV1System(
+    snmp_config.add_v1_system(
         snmp_engine,
         "trap-community",
         agent_config.settings.trap_community,
@@ -39,7 +38,7 @@ async def run_trap_listener(agent_id: str, trap_buffer) -> None:
             varbinds[oid_str] = str(val)
 
         try:
-            _, transport_address = snmp_engine.msgAndPduDsp.getTransportInfo(state_ref)
+            _, transport_address = snmp_engine.message_dispatcher.get_transport_info(state_ref)
             source_ip = str(transport_address[0])
         except Exception:
             source_ip = "unknown"
@@ -51,11 +50,16 @@ async def run_trap_listener(agent_id: str, trap_buffer) -> None:
             "varbinds": json.dumps(varbinds),
             "received_at": now,
         }
-        asyncio.run_coroutine_threadsafe(trap_buffer.add(row), loop)
+        # pysnmp 7's AsyncioDispatcher invokes this on the event loop, so the
+        # buffer write is a plain task. pysnmp 4 needed run_coroutine_threadsafe
+        # because its asyncore dispatcher ran in a separate thread.
+        loop.create_task(trap_buffer.add(row))
         log.info("Trap received from %s oid=%s", source_ip, trap_oid)
 
     ntfrcv.NotificationReceiver(snmp_engine, _callback)
-    snmp_engine.transportDispatcher.jobStarted(1)
+    # Hold a job open so the dispatcher does not consider itself finished and
+    # tear the transport down.
+    snmp_engine.transport_dispatcher.job_started(1)
 
     log.info(
         "Trap listener started on UDP port %d (community: %s)",
@@ -63,24 +67,13 @@ async def run_trap_listener(agent_id: str, trap_buffer) -> None:
         agent_config.settings.trap_community,
     )
 
-    stop_event = threading.Event()
-
-    def _run():
-        try:
-            snmp_engine.transportDispatcher.runDispatcher()
-        except Exception as exc:
-            log.warning("Trap dispatcher error: %s", exc)
-        finally:
-            stop_event.set()
-
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
-
     try:
-        while not stop_event.is_set():
-            await asyncio.sleep(1)
+        # open_server_mode registered the datagram endpoint on this loop, so
+        # datagrams arrive without a blocking run_dispatcher() call (pysnmp 4
+        # needed one, in a thread). Just stay alive until cancelled.
+        while True:
+            await asyncio.sleep(3600)
     except asyncio.CancelledError:
-        snmp_engine.transportDispatcher.closeDispatcher()
-        thread.join(timeout=2)
+        snmp_engine.transport_dispatcher.close_dispatcher()
         log.info("Trap listener stopped")
         raise
