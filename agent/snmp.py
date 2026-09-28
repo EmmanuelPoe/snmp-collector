@@ -1,5 +1,5 @@
 from models import DeviceConfig
-from pysnmp.hlapi import (
+from pysnmp.hlapi.v3arch.asyncio import (
     CommunityData,
     ContextData,
     ObjectIdentity,
@@ -7,13 +7,13 @@ from pysnmp.hlapi import (
     SnmpEngine,
     UdpTransportTarget,
     UsmUserData,
-    nextCmd,
     usmAesCfb128Protocol,
     usmAesCfb256Protocol,
     usmDESPrivProtocol,
     usmHMAC256SHA384AuthProtocol,
     usmHMACMD5AuthProtocol,
     usmHMACSHAAuthProtocol,
+    walk_cmd,
 )
 
 _AUTH = {
@@ -59,14 +59,14 @@ def _auth_data(device: DeviceConfig):
     )
 
 
-def walk_oid(device: DeviceConfig, base_oid: str, max_rows: int = 500) -> list[dict]:
+async def walk_oid(device: DeviceConfig, base_oid: str, max_rows: int = 500) -> list[dict]:
     """Ad-hoc SNMP walk from base_oid, for the MIB browser. Returns [{oid, value}]
     capped at max_rows."""
     auth = _auth_data(device)
-    transport = UdpTransportTarget((device.ip, device.snmp_port), timeout=5, retries=1)
+    transport = await UdpTransportTarget.create((device.ip, device.snmp_port), timeout=5, retries=1)
     engine = SnmpEngine()
     rows = []
-    for err_ind, err_stat, _, var_binds in nextCmd(
+    async for err_ind, err_stat, _, var_binds in walk_cmd(
         engine,
         auth,
         transport,
@@ -96,17 +96,17 @@ _LLDP_REM_COLUMNS = {
 _LLDP_LOC_PORTDESC = "1.0.8802.1.1.2.1.3.7.1.4"
 
 
-def walk_lldp(device: DeviceConfig, max_rows: int = 1000) -> list[dict]:
+async def walk_lldp(device: DeviceConfig, max_rows: int = 1000) -> list[dict]:
     """Walk the LLDP remote-systems table for topology discovery. Returns one dict
     per discovered neighbour. Empty list if the device exposes no LLDP data."""
     auth = _auth_data(device)
-    transport = UdpTransportTarget((device.ip, device.snmp_port), timeout=5, retries=1)
+    transport = await UdpTransportTarget.create((device.ip, device.snmp_port), timeout=5, retries=1)
     engine = SnmpEngine()
 
     # Neighbours keyed by the shared table index (timeMark.localPortNum.remIndex).
     neighbours: dict[str, dict] = {}
     for field, base_oid in _LLDP_REM_COLUMNS.items():
-        for err_ind, err_stat, _, var_binds in nextCmd(
+        async for err_ind, err_stat, _, var_binds in walk_cmd(
             engine,
             auth,
             transport,
@@ -128,7 +128,7 @@ def walk_lldp(device: DeviceConfig, max_rows: int = 1000) -> list[dict]:
 
     # Map local port numbers to human-readable local port descriptions.
     local_ports: dict[str, str] = {}
-    for err_ind, err_stat, _, var_binds in nextCmd(
+    async for err_ind, err_stat, _, var_binds in walk_cmd(
         engine,
         auth,
         transport,
@@ -149,13 +149,13 @@ def walk_lldp(device: DeviceConfig, max_rows: int = 1000) -> list[dict]:
     return result
 
 
-def walk_device(device: DeviceConfig) -> list[dict]:
+async def walk_device(device: DeviceConfig) -> list[dict]:
     auth = _auth_data(device)
-    transport = UdpTransportTarget((device.ip, device.snmp_port), timeout=5, retries=2)
+    transport = await UdpTransportTarget.create((device.ip, device.snmp_port), timeout=5, retries=2)
     engine = SnmpEngine()
 
     interface_names: dict[str, str] = {}
-    for err_ind, err_stat, _, var_binds in nextCmd(
+    async for err_ind, err_stat, _, var_binds in walk_cmd(
         engine,
         auth,
         transport,
@@ -176,7 +176,7 @@ def walk_device(device: DeviceConfig) -> list[dict]:
     for base_oid, oid_name in oid_map.items():
         if base_oid == _IFDESCR_OID:
             continue
-        for err_ind, err_stat, _, var_binds in nextCmd(
+        async for err_ind, err_stat, _, var_binds in walk_cmd(
             engine,
             auth,
             transport,

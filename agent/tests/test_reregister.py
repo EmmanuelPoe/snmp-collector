@@ -4,25 +4,9 @@ config triggers a fresh registration that re-points the upload buffers at the
 new id+token — instead of looping on 404 forever."""
 
 import sys
-import types
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-# main.py imports snmp + trap_receiver, which require pysnmp (not installed for
-# unit tests). Stub them so `import main` works without the SNMP stack.
-_snmp = types.ModuleType("snmp")
-_snmp.walk_device = _snmp.walk_lldp = _snmp.walk_oid = lambda *a, **k: []
-sys.modules.setdefault("snmp", _snmp)
-_trap = types.ModuleType("trap_receiver")
-
-
-async def _run_trap_listener(*a, **k):
-    return None
-
-
-_trap.run_trap_listener = _run_trap_listener
-sys.modules.setdefault("trap_receiver", _trap)
 
 import pytest
 

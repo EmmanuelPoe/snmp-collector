@@ -263,7 +263,8 @@ docker ×5, github-actions, weekly). Day-one findings resolved by bumping pins
 (fastapi 0.109.1, cryptography 48.0.1, python-multipart 0.0.31, pyarrow 23.0.1,
 jinja2 3.1.6, pytest 9.0.3 + pytest-asyncio 1.3.0, `npm audit fix`) — all
 suites + frontend build validated green under the new versions locally; one
-expiry-tagged allowlist entry (PYSEC-2026-2263, pyasn1/pysnmp, 2026-10-31).
+expiry-tagged allowlist entry (PYSEC-2026-2263, pyasn1/pysnmp, 2026-10-31) —
+**cleared 2026-09-27** by the pysnmp 7 migration; the allowlist is empty again.
 **Pending:** first CI run exercises Trivy/syft + in-container tests under the
 bumped pins; Dependabot activates once the branch reaches GitHub.
 

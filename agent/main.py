@@ -164,7 +164,7 @@ async def _fetch_devices() -> list[DeviceConfig]:
 async def _poll_device(device: DeviceConfig) -> None:
     log.info("Polling %s (%s)", device.ip, device.snmp_version)
     try:
-        rows = await asyncio.to_thread(walk_device, device)
+        rows = await walk_device(device)
         now = datetime.now(timezone.utc).isoformat()
         for row in rows:
             row["agent_id"] = _agent_id
@@ -231,10 +231,10 @@ async def _execute_command(client, cmd) -> None:
         if ctype == "walk":
             base_oid = params.get("base_oid", "1.3.6.1.2.1")
             max_rows = params.get("max_rows", 500)
-            rows = await asyncio.to_thread(walk_oid, device, base_oid, max_rows)
+            rows = await walk_oid(device, base_oid, max_rows)
             log.info("Walk command %s: %d OIDs from %s", command_id, len(rows), device.ip)
         else:  # lldp
-            rows = await asyncio.to_thread(walk_lldp, device)
+            rows = await walk_lldp(device)
             log.info("LLDP command %s: %d neighbours from %s", command_id, len(rows), device.ip)
         await _post_command_result(client, command_id, "done", result=rows)
     except Exception as exc:

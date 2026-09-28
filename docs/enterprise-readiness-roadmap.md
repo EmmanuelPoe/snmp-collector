@@ -230,11 +230,15 @@ docker ×5, github-actions, weekly. **Existing findings fixed by bumping pins**
 fastapi 0.109.1, cryptography 48.0.1, python-multipart 0.0.31 (backend);
 pyarrow 23.0.1, python-multipart 0.0.31, jinja2 3.1.6, pytest 9.0.3,
 pytest-asyncio 1.3.0 (manager/agent); `npm audit fix` (form-data, react-router).
-Allowlist: the pyasn1 0.4.8 advisories (PYSEC-2026-2263/-3455/-3456/-3457 and
-the matching CVE-2026-30922/-59884/-59885/-59886 in `.trivyignore`) — the fixes
-need pyasn1>=0.6, which breaks pysnmp 4.4.12; **expires 2026-10-31**, clearing
-it = agent pysnmp migration + `make simulation`. Dependabot is configured to
-`ignore` pyasn1 so it stops proposing a bump that cannot be taken.
+Allowlist: **now empty.** The pyasn1 0.4.8 deferral
+(PYSEC-2026-2263/-3455/-3456/-3457 and the matching
+CVE-2026-30922/-59884/-59885/-59886) was cleared on 2026-09-27 by migrating the
+agent to pysnmp 7.1.29 + pyasn1 0.6.4 ahead of its 2026-10-31 expiry — see the
+Step 2.x note below. `.trivyignore` and the pip-audit `--ignore-vuln` list are
+both empty again, and the Dependabot `ignore` on pyasn1 is gone. The only
+remaining holds are `duckdb` (lockstep across backend/manager) and `bcrypt`
+majors (blocked on the passlib migration), both recorded in
+`.github/dependabot.yml`.
 **Verified on CI 2026-09-26** (first green `build-images`): the Trivy gate had
 never actually run — `docker compose config --images <svc>` also emits the
 service's dependency images, so Trivy got a multi-line reference and errored.
