@@ -231,9 +231,14 @@ jobs:
           fi
           echo "::add-mask::$PW"
           echo "E2E_BOOTSTRAP_PASSWORD=$PW" >> "$GITHUB_ENV"
+      # Pinned to 20 on purpose, unlike the frontend jobs below/above: this
+      # runner's node only drives Playwright, and `playwright install
+      # --with-deps` hangs under node 26 / npm 11 (reproduced twice on #50).
+      # Nothing here reads frontend/package-lock.json, so it gains nothing from
+      # the bump. Revisit when @playwright/test is upgraded.
       - uses: actions/setup-node@v7
         with:
-          node-version: "26"
+          node-version: "20"
           cache: npm
           cache-dependency-path: e2e/package-lock.json
       - name: Install Playwright
