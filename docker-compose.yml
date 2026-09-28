@@ -116,7 +116,9 @@ services:
       # Step 2.1: durable registry in Postgres (schema = backend migration 025;
       # data = manager). registry.json remains only for REGISTRY_BACKEND=file.
       - REGISTRY_BACKEND=postgres
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # +psycopg2 is explicit on purpose: SQLAlchemy 2.1 moved the bare
+      # postgresql:// default to psycopg (v3), which we do not install.
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     restart: unless-stopped
     depends_on:
       postgres:
