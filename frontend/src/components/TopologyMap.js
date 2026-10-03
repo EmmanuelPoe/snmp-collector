@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import CytoscapeComponent from 'react-cytoscapejs';
 import { getTopologyGraph, discoverTopology } from '../services/api';
 import { useToast } from '../hooks/useToast';
+import { cssVar, useThemeVersion } from '../utils/cssVar';
 
 const LAYOUT = {
   name: 'cose',
@@ -11,56 +12,74 @@ const LAYOUT = {
   idealEdgeLength: 120,
 };
 
-const STYLESHEET = [
-  {
-    selector: 'node',
-    style: {
-      label: 'data(label)',
-      'font-size': 10,
-      color: '#c7d0e0',
-      'text-valign': 'bottom',
-      'text-margin-y': 4,
-      width: 34,
-      height: 34,
-      'background-color': '#3b82f6',
-      'border-width': 2,
-      'border-color': '#1e293b',
+// Cytoscape draws on a canvas and can't resolve var(--x), so the stylesheet is
+// built from the live theme and rebuilt when the theme changes.
+function buildStylesheet() {
+  const c = {
+    node: cssVar('--chart-in'),
+    ring: cssVar('--color-bg-surface'),
+    up: cssVar('--color-success'),
+    down: cssVar('--color-error'),
+    root: cssVar('--chart-err-3'),
+    external: cssVar('--color-text-faint'),
+    label: cssVar('--color-text-secondary'),
+    edge: cssVar('--color-border-strong'),
+    edgeLabel: cssVar('--color-text-muted'),
+  };
+  return [
+    {
+      selector: 'node',
+      style: {
+        label: 'data(label)',
+        'font-size': 10,
+        color: c.label,
+        'text-valign': 'bottom',
+        'text-margin-y': 4,
+        width: 34,
+        height: 34,
+        'background-color': c.node,
+        'border-width': 2,
+        'border-color': c.ring,
+      },
     },
-  },
-  { selector: 'node[status = "down"]', style: { 'background-color': '#ef4444' } },
-  { selector: 'node[status = "up"]', style: { 'background-color': '#22c55e' } },
-  {
-    selector: 'node[root = "yes"]',
-    style: { shape: 'diamond', width: 44, height: 44, 'border-color': '#eab308' },
-  },
-  {
-    selector: 'node[kind = "external"]',
-    style: { 'background-color': '#64748b', shape: 'round-rectangle', 'border-style': 'dashed' },
-  },
-  {
-    selector: 'edge',
-    style: {
-      width: 2,
-      'line-color': '#475569',
-      'curve-style': 'bezier',
-      'target-arrow-shape': 'none',
-      label: 'data(label)',
-      'font-size': 8,
-      color: '#7b8494',
-      'text-rotation': 'autorotate',
+    { selector: 'node[status = "down"]', style: { 'background-color': c.down } },
+    { selector: 'node[status = "up"]', style: { 'background-color': c.up } },
+    {
+      selector: 'node[root = "yes"]',
+      style: { shape: 'diamond', width: 44, height: 44, 'border-color': c.root },
     },
-  },
-  {
-    selector: 'edge[kind = "external"]',
-    style: { 'line-style': 'dashed', 'line-color': '#334155' },
-  },
-];
+    {
+      selector: 'node[kind = "external"]',
+      style: { 'background-color': c.external, shape: 'round-rectangle', 'border-style': 'dashed' },
+    },
+    {
+      selector: 'edge',
+      style: {
+        width: 2,
+        'line-color': c.edge,
+        'curve-style': 'bezier',
+        'target-arrow-shape': 'none',
+        label: 'data(label)',
+        'font-size': 8,
+        color: c.edgeLabel,
+        'text-rotation': 'autorotate',
+      },
+    },
+    {
+      selector: 'edge[kind = "external"]',
+      style: { 'line-style': 'dashed', 'line-color': c.edge },
+    },
+  ];
+}
 
 export default function TopologyMap() {
   const { showToast } = useToast();
   const [graph, setGraph] = useState({ nodes: [], edges: [], unresolved: [] });
   const [loading, setLoading] = useState(true);
   const [discovering, setDiscovering] = useState(false);
+  const themeVersion = useThemeVersion();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stylesheet = useMemo(buildStylesheet, [themeVersion]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -171,11 +190,11 @@ export default function TopologyMap() {
           <CytoscapeComponent
             elements={elements}
             layout={LAYOUT}
-            stylesheet={STYLESHEET}
+            stylesheet={stylesheet}
             style={{
               width: '100%',
               height: '640px',
-              background: 'var(--color-bg-elevated, #0f1729)',
+              background: 'var(--color-bg-elevated)',
             }}
           />
         )}
@@ -194,16 +213,16 @@ export default function TopologyMap() {
           }}
         >
           <span>
-            <span style={{ color: '#22c55e' }}>●</span> reachable
+            <span style={{ color: 'var(--color-success)' }}>●</span> reachable
           </span>
           <span>
-            <span style={{ color: '#ef4444' }}>●</span> unreachable
+            <span style={{ color: 'var(--color-error)' }}>●</span> unreachable
           </span>
           <span>
-            <span style={{ color: '#eab308' }}>◆</span> root (core/gateway)
+            <span style={{ color: 'var(--chart-err-3)' }}>◆</span> root (core/gateway)
           </span>
           <span>
-            <span style={{ color: '#64748b' }}>▭</span> unresolved neighbour
+            <span style={{ color: 'var(--color-text-faint)' }}>▭</span> unresolved neighbour
           </span>
         </div>
       )}

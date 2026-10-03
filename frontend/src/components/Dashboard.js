@@ -13,16 +13,14 @@ import { useToast } from '../hooks/useToast';
 import { useAuth } from '../hooks/useAuth';
 import { usePolledResource } from '../hooks/usePolledResource';
 import { formatBps } from '../utils/format';
+import HealthBar from './HealthBar';
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Cell,
   ResponsiveContainer,
 } from 'recharts';
 
@@ -42,17 +40,22 @@ const STATUS_BADGE = {
   offline: 'badge-danger',
 };
 
-function formatTime(ts) {
-  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// h23 (not hour12:false, which renders midnight as "24:05" in en-US).
+function formatClock(ts) {
+  return new Date(ts).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
 }
 
 const CHART_TOOLTIP_STYLE = {
-  backgroundColor: '#18181b',
-  border: '1px solid #1f1f24',
+  backgroundColor: 'var(--chart-tooltip-bg)',
+  border: '1px solid var(--chart-tooltip-border)',
   borderRadius: 4,
   fontSize: 11,
   fontFamily: "'IBM Plex Mono', monospace",
-  color: '#a1a1aa',
+  color: 'var(--color-text-secondary)',
 };
 
 export default function Dashboard() {
@@ -196,12 +199,12 @@ export default function Dashboard() {
   const topRows = traffic?.[topBy] || [];
   const trafficSeries = (traffic?.series || []).map((p) => ({
     ...p,
-    time: formatTime(p.timestamp),
+    time: formatClock(p.timestamp),
   }));
 
   const deviceStatusData = [
     { label: 'Up', count: dev.up, color: 'var(--color-success)' },
-    { label: 'Degraded', count: dev.degraded, color: 'var(--color-warning, #d97706)' },
+    { label: 'Degraded', count: dev.degraded, color: 'var(--color-warning)' },
     { label: 'Down', count: dev.down, color: 'var(--color-error)' },
     { label: 'Disabled', count: dev.disabled, color: 'var(--color-text-faint)' },
   ];
@@ -243,7 +246,7 @@ export default function Dashboard() {
                 dev.down > 0
                   ? 'var(--color-error)'
                   : dev.degraded > 0
-                    ? 'var(--color-warning, #d97706)'
+                    ? 'var(--color-warning)'
                     : 'var(--color-success)',
             }}
           >
@@ -308,8 +311,10 @@ export default function Dashboard() {
                   key={label}
                   onClick={() => setTrafficHours(hours)}
                   style={{
-                    background: trafficHours === hours ? 'var(--color-accent)' : 'var(--color-bg)',
-                    color: trafficHours === hours ? '#fff' : 'var(--color-text-muted)',
+                    background:
+                      trafficHours === hours ? 'var(--color-accent)' : 'var(--color-bg-elevated)',
+                    color:
+                      trafficHours === hours ? 'var(--color-on-accent)' : 'var(--color-text-muted)',
                     border: `1px solid ${trafficHours === hours ? 'var(--color-accent)' : 'var(--color-border)'}`,
                     padding: '2px 8px',
                     borderRadius: 4,
@@ -323,8 +328,8 @@ export default function Dashboard() {
             </div>
           </div>
           {trafficSeries.length > 0 ? (
-            <ResponsiveContainer width="100%" height={90}>
-              <LineChart data={trafficSeries} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={170}>
+              <LineChart data={trafficSeries} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="var(--color-border)"
@@ -333,28 +338,28 @@ export default function Dashboard() {
                 <XAxis
                   dataKey="time"
                   tick={{
-                    fontSize: 9,
-                    fill: 'var(--color-text-faint)',
+                    fontSize: 10,
+                    fill: 'var(--chart-axis)',
                     fontFamily: 'IBM Plex Mono',
                   }}
                   tickLine={false}
                   axisLine={false}
+                  interval="preserveStartEnd"
+                  minTickGap={56}
                 />
-                <YAxis hide />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 4,
-                    fontSize: 11,
-                  }}
-                  formatter={(v) => formatBps(v)}
+                <YAxis
+                  width={78}
+                  tick={{ fontSize: 10, fill: 'var(--chart-axis)', fontFamily: 'IBM Plex Mono' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => formatBps(v, 1)}
                 />
+                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v) => formatBps(v)} />
                 <Line
                   type="monotone"
                   dataKey="in_bps"
                   name="In"
-                  stroke="#2563eb"
+                  stroke="var(--chart-in)"
                   strokeWidth={1.5}
                   dot={false}
                   connectNulls
@@ -363,7 +368,7 @@ export default function Dashboard() {
                   type="monotone"
                   dataKey="out_bps"
                   name="Out"
-                  stroke="#10b981"
+                  stroke="var(--chart-out)"
                   strokeWidth={1.5}
                   dot={false}
                   connectNulls
@@ -385,25 +390,8 @@ export default function Dashboard() {
         </div>
 
         <div className="card">
-          <div className="chart-title">Device Status</div>
-          <ResponsiveContainer width="100%" height={90}>
-            <BarChart data={deviceStatusData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f1f24" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 9, fill: '#3f3f46', fontFamily: 'IBM Plex Mono' }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis hide />
-              <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-              <Bar dataKey="count" radius={[2, 2, 0, 0]} maxBarSize={40}>
-                {deviceStatusData.map((d) => (
-                  <Cell key={d.label} fill={d.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="chart-title">Device Health</div>
+          <HealthBar segments={deviceStatusData} />
         </div>
       </div>
 
@@ -499,7 +487,7 @@ export default function Dashboard() {
               const sevColor =
                 {
                   critical: 'var(--color-error)',
-                  warning: 'var(--color-warning, #d97706)',
+                  warning: 'var(--color-warning)',
                   info: 'var(--color-text-faint)',
                 }[alert.severity] || 'var(--color-error)';
               return (
@@ -511,7 +499,7 @@ export default function Dashboard() {
                           className="badge"
                           style={{
                             background: sevColor,
-                            color: '#fff',
+                            color: 'var(--color-on-accent)',
                             fontSize: 10,
                             textTransform: 'uppercase',
                             padding: '1px 6px',
@@ -624,7 +612,7 @@ export default function Dashboard() {
           <div className="chart-title">Recent Events</div>
           {events.length === 0 ? (
             <div className="event-row">
-              <span className="event-time">{lastUpdated ? formatTime(lastUpdated) : '—'}</span>
+              <span className="event-time">{lastUpdated ? formatClock(lastUpdated) : '—'}</span>
               <span className="event-text">
                 System loaded — {dev.total.toLocaleString()} devices, {agents.length} agents
               </span>
@@ -632,7 +620,7 @@ export default function Dashboard() {
           ) : (
             events.slice(0, 5).map((ev, i) => (
               <div className="event-row" key={i}>
-                <span className="event-time">{formatTime(ev.time)}</span>
+                <span className="event-time">{formatClock(ev.time)}</span>
                 <span className="event-text">{ev.text}</span>
               </div>
             ))

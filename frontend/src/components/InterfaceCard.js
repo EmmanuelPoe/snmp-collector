@@ -16,9 +16,11 @@ function InterfaceCard({ deviceId, iface, data, isActive, onClick }) {
     <div
       onClick={onClick}
       style={{
-        background: isActive ? '#1a2744' : '#1e293b',
-        border: `1px solid ${isActive ? '#3b82f6' : '#334155'}`,
-        boxShadow: isActive ? '0 0 0 2px rgba(59,130,246,0.25)' : 'none',
+        background: isActive ? 'var(--color-accent-dim)' : 'var(--color-bg-elevated)',
+        border: `1px solid ${isActive ? 'var(--color-accent)' : 'var(--color-border)'}`,
+        boxShadow: isActive
+          ? '0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent)'
+          : 'none',
         borderRadius: 10,
         padding: 14,
         cursor: 'pointer',
@@ -39,7 +41,7 @@ function InterfaceCard({ deviceId, iface, data, isActive, onClick }) {
             style={{
               fontSize: 12,
               fontWeight: 600,
-              color: '#e2e8f0',
+              color: 'var(--color-text-primary)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -48,7 +50,9 @@ function InterfaceCard({ deviceId, iface, data, isActive, onClick }) {
             {iface}
           </div>
           {data.alias && (
-            <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>{data.alias}</div>
+            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 1 }}>
+              {data.alias}
+            </div>
           )}
         </div>
         <span
@@ -59,9 +63,11 @@ function InterfaceCard({ deviceId, iface, data, isActive, onClick }) {
             fontWeight: 600,
             whiteSpace: 'nowrap',
             marginLeft: 8,
-            background: isDown ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)',
-            color: isDown ? '#ef4444' : '#10b981',
-            border: `1px solid ${isDown ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`,
+            background: isDown
+              ? 'color-mix(in srgb, var(--color-error) 16%, transparent)'
+              : 'color-mix(in srgb, var(--color-success) 16%, transparent)',
+            color: isDown ? 'var(--color-error)' : 'var(--color-success)',
+            border: `1px solid ${isDown ? 'color-mix(in srgb, var(--color-error) 32%, transparent)' : 'color-mix(in srgb, var(--color-success) 32%, transparent)'}`,
           }}
         >
           {(data.status ?? 'unknown').toUpperCase()}
@@ -80,17 +86,17 @@ function InterfaceCard({ deviceId, iface, data, isActive, onClick }) {
         }}
       >
         {[
-          { val: formatBps(data.current_in_bps), lbl: 'In', color: '#3b82f6' },
-          { val: formatBps(data.current_out_bps), lbl: 'Out', color: '#10b981' },
+          { val: formatBps(data.current_in_bps), lbl: 'In', color: 'var(--chart-in)' },
+          { val: formatBps(data.current_out_bps), lbl: 'Out', color: 'var(--chart-out)' },
           {
             val: data.utilization_pct != null ? `${data.utilization_pct}%` : '—',
             lbl: 'Util',
-            color: highUtil ? '#ef4444' : '#f59e0b',
+            color: highUtil ? 'var(--color-error)' : 'var(--chart-warn)',
           },
           {
             val: data.error_count ?? 0,
             lbl: 'Errors',
-            color: (data.error_count ?? 0) > 0 ? '#ef4444' : '#64748b',
+            color: (data.error_count ?? 0) > 0 ? 'var(--color-error)' : 'var(--color-text-muted)',
           },
         ].map(({ val, lbl, color }) => (
           <div key={lbl}>
@@ -98,7 +104,7 @@ function InterfaceCard({ deviceId, iface, data, isActive, onClick }) {
             <div
               style={{
                 fontSize: 9,
-                color: '#64748b',
+                color: 'var(--color-text-muted)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
                 marginTop: 1,

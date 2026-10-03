@@ -142,9 +142,9 @@ function DeviceMetrics() {
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              background: 'rgba(16,185,129,0.15)',
-              border: '1px solid rgba(16,185,129,0.3)',
-              color: '#10b981',
+              background: 'color-mix(in srgb, var(--color-success) 15%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--color-success) 32%, transparent)',
+              color: 'var(--color-success)',
               padding: '3px 10px',
               borderRadius: 12,
               fontSize: 11,
@@ -155,7 +155,7 @@ function DeviceMetrics() {
                 width: 6,
                 height: 6,
                 borderRadius: '50%',
-                background: '#10b981',
+                background: 'var(--color-success)',
                 display: 'inline-block',
                 animation: 'pulse 1.5s infinite',
               }}
@@ -223,7 +223,7 @@ function DeviceMetrics() {
               bottom: 0,
               width: 480,
               zIndex: 10,
-              boxShadow: '-4px 0 24px rgba(0,0,0,0.4)',
+              boxShadow: 'var(--shadow-lg)',
             }}
           >
             <InterfacePanel

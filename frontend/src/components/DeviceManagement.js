@@ -339,9 +339,11 @@ export default function DeviceManagement() {
                               fontSize: 10,
                               padding: '1px 6px',
                               borderRadius: 3,
-                              background: 'rgba(99,102,241,0.15)',
+                              background:
+                                'color-mix(in srgb, var(--color-accent) 15%, transparent)',
                               color: 'var(--color-accent)',
-                              border: '1px solid rgba(99,102,241,0.3)',
+                              border:
+                                '1px solid color-mix(in srgb, var(--color-accent) 32%, transparent)',
                             }}
                           >
                             {tag}
@@ -608,8 +610,9 @@ export default function DeviceManagement() {
                       <span
                         key={tag}
                         style={{
-                          background: 'rgba(99,102,241,0.15)',
-                          border: '1px solid rgba(99,102,241,0.3)',
+                          background: 'color-mix(in srgb, var(--color-accent) 15%, transparent)',
+                          border:
+                            '1px solid color-mix(in srgb, var(--color-accent) 32%, transparent)',
                           borderRadius: 4,
                           padding: '2px 8px',
                           fontSize: 12,

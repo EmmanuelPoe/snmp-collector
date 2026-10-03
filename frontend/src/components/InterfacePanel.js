@@ -73,12 +73,12 @@ function computeDeltas(rows) {
 }
 
 const CHART_STYLE = {
-  backgroundColor: '#0f172a',
-  border: '1px solid rgba(255,255,255,0.1)',
+  backgroundColor: 'var(--color-bg-elevated)',
+  border: '1px solid var(--color-border)',
   borderRadius: 8,
 };
-const GRID = 'rgba(255,255,255,0.05)';
-const AXIS = '#64748b';
+const GRID = 'var(--chart-grid)';
+const AXIS = 'var(--chart-axis)';
 
 function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
   const [timeRange, setTimeRange] = useState(1);
@@ -121,8 +121,8 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
     <div
       style={{
         width: 480,
-        background: '#1a2035',
-        borderLeft: '1px solid #334155',
+        background: 'var(--color-bg-surface)',
+        borderLeft: '1px solid var(--color-border)',
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
@@ -132,7 +132,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
       <div
         style={{
           padding: '14px 16px',
-          borderBottom: '1px solid #334155',
+          borderBottom: '1px solid var(--color-border)',
           display: 'flex',
           alignItems: 'center',
           gap: 10,
@@ -144,7 +144,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
             style={{
               fontSize: 13,
               fontWeight: 600,
-              color: '#f1f5f9',
+              color: 'var(--color-text-primary)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -152,7 +152,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
           >
             {iface}
           </div>
-          <div style={{ fontSize: 11, color: '#64748b' }}>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
             {(ifaceData?.status ?? 'unknown').toUpperCase()}
             {ifaceData?.speed_bps ? ` · ${formatBps(ifaceData.speed_bps)}` : ''}
           </div>
@@ -162,7 +162,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
           style={{
             background: 'none',
             border: 'none',
-            color: '#64748b',
+            color: 'var(--color-text-muted)',
             cursor: 'pointer',
             fontSize: 18,
             padding: '2px 6px',
@@ -176,7 +176,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
       <div
         style={{
           padding: '8px 16px',
-          borderBottom: '1px solid #1e293b',
+          borderBottom: '1px solid var(--color-border-subtle)',
           display: 'flex',
           gap: 6,
           flexShrink: 0,
@@ -187,9 +187,9 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
             key={label}
             onClick={() => setTimeRange(hours)}
             style={{
-              background: timeRange === hours ? '#3b82f6' : '#1e293b',
-              border: `1px solid ${timeRange === hours ? '#3b82f6' : '#334155'}`,
-              color: timeRange === hours ? '#fff' : '#94a3b8',
+              background: timeRange === hours ? 'var(--color-accent)' : 'var(--color-bg-elevated)',
+              border: `1px solid ${timeRange === hours ? 'var(--color-accent)' : 'var(--color-border)'}`,
+              color: timeRange === hours ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
               padding: '3px 10px',
               borderRadius: 6,
               fontSize: 11,
@@ -206,22 +206,27 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
           gridTemplateColumns: '1fr 1fr 1fr',
           gap: 8,
           padding: '10px 16px',
-          borderBottom: '1px solid #1e293b',
+          borderBottom: '1px solid var(--color-border-subtle)',
           flexShrink: 0,
         }}
       >
         {[
-          { val: formatBps(currentInBps), lbl: 'In (current)', color: '#3b82f6' },
-          { val: formatBps(currentOutBps), lbl: 'Out (current)', color: '#10b981' },
+          { val: formatBps(currentInBps), lbl: 'In (current)', color: 'var(--chart-in)' },
+          { val: formatBps(currentOutBps), lbl: 'Out (current)', color: 'var(--chart-out)' },
           {
             val: util != null ? `${util}%` : '—',
             lbl: 'Utilization',
-            color: (util ?? 0) >= 80 ? '#ef4444' : '#f59e0b',
+            color: (util ?? 0) >= 80 ? 'var(--color-error)' : 'var(--chart-warn)',
           },
         ].map(({ val, lbl, color }) => (
-          <div key={lbl} style={{ background: '#0f172a', borderRadius: 6, padding: '8px 10px' }}>
+          <div
+            key={lbl}
+            style={{ background: 'var(--color-bg-elevated)', borderRadius: 6, padding: '8px 10px' }}
+          >
             <div style={{ fontSize: 15, fontWeight: 700, color }}>{val}</div>
-            <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{lbl}</div>
+            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>
+              {lbl}
+            </div>
           </div>
         ))}
       </div>
@@ -236,19 +241,21 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
         }}
       >
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Loading...</div>
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+            Loading...
+          </div>
         ) : chartData.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
             No data for this time range.
           </div>
         ) : (
           <>
-            <div style={{ background: '#0f172a', borderRadius: 8, padding: 12 }}>
+            <div style={{ background: 'var(--color-bg-elevated)', borderRadius: 8, padding: 12 }}>
               <div
                 style={{
                   fontSize: 11,
                   fontWeight: 600,
-                  color: '#94a3b8',
+                  color: 'var(--color-text-secondary)',
                   marginBottom: 8,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
@@ -260,12 +267,12 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
                 <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="gradIn" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      <stop offset="5%" stopColor="var(--chart-in)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--chart-in)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gradOut" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      <stop offset="5%" stopColor="var(--chart-out)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--chart-out)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
@@ -284,7 +291,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
                   <Area
                     type="monotone"
                     dataKey="in_bps"
-                    stroke="#3b82f6"
+                    stroke="var(--chart-in)"
                     fill="url(#gradIn)"
                     name="In"
                     dot={false}
@@ -293,7 +300,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
                   <Area
                     type="monotone"
                     dataKey="out_bps"
-                    stroke="#10b981"
+                    stroke="var(--chart-out)"
                     fill="url(#gradOut)"
                     name="Out"
                     dot={false}
@@ -303,12 +310,12 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
               </ResponsiveContainer>
             </div>
             {hasErrors && (
-              <div style={{ background: '#0f172a', borderRadius: 8, padding: 12 }}>
+              <div style={{ background: 'var(--color-bg-elevated)', borderRadius: 8, padding: 12 }}>
                 <div
                   style={{
                     fontSize: 11,
                     fontWeight: 600,
-                    color: '#94a3b8',
+                    color: 'var(--color-text-secondary)',
                     marginBottom: 8,
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
@@ -326,7 +333,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
                     <Line
                       type="monotone"
                       dataKey="in_errors"
-                      stroke="#ef4444"
+                      stroke="var(--color-error)"
                       dot={false}
                       name="In Errors"
                       strokeWidth={1.5}
@@ -334,7 +341,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
                     <Line
                       type="monotone"
                       dataKey="out_errors"
-                      stroke="#f97316"
+                      stroke="var(--chart-err-2)"
                       dot={false}
                       name="Out Errors"
                       strokeWidth={1.5}
@@ -342,7 +349,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
                     <Line
                       type="monotone"
                       dataKey="in_discards"
-                      stroke="#f59e0b"
+                      stroke="var(--chart-warn)"
                       dot={false}
                       name="In Discards"
                       strokeWidth={1.5}
@@ -350,7 +357,7 @@ function InterfacePanel({ deviceId, iface, ifaceData, onClose }) {
                     <Line
                       type="monotone"
                       dataKey="out_discards"
-                      stroke="#eab308"
+                      stroke="var(--chart-err-3)"
                       dot={false}
                       name="Out Discards"
                       strokeWidth={1.5}

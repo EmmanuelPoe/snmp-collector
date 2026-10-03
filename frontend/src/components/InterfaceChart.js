@@ -39,14 +39,14 @@ function formatLabel(iso, hours) {
 }
 
 const CHART_STYLE = {
-  background: 'rgba(0,0,0,0.2)',
-  border: '1px solid rgba(255,255,255,0.06)',
+  background: 'var(--color-bg-elevated)',
+  border: '1px solid var(--color-border)',
   borderRadius: 6,
 };
 
 const TOOLTIP_STYLE = {
-  background: '#1e293b',
-  border: '1px solid rgba(255,255,255,0.1)',
+  background: 'var(--color-bg-elevated)',
+  border: '1px solid var(--chart-tooltip-border)',
   borderRadius: 6,
   fontSize: 11,
 };
@@ -92,9 +92,12 @@ export default function InterfaceChart({ deviceId, interfaceName }) {
               setRange(r);
             }}
             style={{
-              background: range.label === r.label ? 'rgba(59,130,246,0.3)' : 'transparent',
-              border: `1px solid ${range.label === r.label ? '#3b82f6' : 'rgba(255,255,255,0.1)'}`,
-              color: range.label === r.label ? '#93c5fd' : '#64748b',
+              background:
+                range.label === r.label
+                  ? 'color-mix(in srgb, var(--color-accent) 20%, transparent)'
+                  : 'transparent',
+              border: `1px solid ${range.label === r.label ? 'var(--color-accent)' : 'var(--color-border)'}`,
+              color: range.label === r.label ? 'var(--color-accent)' : 'var(--color-text-muted)',
               borderRadius: 4,
               padding: '1px 7px',
               fontSize: 10,
@@ -113,7 +116,7 @@ export default function InterfaceChart({ deviceId, interfaceName }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#475569',
+            color: 'var(--chart-axis)',
             fontSize: 11,
           }}
         >
@@ -127,7 +130,7 @@ export default function InterfaceChart({ deviceId, interfaceName }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#ef4444',
+            color: 'var(--color-error)',
             fontSize: 11,
           }}
         >
@@ -141,25 +144,25 @@ export default function InterfaceChart({ deviceId, interfaceName }) {
               <AreaChart data={series} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id={`gIn_${interfaceName}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    <stop offset="5%" stopColor="var(--chart-in)" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="var(--chart-in)" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id={`gOut_${interfaceName}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    <stop offset="5%" stopColor="var(--chart-out)" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="var(--chart-out)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                 <XAxis
                   dataKey="label"
-                  tick={{ fontSize: 9, fill: '#475569' }}
+                  tick={{ fontSize: 9, fill: 'var(--chart-axis)' }}
                   interval="preserveStartEnd"
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
-                  tickFormatter={formatBps}
-                  tick={{ fontSize: 9, fill: '#475569' }}
+                  tickFormatter={(v) => formatBps(v)}
+                  tick={{ fontSize: 9, fill: 'var(--chart-axis)' }}
                   width={55}
                   tickLine={false}
                   axisLine={false}
@@ -167,14 +170,14 @@ export default function InterfaceChart({ deviceId, interfaceName }) {
                 <Tooltip
                   formatter={(v, name) => [formatBps(v), name]}
                   contentStyle={TOOLTIP_STYLE}
-                  labelStyle={{ color: '#94a3b8' }}
+                  labelStyle={{ color: 'var(--color-text-secondary)' }}
                 />
                 <Legend wrapperStyle={{ fontSize: 10, paddingTop: 2 }} />
                 <Area
                   type="monotone"
                   dataKey="in_bps"
                   name="In"
-                  stroke="#3b82f6"
+                  stroke="var(--chart-in)"
                   fill={`url(#gIn_${interfaceName})`}
                   dot={false}
                   connectNulls
@@ -184,7 +187,7 @@ export default function InterfaceChart({ deviceId, interfaceName }) {
                   type="monotone"
                   dataKey="out_bps"
                   name="Out"
-                  stroke="#10b981"
+                  stroke="var(--chart-out)"
                   fill={`url(#gOut_${interfaceName})`}
                   dot={false}
                   connectNulls
@@ -200,24 +203,27 @@ export default function InterfaceChart({ deviceId, interfaceName }) {
                 <AreaChart data={series} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 9, fill: '#475569' }}
+                    tick={{ fontSize: 9, fill: 'var(--chart-axis)' }}
                     interval="preserveStartEnd"
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 9, fill: '#475569' }}
+                    tick={{ fontSize: 9, fill: 'var(--chart-axis)' }}
                     width={30}
                     tickLine={false}
                     axisLine={false}
                   />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#94a3b8' }} />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={{ color: 'var(--color-text-secondary)' }}
+                  />
                   <Area
                     type="monotone"
                     dataKey="in_errors"
                     name="In Errors"
-                    stroke="#ef4444"
-                    fill="rgba(239,68,68,0.1)"
+                    stroke="var(--color-error)"
+                    fill="color-mix(in srgb, var(--color-error) 12%, transparent)"
                     dot={false}
                     connectNulls
                     strokeWidth={1}
@@ -226,8 +232,8 @@ export default function InterfaceChart({ deviceId, interfaceName }) {
                     type="monotone"
                     dataKey="out_errors"
                     name="Out Errors"
-                    stroke="#f97316"
-                    fill="rgba(249,115,22,0.1)"
+                    stroke="var(--chart-err-2)"
+                    fill="color-mix(in srgb, var(--chart-err-2) 12%, transparent)"
                     dot={false}
                     connectNulls
                     strokeWidth={1}
