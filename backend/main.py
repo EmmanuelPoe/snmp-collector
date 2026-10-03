@@ -19,6 +19,7 @@ from routers import (
     audit_log,
     config,
     devices,
+    fleet,
     internal,
     maintenance,
     metrics,
@@ -129,12 +130,16 @@ app.add_middleware(
     # request headers.
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
+    # Paginated lists report their full size here (cross-origin JS can't read
+    # it otherwise).
+    expose_headers=["X-Total-Count"],
 )
 
 Instrumentator().instrument(app).expose(app, endpoint="/internal/prometheus")
 
 app.include_router(auth_router)
 app.include_router(devices.router)
+app.include_router(fleet.router)
 app.include_router(metrics.router)
 app.include_router(config.router)
 app.include_router(internal.router)

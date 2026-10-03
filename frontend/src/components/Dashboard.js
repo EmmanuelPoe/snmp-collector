@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  getDevices,
   getAgents,
-  getInterfaceRates,
-  getAlerts,
-  getDeviceTags,
+  getAlertsPage,
+  getFleetSummary,
+  getFleetTraffic,
   acknowledgeAlert,
   assignAlert,
   setAlertNote,
@@ -12,6 +11,8 @@ import {
 } from '../services/api';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../hooks/useAuth';
+import { usePolledResource } from '../hooks/usePolledResource';
+import { formatBps } from '../utils/format';
 import {
   LineChart,
   Line,
@@ -21,10 +22,14 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Cell,
   ResponsiveContainer,
 } from 'recharts';
 
-const DEVICE_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
+const NO_AGENTS = [];
+const ALERT_PAGE_SIZE = 50;
+// A burst larger than this collapses into one toast instead of one per alert.
+const TOAST_BURST_LIMIT = 3;
 const TIME_RANGES = [
   { label: '1h', hours: 1 },
   { label: '6h', hours: 6 },
@@ -41,14 +46,6 @@ function formatTime(ts) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatBytes(val) {
-  if (val == null) return '—';
-  if (val > 1e9) return (val / 1e9).toFixed(1) + ' GB';
-  if (val > 1e6) return (val / 1e6).toFixed(1) + ' MB';
-  if (val > 1e3) return (val / 1e3).toFixed(1) + ' KB';
-  return val + ' B';
-}
-
 const CHART_TOOLTIP_STYLE = {
   backgroundColor: '#18181b',
   border: '1px solid #1f1f24',
@@ -63,71 +60,58 @@ export default function Dashboard() {
   const { user } = useAuth();
   const canManageAlerts = user?.role === 'admin' || user?.role === 'editor';
   const [assignableUsers, setAssignableUsers] = useState([]);
-  const [devices, setDevices] = useState([]);
-  const [agents, setAgents] = useState([]);
-  const [trafficData, setTrafficData] = useState([]);
   const [events, setEvents] = useState([]);
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [trafficHours, setTrafficHours] = useState(1);
-  const [deviceNames, setDeviceNames] = useState([]);
   const [alerts, setAlerts] = useState([]);
-  const [allTags, setAllTags] = useState([]);
-  const [tagFilter, setTagFilter] = useState('');
+  const [alertTotal, setAlertTotal] = useState(0);
+  const [alertLimit, setAlertLimit] = useState(ALERT_PAGE_SIZE);
+  const [severityFilter, setSeverityFilter] = useState('');
+  const [topBy, setTopBy] = useState('top_by_traffic');
   const [secsAgo, setSecsAgo] = useState(0);
-  const prevAlertIds = React.useRef(new Set());
+  // Highest alert id already shown. null until the first page lands (no toasts for the
+  // backlog). Ids only grow, so paging, resolving or a bigger page size can't look "new".
+  const alertWatermark = React.useRef(null);
 
-  const loadData = useCallback(async () => {
-    try {
-      const [devicesRes, agentsRes, tagsRes] = await Promise.all([
-        getDevices(),
-        getAgents().catch(() => []),
-        getDeviceTags().catch(() => []),
-      ]);
-      setAllTags(tagsRes);
-      setDevices(devicesRes);
-      setAgents(agentsRes);
-      const ratesResults = await Promise.all(
-        devicesRes.map((d) => getInterfaceRates(d.id, trafficHours).catch(() => null)),
-      );
-      const ratesMap = {};
-      devicesRes.forEach((d, i) => {
-        if (ratesResults[i]) ratesMap[d.name] = ratesResults[i];
-      });
-      setDeviceNames(devicesRes.map((d) => d.name));
-      setTrafficData(buildPerDeviceSeries(ratesMap));
-      setLastUpdated(new Date());
-    } catch (err) {
-      console.error('Dashboard load error:', err);
-    } finally {
-      setLoading(false);
+  const {
+    data: summary,
+    error: summaryError,
+    refresh: refreshSummary,
+    updatedAt: lastUpdated,
+  } = usePolledResource('fleet-summary', getFleetSummary);
+  const { data: traffic } = usePolledResource(
+    `fleet-traffic:${trafficHours}`,
+    () => getFleetTraffic(trafficHours, 10),
+    { intervalMs: 60000 },
+  );
+  const { data: agentsData } = usePolledResource('agents', () => getAgents().catch(() => []));
+  const agents = agentsData || NO_AGENTS;
+
+  const alertFeedKey = `alerts:${severityFilter}:${alertLimit}`;
+  const { data: alertPage } = usePolledResource(alertFeedKey, () =>
+    getAlertsPage({ limit: alertLimit, ...(severityFilter && { severity: severityFilter }) }),
+  );
+
+  useEffect(() => {
+    if (!alertPage) return;
+    setAlerts(alertPage.items);
+    setAlertTotal(alertPage.total);
+    const mark = alertWatermark.current;
+    const maxId = Math.max(0, ...alertPage.items.map((a) => a.id));
+    alertWatermark.current = Math.max(mark ?? 0, maxId);
+    if (mark === null) return;
+    const fresh = alertPage.items.filter((a) => a.id > mark);
+    if (fresh.length > TOAST_BURST_LIMIT) {
+      const critical = fresh.filter((a) => a.severity === 'critical').length;
+      showToast(`${fresh.length} new alerts (${critical} critical)`, 'error');
+    } else {
+      fresh.forEach((a) => showToast(a.message, 'error'));
     }
-  }, [trafficHours]);
+  }, [alertPage, showToast]);
 
+  // Changing the filter swaps feeds; don't announce the other feed's alerts.
   useEffect(() => {
-    loadData();
-    const iv = setInterval(loadData, 30000);
-    return () => clearInterval(iv);
-  }, [loadData]);
-
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const data = await getAlerts();
-        setAlerts(data);
-        const newIds = new Set(data.map((a) => a.id));
-        data.forEach((a) => {
-          if (!prevAlertIds.current.has(a.id)) showToast(a.message, 'error');
-        });
-        prevAlertIds.current = newIds;
-      } catch {
-        // non-fatal
-      }
-    };
-    poll();
-    const iv = setInterval(poll, 30000);
-    return () => clearInterval(iv);
-  }, [showToast]);
+    alertWatermark.current = null;
+  }, [severityFilter]);
 
   useEffect(() => {
     if (!canManageAlerts) return;
@@ -188,7 +172,18 @@ export default function Dashboard() {
     }
   }, [agents]);
 
-  if (loading) {
+  if (!summary && summaryError) {
+    return (
+      <div className="loading-center" role="alert" style={{ flexDirection: 'column', gap: 12 }}>
+        <div>Couldn't load the fleet summary. Retrying automatically.</div>
+        <button className="btn btn-secondary" onClick={refreshSummary}>
+          Retry now
+        </button>
+      </div>
+    );
+  }
+
+  if (!summary) {
     return (
       <div className="loading-center">
         <div className="spinner" />
@@ -196,17 +191,19 @@ export default function Dashboard() {
     );
   }
 
-  const visibleDeviceNames = tagFilter
-    ? devices.filter((d) => d.tags?.includes(tagFilter)).map((d) => d.name)
-    : deviceNames;
-
-  const totalDevices = devices.length;
-  const activeDevices = devices.filter((d) => d.enabled).length;
+  const { devices: dev, alerts: alertStats } = summary;
   const onlineAgents = agents.filter((a) => a.status === 'online').length;
+  const topRows = traffic?.[topBy] || [];
+  const trafficSeries = (traffic?.series || []).map((p) => ({
+    ...p,
+    time: formatTime(p.timestamp),
+  }));
 
   const deviceStatusData = [
-    { label: 'Active', count: activeDevices },
-    { label: 'Disabled', count: totalDevices - activeDevices },
+    { label: 'Up', count: dev.up, color: 'var(--color-success)' },
+    { label: 'Degraded', count: dev.degraded, color: 'var(--color-warning, #d97706)' },
+    { label: 'Down', count: dev.down, color: 'var(--color-error)' },
+    { label: 'Disabled', count: dev.disabled, color: 'var(--color-text-faint)' },
   ];
 
   return (
@@ -221,21 +218,6 @@ export default function Dashboard() {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {allTags.length > 0 && (
-            <select
-              className="input"
-              value={tagFilter}
-              onChange={(e) => setTagFilter(e.target.value)}
-              style={{ width: 'auto' }}
-            >
-              <option value="">All devices</option>
-              {allTags.map((tag) => (
-                <option key={tag} value={tag}>
-                  {tag}
-                </option>
-              ))}
-            </select>
-          )}
           <span className="live-badge">
             <span className="live-dot" />
             LIVE
@@ -245,14 +227,35 @@ export default function Dashboard() {
 
       <div className="stats-row">
         <div className="stat-card">
-          <div className="stat-label">Total Devices</div>
-          <div className="stat-value">{totalDevices}</div>
-          <div className="stat-sub">{activeDevices} active</div>
+          <div className="stat-label">Devices</div>
+          <div className="stat-value">{dev.total.toLocaleString()}</div>
+          <div className="stat-sub">
+            {dev.up.toLocaleString()} up
+            {dev.disabled > 0 && ` · ${dev.disabled.toLocaleString()} disabled`}
+          </div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Active Devices</div>
-          <div className="stat-value green">{activeDevices}</div>
-          <div className="stat-sub">{totalDevices - activeDevices} disabled</div>
+          <div className="stat-label">Down / Degraded</div>
+          <div
+            className="stat-value"
+            style={{
+              color:
+                dev.down > 0
+                  ? 'var(--color-error)'
+                  : dev.degraded > 0
+                    ? 'var(--color-warning, #d97706)'
+                    : 'var(--color-success)',
+            }}
+          >
+            {dev.down.toLocaleString()}
+            <span style={{ fontSize: 13, color: 'var(--color-text-faint)' }}>
+              {' '}
+              / {dev.degraded.toLocaleString()}
+            </span>
+          </div>
+          <div className="stat-sub">
+            {dev.down === 0 && dev.degraded === 0 ? 'all devices healthy' : 'need attention'}
+          </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Agents Online</div>
@@ -276,12 +279,14 @@ export default function Dashboard() {
           <div className="stat-label">Open Alerts</div>
           <div
             className="stat-value"
-            style={{ color: alerts.length > 0 ? 'var(--color-error)' : 'var(--color-success)' }}
+            style={{ color: alertStats.open > 0 ? 'var(--color-error)' : 'var(--color-success)' }}
           >
-            {alerts.length}
+            {alertStats.open.toLocaleString()}
           </div>
           <div className="stat-sub">
-            {alerts.length === 0 ? 'all clear' : `${alerts.length} active`}
+            {alertStats.open === 0
+              ? 'all clear'
+              : `${alertStats.critical.toLocaleString()} critical · ${alertStats.unacknowledged.toLocaleString()} unacknowledged`}
           </div>
         </div>
       </div>
@@ -296,7 +301,7 @@ export default function Dashboard() {
               marginBottom: 8,
             }}
           >
-            <div className="chart-title">Network Traffic · Per Device</div>
+            <div className="chart-title">Fleet Traffic · Aggregate Interface Throughput</div>
             <div style={{ display: 'flex', gap: 4 }}>
               {TIME_RANGES.map(({ label, hours }) => (
                 <button
@@ -317,9 +322,9 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-          {trafficData.length > 0 && visibleDeviceNames.length > 0 ? (
+          {trafficSeries.length > 0 ? (
             <ResponsiveContainer width="100%" height={90}>
-              <LineChart data={trafficData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+              <LineChart data={trafficSeries} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="var(--color-border)"
@@ -343,19 +348,26 @@ export default function Dashboard() {
                     borderRadius: 4,
                     fontSize: 11,
                   }}
-                  formatter={(v) => formatBytes(v)}
+                  formatter={(v) => formatBps(v)}
                 />
-                {visibleDeviceNames.map((name, i) => (
-                  <Line
-                    key={name}
-                    type="monotone"
-                    dataKey={name}
-                    stroke={DEVICE_COLORS[i % DEVICE_COLORS.length]}
-                    strokeWidth={1.5}
-                    dot={false}
-                    connectNulls
-                  />
-                ))}
+                <Line
+                  type="monotone"
+                  dataKey="in_bps"
+                  name="In"
+                  stroke="#2563eb"
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="out_bps"
+                  name="Out"
+                  stroke="#10b981"
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
+                />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -385,15 +397,98 @@ export default function Dashboard() {
               />
               <YAxis hide />
               <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-              <Bar dataKey="count" fill="#fbbf24" radius={[2, 2, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="count" radius={[2, 2, 0, 0]} maxBarSize={40}>
+                {deviceStatusData.map((d) => (
+                  <Cell key={d.label} fill={d.color} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 8,
+          }}
+        >
+          <div className="chart-title">Top Interfaces</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[
+              ['top_by_traffic', 'By traffic'],
+              ['top_by_utilization', 'By utilization'],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                className={`btn btn-sm ${topBy === key ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setTopBy(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {topRows.length === 0 ? (
+          <span className="text-faint text-xs">No traffic data collected yet</span>
+        ) : (
+          <table className="table" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>Device</th>
+                <th style={{ textAlign: 'left' }}>Interface</th>
+                <th style={{ textAlign: 'right' }}>In</th>
+                <th style={{ textAlign: 'right' }}>Out</th>
+                <th style={{ textAlign: 'right' }}>Utilization</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topRows.map((r) => (
+                <tr key={`${r.device_ip}/${r.interface_name}`}>
+                  <td>{r.device_name}</td>
+                  <td>{r.interface_name}</td>
+                  <td style={{ textAlign: 'right' }}>{formatBps(r.in_bps)}</td>
+                  <td style={{ textAlign: 'right' }}>{formatBps(r.out_bps)}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {r.utilization_pct != null ? `${r.utilization_pct}%` : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       <div className="detail-row">
         <div className="card">
-          <div className="chart-title">Active Alerts</div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 8,
+            }}
+          >
+            <div className="chart-title">Active Alerts · {alertTotal.toLocaleString()}</div>
+            <select
+              className="input"
+              aria-label="Filter alerts by severity"
+              value={severityFilter}
+              onChange={(e) => {
+                setSeverityFilter(e.target.value);
+                setAlertLimit(ALERT_PAGE_SIZE);
+              }}
+              style={{ width: 'auto', height: 24, fontSize: 11, padding: '0 4px' }}
+            >
+              <option value="">All severities</option>
+              <option value="critical">Critical</option>
+              <option value="warning">Warning</option>
+              <option value="info">Info</option>
+            </select>
+          </div>
           {alerts.length === 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 8 }}>
               <span style={{ color: 'var(--color-success)', fontSize: 14 }}>✓</span>
@@ -486,6 +581,15 @@ export default function Dashboard() {
               );
             })
           )}
+          {alerts.length < alertTotal && (
+            <button
+              className="btn btn-sm btn-secondary"
+              style={{ marginTop: 8 }}
+              onClick={() => setAlertLimit((n) => n + ALERT_PAGE_SIZE)}
+            >
+              Show more ({(alertTotal - alerts.length).toLocaleString()} remaining)
+            </button>
+          )}
         </div>
 
         <div className="card">
@@ -522,7 +626,7 @@ export default function Dashboard() {
             <div className="event-row">
               <span className="event-time">{lastUpdated ? formatTime(lastUpdated) : '—'}</span>
               <span className="event-text">
-                System loaded — {totalDevices} devices, {agents.length} agents
+                System loaded — {dev.total.toLocaleString()} devices, {agents.length} agents
               </span>
             </div>
           ) : (
@@ -537,20 +641,4 @@ export default function Dashboard() {
       </div>
     </div>
   );
-}
-
-function buildPerDeviceSeries(ratesMap) {
-  const buckets = {};
-  for (const [deviceName, ratesData] of Object.entries(ratesMap)) {
-    if (!ratesData?.interfaces) continue;
-    for (const ifaceData of Object.values(ratesData.interfaces)) {
-      for (const pt of ifaceData.sparkline || []) {
-        const d = new Date(pt.timestamp);
-        const bucket = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
-        if (!buckets[bucket]) buckets[bucket] = { time: bucket };
-        buckets[bucket][deviceName] = (buckets[bucket][deviceName] || 0) + pt.in_bps + pt.out_bps;
-      }
-    }
-  }
-  return Object.values(buckets).sort((a, b) => a.time.localeCompare(b.time));
 }

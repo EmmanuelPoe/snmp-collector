@@ -33,9 +33,19 @@ api.interceptors.response.use(
 );
 
 // ===== Devices =====
+// The API caps a page at 1000 devices; walk the pages so callers always get the
+// whole fleet (a bare GET /devices silently stops at 100).
+const DEVICE_PAGE_SIZE = 1000;
 export const getDevices = async (enabledOnly = false) => {
-  const response = await api.get('/devices', { params: { enabled_only: enabledOnly } });
-  return response.data;
+  const all = [];
+  for (;;) {
+    const response = await api.get('/devices', {
+      params: { enabled_only: enabledOnly, skip: all.length, limit: DEVICE_PAGE_SIZE },
+    });
+    all.push(...response.data);
+    const total = Number(response.headers['x-total-count']);
+    if (response.data.length < DEVICE_PAGE_SIZE || (total && all.length >= total)) return all;
+  }
 };
 export const getDevice = async (deviceId) => {
   const response = await api.get(`/devices/${deviceId}`);
@@ -248,12 +258,17 @@ export const clearOfflineAgents = async () => {
 };
 
 // ===== Alerts =====
-export const getAlerts = async (includeResolved = false) => {
-  const response = await api.get('/alerts', { params: { include_resolved: includeResolved } });
+// One page of alerts plus the unpaginated total (X-Total-Count).
+export const getAlertsPage = async (params = {}) => {
+  const response = await api.get('/alerts', { params });
+  return { items: response.data, total: Number(response.headers['x-total-count']) || 0 };
+};
+export const getFleetSummary = async () => {
+  const response = await api.get('/fleet/summary');
   return response.data;
 };
-export const getAlertCount = async () => {
-  const response = await api.get('/alerts/count');
+export const getFleetTraffic = async (hours = 1, top = 10) => {
+  const response = await api.get('/fleet/traffic', { params: { hours, top } });
   return response.data;
 };
 export const resolveAlert = async (alertId) => {

@@ -72,6 +72,7 @@ Device registered in Backend (Postgres)
 - `agents` — proxy to manager's agent registry
 - `internal` — endpoints consumed by manager (device config lookup)
 - `alerts` — CRUD for `Alert` model; GET list, GET count, PUT resolve (Postgres)
+- `fleet` — `/fleet/summary` (device/alert/agent roll-up) and `/fleet/traffic` (proxies manager's aggregate fleet-traffic query)
 - `alert-rules` — per-device bandwidth/error thresholds; GET and POST upsert (Postgres)
 
 ### Manager routers
@@ -92,7 +93,7 @@ Device registered in Backend (Postgres)
 ## Frontend notes
 
 - The frontend container serves a **pre-built static bundle** via Nginx. Source changes require `docker-compose build frontend && docker-compose up -d frontend` — `npm start` hot-reload only works outside Docker.
-- Alert feed, sidebar badge, and toast notifications poll `/alerts` and `/alerts/count` every 30s.
+- Dashboard, sidebar badge and alert feed poll through `usePolledResource` (one request per key, paused on hidden tabs, backs off on errors): `/fleet/summary` and `/alerts` every 30s, `/fleet/traffic` every 60s. Lists are paginated server-side (`X-Total-Count`); `getDevices()` pages through the whole fleet.
 - Per-device alert thresholds are configured in the Device edit modal (bandwidth in/out %, error rate).
 
 ## Environment

@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 import audit
 from auth import get_current_user, require_role
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Request
-from models import Alert, AlertRule, AlertStatus, Device, User
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from models import Alert, AlertRule, AlertSeverity, AlertStatus, AlertType, Device, User
 from schemas import (
     AlertAssignRequest,
     AlertCountResponse,
@@ -22,14 +22,34 @@ rules_router = APIRouter(prefix="/alert-rules", tags=["alert-rules"])
 
 @alerts_router.get("", response_model=List[AlertResponse])
 def list_alerts(
+    response: Response,
     include_resolved: bool = False,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    severity: Optional[AlertSeverity] = None,
+    alert_type: Optional[AlertType] = None,
+    device_id: Optional[int] = None,
+    acknowledged: Optional[bool] = None,
+    assigned_to: Optional[int] = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     q = db.query(Alert)
     if not include_resolved:
         q = q.filter(Alert.status == AlertStatus.open)
-    return q.order_by(Alert.triggered_at.desc()).all()
+    if severity:
+        q = q.filter(Alert.severity == severity)
+    if alert_type:
+        q = q.filter(Alert.alert_type == alert_type)
+    if device_id is not None:
+        q = q.filter(Alert.device_id == device_id)
+    if acknowledged is not None:
+        q = q.filter(Alert.acknowledged_at.isnot(None) if acknowledged else Alert.acknowledged_at.is_(None))
+    if assigned_to is not None:
+        q = q.filter(Alert.assigned_to == assigned_to)
+    # An outage can open hundreds of alerts at once; never return them all.
+    response.headers["X-Total-Count"] = str(q.count())
+    return q.order_by(Alert.triggered_at.desc(), Alert.id.desc()).offset(skip).limit(limit).all()
 
 
 @alerts_router.get("/count", response_model=AlertCountResponse)
