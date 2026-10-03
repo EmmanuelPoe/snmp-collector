@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   getDevices,
   createDevice,
@@ -22,7 +22,14 @@ export default function DeviceManagement() {
   const [availableModules, setAvailableModules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [search, setSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
+  // Re-sync when the URL changes while this page is already mounted (the command
+  // palette links to /devices?q=... from /devices itself).
+  const urlQuery = searchParams.get('q');
+  useEffect(() => {
+    if (urlQuery !== null) setSearch(urlQuery);
+  }, [urlQuery]);
   const [sort, setSort] = useState({ col: 'name', dir: 'asc' });
   const [editingDevice, setEditingDevice] = useState(null);
   const [formData, setFormData] = useState({

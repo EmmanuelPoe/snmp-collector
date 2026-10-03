@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { getFleetSummary, getTraps, logoutServer } from '../services/api';
+import { getFleetSummary, getTraps } from '../services/api';
 import { usePolledResource } from '../hooks/usePolledResource';
 import { useTheme } from '../hooks/useTheme';
+import { useSignOut } from '../hooks/useSignOut';
 import Icon from './Icon';
+import { visibleSections } from '../navConfig';
+import { useCommandPalette } from './CommandPalette';
 
 function readCollapsed() {
   try {
@@ -15,9 +18,10 @@ function readCollapsed() {
 }
 
 export default function Sidebar() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const { theme, cycle: cycleTheme } = useTheme();
+  const palette = useCommandPalette();
+  const signOut = useSignOut();
   const [collapsed, setCollapsed] = useState(readCollapsed);
 
   // Shared with the dashboard: one request per interval however many widgets ask.
@@ -40,62 +44,11 @@ export default function Sidebar() {
     });
   }
 
-  function handleLogout() {
-    logoutServer(); // revoke server-side (best effort, fire-and-forget)
-    logout();
-    navigate('/login');
-  }
-
-  const sections = [
-    {
-      label: 'Monitor',
-      items: [
-        {
-          to: '/',
-          icon: 'dashboard',
-          label: 'Dashboard',
-          badge: alertCount > 0 ? alertCount : null,
-          badgeClass: 'badge-danger',
-        },
-        { to: '/devices', icon: 'devices', label: 'Devices' },
-        { to: '/metrics', icon: 'metrics', label: 'Metrics' },
-        { to: '/topology', icon: 'topology', label: 'Topology' },
-        {
-          to: '/traps',
-          icon: 'traps',
-          label: 'Traps',
-          badge: trapCount > 0 ? trapCount : null,
-          badgeClass: 'badge-warning',
-        },
-      ],
-    },
-    {
-      label: 'Collection',
-      items: [
-        { to: '/agents', icon: 'agents', label: 'Agents' },
-        { to: '/config', icon: 'config', label: 'Configuration' },
-        { to: '/mib-browser', icon: 'mib', label: 'MIB Browser' },
-      ],
-    },
-    {
-      label: 'Alerting',
-      items: [
-        { to: '/notifications', icon: 'notifications', label: 'Notifications' },
-        { to: '/maintenance', icon: 'maintenance', label: 'Maintenance' },
-      ],
-    },
-    ...(user?.role === 'admin'
-      ? [
-          {
-            label: 'Admin',
-            items: [
-              { to: '/users', icon: 'users', label: 'Users' },
-              { to: '/audit', icon: 'audit', label: 'Audit Log' },
-            ],
-          },
-        ]
-      : []),
-  ];
+  const badges = {
+    '/': alertCount > 0 ? { value: alertCount, className: 'badge-danger' } : null,
+    '/traps': trapCount > 0 ? { value: trapCount, className: 'badge-warning' } : null,
+  };
+  const sections = visibleSections(user?.role);
 
   const themeIcon = { system: 'system', light: 'sun', dark: 'moon' }[theme];
   const themeLabel = { system: 'System', light: 'Light', dark: 'Dark' }[theme];
@@ -124,6 +77,21 @@ export default function Sidebar() {
         </div>
       </div>
 
+      <button
+        className="sidebar-search"
+        onClick={palette.open}
+        aria-label="Search (command palette)"
+        title={`Search (${palette.shortcutLabel})`}
+      >
+        <Icon name="search" size={15} />
+        {!collapsed && (
+          <>
+            <span className="sidebar-search-text">Search…</span>
+            <kbd className="kbd">{palette.shortcutLabel}</kbd>
+          </>
+        )}
+      </button>
+
       <nav className="sidebar-nav">
         {sections.map((section) => (
           <div key={section.label}>
@@ -141,12 +109,12 @@ export default function Sidebar() {
                   <Icon name={item.icon} size={16} />
                 </span>
                 {!collapsed && <span className="nav-label">{item.label}</span>}
-                {!collapsed && item.badge && (
-                  <span className={`nav-badge ${item.badgeClass}`}>
-                    {item.badge > 99 ? '99+' : item.badge}
+                {!collapsed && badges[item.to] && (
+                  <span className={`nav-badge ${badges[item.to].className}`}>
+                    {badges[item.to].value > 99 ? '99+' : badges[item.to].value}
                   </span>
                 )}
-                {collapsed && item.badge && <span className="nav-badge-dot" />}
+                {collapsed && badges[item.to] && <span className="nav-badge-dot" />}
               </NavLink>
             ))}
           </div>
@@ -184,7 +152,7 @@ export default function Sidebar() {
           </NavLink>
           <button
             className="sidebar-action sidebar-action-danger"
-            onClick={handleLogout}
+            onClick={signOut}
             title="Sign out"
             aria-label="Sign out"
           >

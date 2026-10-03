@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Link, MemoryRouter } from 'react-router-dom';
 import DeviceManagement from './DeviceManagement';
 import { ToastProvider } from '../hooks/useToast';
 import * as api from '../services/api';
@@ -28,11 +29,16 @@ const DEVICE = {
   tags: [],
 };
 
-function renderPage() {
+function renderPage(route = '/devices') {
   return render(
-    <ToastProvider>
-      <DeviceManagement />
-    </ToastProvider>,
+    <MemoryRouter
+      initialEntries={[route]}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
+      <ToastProvider>
+        <DeviceManagement />
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -110,4 +116,40 @@ test('edit flow: loads the device into the modal and calls updateDevice', async 
   const [id, payload] = api.updateDevice.mock.calls[0];
   expect(id).toBe(7);
   expect(payload.name).toBe('sw-edge-renamed');
+});
+
+test('?q= pre-fills the search box (deep link from the command palette)', async () => {
+  api.getDevices.mockResolvedValue([
+    DEVICE,
+    { ...DEVICE, id: 8, name: 'core-1', ip_address: '10.9.9.9' },
+  ]);
+  renderPage('/devices?q=core');
+
+  expect(await screen.findByDisplayValue('core')).toBeInTheDocument();
+  expect(screen.getByText('core-1')).toBeInTheDocument();
+  expect(screen.queryByText('sw-edge-1')).not.toBeInTheDocument();
+});
+
+test('navigating to ?q= while already on the page re-applies the filter', async () => {
+  api.getDevices.mockResolvedValue([
+    DEVICE,
+    { ...DEVICE, id: 8, name: 'core-1', ip_address: '10.9.9.9' },
+  ]);
+  const user = userEvent.setup();
+  render(
+    <MemoryRouter
+      initialEntries={['/devices']}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
+      <Link to="/devices?q=core">filter</Link>
+      <ToastProvider>
+        <DeviceManagement />
+      </ToastProvider>
+    </MemoryRouter>,
+  );
+  expect(await screen.findByText('sw-edge-1')).toBeInTheDocument();
+
+  await user.click(screen.getByText('filter'));
+  expect(await screen.findByDisplayValue('core')).toBeInTheDocument();
+  expect(screen.queryByText('sw-edge-1')).not.toBeInTheDocument();
 });

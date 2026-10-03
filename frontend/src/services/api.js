@@ -47,6 +47,11 @@ export const getDevices = async (enabledOnly = false) => {
     if (response.data.length < DEVICE_PAGE_SIZE || (total && all.length >= total)) return all;
   }
 };
+// Palette-sized lookup: one small page, matched server-side on name or IP.
+export const searchDevices = async (term, { limit = 8, signal } = {}) => {
+  const response = await api.get('/devices', { params: { search: term, limit }, signal });
+  return { items: response.data, total: Number(response.headers['x-total-count']) || 0 };
+};
 export const getDevice = async (deviceId) => {
   const response = await api.get(`/devices/${deviceId}`);
   return response.data;

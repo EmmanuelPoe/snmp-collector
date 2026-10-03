@@ -26,6 +26,13 @@ function DeviceMetrics() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Follows ?device_id= on mount and on later navigation (palette links to
+  // /metrics?device_id=X from /metrics itself).
+  const paramId = searchParams.get('device_id');
+  useEffect(() => {
+    if (paramId && devices.some((d) => String(d.id) === paramId)) setSelectedDevice(paramId);
+  }, [paramId, devices]);
+
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRatesData(null);
@@ -41,11 +48,6 @@ function DeviceMetrics() {
     try {
       const data = await getDevices(true);
       setDevices(data);
-      const paramId = searchParams.get('device_id');
-      if (paramId) {
-        const match = data.find((d) => String(d.id) === String(paramId));
-        if (match) setSelectedDevice(String(match.id));
-      }
     } catch (err) {
       console.error('DeviceMetrics: failed to load devices', err);
     }
