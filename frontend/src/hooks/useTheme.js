@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const KEY = 'snmp-theme';
 const CHOICES = ['system', 'light', 'dark'];
@@ -26,31 +26,33 @@ export function initTheme() {
 
 export function useTheme() {
   const [theme, setThemeState] = useState(readStored);
-  const mounted = useRef(false);
 
-  // initTheme() already applied the stored choice at startup; re-applying on
-  // mount would fire a redundant themechange (rebuilding every canvas chart).
+  // Follow a change made elsewhere in this tab (e.g. the command palette).
   useEffect(() => {
-    if (mounted.current) applyTheme(theme);
-    mounted.current = true;
-  }, [theme]);
+    const root = document.documentElement;
+    const onChange = (e) => CHOICES.includes(e.detail) && setThemeState(e.detail);
+    root.addEventListener('themechange', onChange);
+    return () => root.removeEventListener('themechange', onChange);
+  }, []);
 
   // Follow a change made in another tab.
   useEffect(() => {
     const onStorage = (e) => {
-      if (e.key === KEY) setThemeState(readStored());
+      if (e.key === KEY) applyTheme(readStored());
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
+  // Applied synchronously, not from an effect: a caller may unmount right after
+  // (the palette closes on select) and an effect would never run.
   const setTheme = useCallback((next) => {
     try {
       localStorage.setItem(KEY, next);
     } catch {
       // not persisted; applies for this session
     }
-    setThemeState(next);
+    applyTheme(next); // its themechange event updates every hook instance, including this one
   }, []);
 
   const cycle = useCallback(() => {
