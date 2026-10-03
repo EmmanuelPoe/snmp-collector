@@ -1,44 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { getAlertCount, getTraps, logoutServer } from '../services/api';
+import { getFleetSummary, getTraps, logoutServer } from '../services/api';
+import { usePolledResource } from '../hooks/usePolledResource';
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [alertCount, setAlertCount] = useState(0);
-  const [trapCount, setTrapCount] = useState(0);
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem('sidebar-collapsed') === 'true',
   );
 
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const data = await getAlertCount();
-        setAlertCount(data.open);
-      } catch {
-        // non-fatal
-      }
-    };
-    poll();
-    const iv = setInterval(poll, 30000);
-    return () => clearInterval(iv);
-  }, []);
-
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const data = await getTraps({ hours: 1, limit: 200 });
-        setTrapCount(data.length);
-      } catch {
-        // non-fatal
-      }
-    };
-    poll();
-    const iv = setInterval(poll, 30000);
-    return () => clearInterval(iv);
-  }, []);
+  // Shared with the dashboard: one request per interval however many widgets ask.
+  const { data: summary } = usePolledResource('fleet-summary', getFleetSummary);
+  const { data: traps } = usePolledResource('traps-1h', () => getTraps({ hours: 1, limit: 200 }), {
+    intervalMs: 60000,
+  });
+  const alertCount = summary?.alerts.open ?? 0;
+  const trapCount = traps?.length ?? 0;
 
   function toggle() {
     setCollapsed((prev) => {

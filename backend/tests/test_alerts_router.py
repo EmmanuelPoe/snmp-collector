@@ -17,7 +17,7 @@ config.settings.jwt_secret = "test-secret-for-unit-tests"
 from auth import hash_password
 from database import Base, get_db
 from fastapi.testclient import TestClient
-from models import Alert, AlertRule, AlertStatus, AlertType, Device, User, UserRole
+from models import Alert, AlertRule, AlertSeverity, AlertStatus, AlertType, Device, User, UserRole
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -275,3 +275,45 @@ def test_assignable_users_for_editor(client, auth):
 
 def test_assignable_users_requires_role(client):
     assert client.get("/auth/users/assignable").status_code == 401
+
+
+def test_list_alerts_paginates_with_total_header(client, auth):
+    db = client.app.dependency_overrides[get_db]()
+    db.add_all([Alert(alert_type=AlertType.agent_offline, message=f"a{i}") for i in range(5)])
+    db.commit()
+
+    first = client.get("/alerts", params={"limit": 2}, headers=auth)
+    assert first.headers["X-Total-Count"] == "5"
+    second = client.get("/alerts", params={"limit": 2, "skip": 2}, headers=auth)
+    last = client.get("/alerts", params={"limit": 2, "skip": 4}, headers=auth)
+    ids = [a["id"] for r in (first, second, last) for a in r.json()]
+    assert len(ids) == 5 and len(set(ids)) == 5
+
+
+def test_list_alerts_rejects_unbounded_page(client, auth):
+    assert client.get("/alerts", params={"limit": 501}, headers=auth).status_code == 422
+    assert client.get("/alerts", params={"limit": 0}, headers=auth).status_code == 422
+
+
+def test_list_alerts_filters(client, auth):
+    db = client.app.dependency_overrides[get_db]()
+    db.add_all(
+        [
+            Alert(alert_type=AlertType.device_unreachable, severity=AlertSeverity.critical, message="a", device_id=1),
+            Alert(alert_type=AlertType.interface_down, severity=AlertSeverity.warning, message="b", device_id=1),
+            Alert(alert_type=AlertType.interface_down, severity=AlertSeverity.warning, message="c", device_id=2),
+        ]
+    )
+    db.commit()
+
+    def msgs(**params):
+        r = client.get("/alerts", params=params, headers=auth)
+        assert r.status_code == 200
+        return sorted(a["message"] for a in r.json()), r.headers["X-Total-Count"]
+
+    assert msgs(severity="critical") == (["a"], "1")
+    assert msgs(alert_type="interface_down") == (["b", "c"], "2")
+    assert msgs(device_id=1) == (["a", "b"], "2")
+    assert msgs(acknowledged="false")[1] == "3"
+    assert msgs(acknowledged="true") == ([], "0")
+    assert client.get("/alerts", params={"severity": "bogus"}, headers=auth).status_code == 422

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, datetime as _dt, timedelta, timezone
 from typing import Optional
 
@@ -164,6 +165,169 @@ async def interface_rates(
         }
 
     return {"interfaces": interfaces}
+
+
+_FLEET_CACHE_TTL_S = 15.0
+_FLEET_CACHE_MAX = 32
+_fleet_cache: dict[tuple, tuple[float, dict]] = {}
+_fleet_locks: dict[tuple, asyncio.Lock] = {}
+# The leaderboard only needs "current" rates (last 10 min) plus one earlier sample
+# per counter, so don't window-scan the whole `hours` span a second time.
+_TOP_RAW_WINDOW = timedelta(minutes=15)
+
+# Octet counters only; HC variants win when an interface reports both so a
+# 64-bit and a 32-bit counter for the same port are never summed twice. A counter
+# reset or 32-bit wrap (v < pv) drops the sample rather than reporting 0 bps.
+_FLEET_RATES_CTE = """
+WITH raw AS (
+  SELECT device_ip, interface_name,
+         CASE WHEN oid_name LIKE '%In%' THEN 'in' ELSE 'out' END AS dir,
+         oid_name LIKE 'ifHC%' AS is_hc,
+         TRY_CAST(value AS DOUBLE) AS v, collected_at
+  FROM snmp_polls
+  WHERE collected_at >= ? AND interface_name IS NOT NULL
+    AND oid_name IN ('ifHCInOctets','ifInOctets','ifHCOutOctets','ifOutOctets')
+),
+pref AS (
+  SELECT *, MAX(is_hc::INT) OVER (PARTITION BY device_ip, interface_name, dir) AS any_hc
+  FROM raw
+),
+lagged AS (
+  SELECT device_ip, interface_name, dir, collected_at, v,
+         LAG(v) OVER w AS pv, LAG(collected_at) OVER w AS pt
+  FROM pref
+  WHERE is_hc::INT = any_hc
+  WINDOW w AS (PARTITION BY device_ip, interface_name, dir ORDER BY collected_at)
+),
+rates AS (
+  SELECT device_ip, interface_name, dir, collected_at,
+         (v - pv) / date_diff('millisecond', pt, collected_at) * 8000.0 AS bps
+  FROM lagged
+  WHERE pv IS NOT NULL AND v >= pv AND date_diff('millisecond', pt, collected_at) > 0
+)
+"""
+
+
+async def _fleet_traffic(hours: float, top: int) -> dict:
+    now = _dt.now(timezone.utc)
+    bucket_s = max(60, int(hours * 3600 / 60))
+
+    series_rows = await query(
+        _FLEET_RATES_CTE
+        + """
+, per_iface AS (
+  SELECT to_timestamp(floor(epoch(collected_at) / ?) * ?) AS bucket,
+         device_ip, interface_name, dir, AVG(bps) AS bps
+  FROM rates GROUP BY ALL
+)
+SELECT bucket,
+       SUM(bps) FILTER (WHERE dir = 'in'),
+       SUM(bps) FILTER (WHERE dir = 'out'),
+       COUNT(DISTINCT device_ip)
+FROM per_iface GROUP BY bucket ORDER BY bucket
+""",
+        [now - timedelta(hours=hours), bucket_s, bucket_s],
+    )
+
+    # "Current" = the last rate inside a short window, so a device that stopped
+    # reporting drops out of the leaderboard instead of pinning old numbers.
+    top_rows = await query(
+        _FLEET_RATES_CTE
+        + """
+, latest AS (
+  SELECT device_ip, interface_name, dir, arg_max(bps, collected_at) AS bps
+  FROM rates WHERE collected_at >= ? GROUP BY ALL
+),
+cur AS (
+  SELECT device_ip, interface_name,
+         COALESCE(MAX(bps) FILTER (WHERE dir = 'in'), 0) AS in_bps,
+         COALESCE(MAX(bps) FILTER (WHERE dir = 'out'), 0) AS out_bps
+  FROM latest GROUP BY ALL
+),
+speed AS (
+  SELECT device_ip, interface_name,
+         COALESCE(
+           arg_max(TRY_CAST(value AS DOUBLE), collected_at) FILTER (WHERE oid_name = 'ifHighSpeed') * 1000000,
+           arg_max(TRY_CAST(value AS DOUBLE), collected_at) FILTER (WHERE oid_name = 'ifSpeed')
+         ) AS speed_bps
+  FROM snmp_polls
+  WHERE collected_at >= ? AND oid_name IN ('ifHighSpeed','ifSpeed') AND interface_name IS NOT NULL
+  GROUP BY ALL
+)
+SELECT c.device_ip, c.interface_name, c.in_bps, c.out_bps,
+       CASE WHEN s.speed_bps > 0 THEN GREATEST(c.in_bps, c.out_bps) / s.speed_bps * 100 END AS util
+FROM cur c LEFT JOIN speed s USING (device_ip, interface_name)
+""",
+        [now - _TOP_RAW_WINDOW, now - timedelta(minutes=10), now - timedelta(minutes=10)],
+    )
+
+    def _iface(r) -> dict:
+        return {
+            "device_ip": r[0],
+            "interface_name": r[1],
+            "in_bps": r[2],
+            "out_bps": r[3],
+            "utilization_pct": round(r[4], 2) if r[4] is not None else None,
+        }
+
+    ifaces = [_iface(r) for r in top_rows]
+    by_traffic = sorted(ifaces, key=lambda i: max(i["in_bps"], i["out_bps"]), reverse=True)[:top]
+    by_util = sorted(
+        (i for i in ifaces if i["utilization_pct"] is not None),
+        key=lambda i: i["utilization_pct"],
+        reverse=True,
+    )[:top]
+    return {
+        "series": [
+            {"timestamp": r[0].isoformat(), "in_bps": r[1] or 0.0, "out_bps": r[2] or 0.0, "devices": r[3]}
+            for r in series_rows
+        ],
+        "totals": {
+            "in_bps": sum(i["in_bps"] for i in ifaces),
+            "out_bps": sum(i["out_bps"] for i in ifaces),
+            "interfaces": len(ifaces),
+            "devices": len({i["device_ip"] for i in ifaces}),
+        },
+        "top_by_traffic": by_traffic,
+        "top_by_utilization": by_util,
+    }
+
+
+@router.get("/fleet-traffic")
+async def fleet_traffic(
+    hours: float = Query(default=1.0, gt=0, le=24),
+    top: int = Query(default=10, ge=1, le=50),
+    _: str = Depends(require_api_key),
+):
+    """Fleet-wide throughput series plus top-N interfaces, in one aggregate
+    query — replaces the dashboard's per-device /rates fan-out. Cached briefly
+    because every open dashboard asks for the same answer and queries share the
+    DuckDB lock with ingest."""
+    import time
+
+    # Quantise so varied float `hours` can't mint unbounded cache keys.
+    hours = max(0.25, round(hours * 4) / 4)
+    key = (hours, top)
+
+    def _fresh():
+        hit = _fleet_cache.get(key)
+        return hit[1] if hit and time.monotonic() - hit[0] < _FLEET_CACHE_TTL_S else None
+
+    if (cached := _fresh()) is not None:
+        return cached
+    # Single flight: concurrent misses wait for one computation instead of each
+    # running the aggregate while holding the DuckDB lock ingest also needs.
+    async with _fleet_locks.setdefault(key, asyncio.Lock()):
+        if (cached := _fresh()) is not None:
+            return cached
+        result = await _fleet_traffic(hours, top)
+        now = time.monotonic()
+        for k in [k for k, (ts, _) in _fleet_cache.items() if now - ts >= _FLEET_CACHE_TTL_S]:
+            del _fleet_cache[k]
+        if len(_fleet_cache) >= _FLEET_CACHE_MAX:
+            _fleet_cache.pop(next(iter(_fleet_cache)))
+        _fleet_cache[key] = (now, result)
+        return result
 
 
 @router.get("/summary")

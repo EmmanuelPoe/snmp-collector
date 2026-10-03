@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 import httpx
 import pyarrow as pa
 import pyarrow.parquet as pq
+from fleet import synthetic_ip
 
 OID_NAMES = [
     "ifInOctets",
@@ -49,7 +50,7 @@ def make_batch(device_start: int, devices_per_batch: int, interfaces: int, oids:
     n = devices_per_batch * interfaces * oids
     device_ips, iface_names, oid_names, oid_vals, values = [], [], [], [], []
     for d in range(device_start, device_start + devices_per_batch):
-        ip = f"10.{(d >> 8) & 0xFF}.{d & 0xFF}.1"
+        ip = synthetic_ip(d)
         for i in range(interfaces):
             for o in range(oids):
                 device_ips.append(ip)
