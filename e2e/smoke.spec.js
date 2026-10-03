@@ -36,7 +36,7 @@ test('bootstrap login → add device → metrics flow → dashboard renders', as
     await pw.nth(2).fill(NEW_PASSWORD);
     await page.getByRole('button', { name: /set new password/i }).click();
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByText('Network Traffic · Per Device')).toBeVisible();
+    await expect(page.getByText('Fleet Traffic')).toBeVisible();
     await expect(page.getByText('Active Alerts')).toBeVisible();
   });
 
