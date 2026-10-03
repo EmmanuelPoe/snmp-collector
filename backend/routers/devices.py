@@ -6,16 +6,18 @@ import httpx
 from auth import get_current_user, require_role
 from config import settings
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from models import Device, User
 from rate_limit import limiter, token_or_ip
 from schemas import DeviceCreate, DeviceCredentialsResponse, DeviceResponse, DeviceUpdate
-from sqlalchemy import cast
+from sqlalchemy import cast, or_
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/devices", tags=["devices"])
+
+MAX_PAGE_SIZE = 1000
 
 
 def _manager_headers() -> dict:
@@ -52,10 +54,12 @@ def list_tags(
 
 @router.get("", response_model=List[DeviceResponse])
 def list_devices(
-    skip: int = 0,
-    limit: int = 100,
+    response: Response,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=MAX_PAGE_SIZE),
     enabled_only: bool = False,
     tag: Optional[str] = None,
+    search: Optional[str] = Query(default=None, max_length=100, description="Substring of name or IP"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -64,7 +68,15 @@ def list_devices(
         q = q.filter(Device.enabled == True)
     if tag:
         q = q.filter(cast(Device.tags, JSONB).contains([tag]))
-    return q.offset(skip).limit(limit).all()
+    if search:
+        term = search.strip()
+        q = q.filter(
+            or_(Device.name.icontains(term, autoescape=True), Device.ip_address.contains(term, autoescape=True))
+        )
+    # Total ahead of the page so clients can render "1-100 of 2,000". A header
+    # keeps the body a plain array, which every existing caller relies on.
+    response.headers["X-Total-Count"] = str(q.count())
+    return q.order_by(Device.id).offset(skip).limit(limit).all()
 
 
 @router.post("", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)

@@ -96,8 +96,9 @@ export default function TrapsPage() {
                 key={r.label}
                 onClick={() => setHours(r.hours)}
                 style={{
-                  background: hours === r.hours ? 'var(--color-accent)' : 'var(--color-bg)',
-                  color: hours === r.hours ? '#fff' : 'var(--color-text-muted)',
+                  background:
+                    hours === r.hours ? 'var(--color-accent)' : 'var(--color-bg-elevated)',
+                  color: hours === r.hours ? 'var(--color-on-accent)' : 'var(--color-text-muted)',
                   border: `1px solid ${hours === r.hours ? 'var(--color-accent)' : 'var(--color-border)'}`,
                   padding: '2px 8px',
                   borderRadius: 4,

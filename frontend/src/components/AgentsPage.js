@@ -278,7 +278,7 @@ export default function AgentsPage() {
               </p>
               <pre
                 style={{
-                  background: 'var(--color-bg)',
+                  background: 'var(--color-bg-elevated)',
                   border: '1px solid var(--color-border)',
                   borderRadius: 6,
                   padding: '12px 14px',
@@ -286,7 +286,7 @@ export default function AgentsPage() {
                   fontFamily: "'IBM Plex Mono', monospace",
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-all',
-                  color: 'var(--color-text)',
+                  color: 'var(--color-text-primary)',
                 }}
               >
                 {deployResult.install_command}

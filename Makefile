@@ -1,4 +1,4 @@
-.PHONY: loadtest backup restore help setup ensure-env ensure-dirs build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend observability-up observability-down observability-token dev-frontend dev-backend
+.PHONY: loadtest loadtest-register loadtest-cleanup backup restore help setup ensure-env ensure-dirs build up down logs logs-backend logs-frontend logs-manager clean reset migrate shell-backend shell-db test simulation clean-simulation status restart-backend restart-frontend observability-up observability-down observability-token dev-frontend dev-backend
 
 # Create .env from the example on first run, generating strong random secrets so
 # the stack starts securely out of the box (the services refuse to start with the
@@ -195,11 +195,20 @@ restore:
 	@test -n "$(BACKUP)" || (echo "usage: make restore BACKUP=<timestamp>  (see ls backups/)" && exit 1)
 	@./scripts/restore.sh $(BACKUP)
 
-# Load test at the 1000-device target (Step 2.5) — see docs/scale-benchmark.md
+# Register the synthetic fleet as real devices (query benchmarks need Postgres rows).
+loadtest-register:
+	@set -a && . ./.env && set +a && \
+	python3 scripts/loadtest/register_fleet.py --password "$${SIM_ADMIN_PASSWORD:?set SIM_ADMIN_PASSWORD to the admin password}" --devices "$${LOADTEST_DEVICES:-2000}"
+
+loadtest-cleanup:
+	@set -a && . ./.env && set +a && \
+	python3 scripts/loadtest/register_fleet.py --password "$${SIM_ADMIN_PASSWORD:?set SIM_ADMIN_PASSWORD to the admin password}" --cleanup
+
+# Load test (Step 2.5) at LOADTEST_DEVICES devices (default 2000) — see docs/scale-benchmark.md
 loadtest:
 	@echo "🏋️  Load test: synthetic ingest (120s) + query fleet (60s)"
 	@set -a && . ./.env && set +a && \
-	python3 scripts/loadtest/ingest_load.py --devices 1000 --duration 120 --concurrency 4 --api-key "$$MANAGER_API_KEY" && \
+	python3 scripts/loadtest/ingest_load.py --devices "$${LOADTEST_DEVICES:-2000}" --duration 120 --concurrency 4 --api-key "$$MANAGER_API_KEY" && \
 	echo "" && \
 	python3 scripts/loadtest/query_load.py --password "$${SIM_ADMIN_PASSWORD:?set SIM_ADMIN_PASSWORD to the admin password}" --duration 60
 	@echo ""

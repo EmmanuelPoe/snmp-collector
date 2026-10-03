@@ -21,7 +21,14 @@ import httpx
 
 async def dashboard_worker(client, args, device_ids, results, stop_at):
     while time.monotonic() < stop_at:
-        calls = [("GET", f"{args.api_url}/alerts/count", None)]
+        # One open dashboard tab: the shared poller's summary + feed + top-N,
+        # plus the sidebar badge source. (Pre-Phase-A this was one /rates call
+        # per device per refresh.)
+        calls = [
+            ("GET", f"{args.api_url}/fleet/summary", None),
+            ("GET", f"{args.api_url}/fleet/traffic?hours=1&top=10", None),
+            ("GET", f"{args.api_url}/alerts?limit=50", None),
+        ]
         if device_ids:
             did = random.choice(device_ids)
             calls += [
@@ -59,8 +66,15 @@ async def main():
         resp.raise_for_status()
         client.headers["Authorization"] = f"Bearer {resp.json()['access_token']}"
 
-        devices = (await client.get(f"{args.api_url}/devices")).json()
-        device_ids = [d["id"] for d in devices]
+        device_ids, skip = [], 0
+        while True:  # page through the fleet; one bare GET stops at 100
+            resp = await client.get(f"{args.api_url}/devices", params={"skip": skip, "limit": 1000})
+            resp.raise_for_status()
+            page = resp.json()
+            device_ids += [d["id"] for d in page]
+            if len(page) < 1000:
+                break
+            skip += 1000
 
         results = {"latencies": [], "errors": 0}
         stop_at = time.monotonic() + args.duration
