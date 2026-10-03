@@ -72,6 +72,10 @@ test('bootstrap login → add device → metrics flow → dashboard renders', as
 
   await test.step('dashboard traffic chart renders with data', async () => {
     await page.goto('/');
-    await expect(page.locator('.recharts-surface').first()).toBeVisible({ timeout: 60_000 });
+    // Scope to the traffic card: other charts must not satisfy this. A rate
+    // needs two samples per counter, so the series appears after the agent's
+    // second poll; the dashboard refreshes it on its own, no reload needed.
+    const trafficChart = page.locator('.card', { hasText: 'Fleet Traffic' }).locator('.recharts-surface');
+    await expect(trafficChart.first()).toBeVisible({ timeout: 180_000 });
   });
 });
