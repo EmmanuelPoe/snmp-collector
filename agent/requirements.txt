@@ -1,7 +1,7 @@
-pysnmp==7.1.29
+pysnmp==7.1.30
 pyasn1==0.6.4
 pyarrow==25.0.1
 httpx==0.28.1
-pydantic-settings==2.15.0
+pydantic-settings==2.16.0
 pytest==9.1.1
 pytest-asyncio==1.4.0
