@@ -202,7 +202,9 @@ jobs:
           path: sboms/
 
   e2e-simulation:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which Playwright's chromium
+    # installer doesn't support yet. Revisit when @playwright/test is upgraded.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
