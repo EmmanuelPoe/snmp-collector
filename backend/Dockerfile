@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.15-slim
 WORKDIR /app
 # Patch OS packages — the base image ships fixable HIGH findings that the trivy
 # gate in CI blocks on.
