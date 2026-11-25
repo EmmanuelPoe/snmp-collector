@@ -11,7 +11,7 @@ make build           # Rebuild containers
 make reset           # clean + build + up
 
 make migrate         # Run alembic migrations inside backend container
-make test            # Run manager pytest suite (only service with tests)
+make test            # Run the manager pytest suite in its container (other suites: see docs/testing.md)
 make simulation      # End-to-end SNMP collection test using the simulator
 make clean-simulation # Remove simulation test data from postgres
 
@@ -30,6 +30,32 @@ Run a single manager test:
 ```bash
 docker-compose exec manager pytest tests/test_ingest.py -v
 ```
+
+Every service has tests, and CI (`.github/workflows/ci.yml`) runs all of them plus lint, secret scan, dependency audit, image build and a Playwright + simulator end-to-end job. Run the same checks locally before pushing — see [docs/testing.md](docs/testing.md):
+```bash
+ruff check . && ruff format --check . && python scripts/check_shared.py
+(cd backend && python -m pytest -q)      # SQLite, no containers needed
+(cd agent && python -m pytest -q)
+npm run test:ci --prefix frontend
+```
+
+## Agent docs
+
+- [docs/architecture.md](docs/architecture.md) — services, ownership boundaries, data flow, where code lives
+- [docs/security.md](docs/security.md) — auth/RBAC, secrets, encryption, hardening, rules for changes
+- [docs/ui.md](docs/ui.md) — React app structure, navigation, theming, polling
+- [docs/testing.md](docs/testing.md) — every test suite, how to run it, what CI enforces
+- [docs/agent-guide.md](docs/agent-guide.md) — recipes and pitfalls for common changes
+- Existing planning/ops docs: [enterprise-readiness-roadmap.md](docs/enterprise-readiness-roadmap.md), [implementation-plan.md](docs/implementation-plan.md), [metrics-store-decision.md](docs/metrics-store-decision.md), [scale-benchmark.md](docs/scale-benchmark.md), [runbooks/](docs/runbooks/)
+
+## Rules for agents
+
+- Respect ownership: backend owns Postgres (via Alembic migrations), manager owns DuckDB writes. Never write DuckDB from the backend.
+- Every new backend route needs an auth dependency (`get_current_user` or `require_role(...)`); `/internal/*` routes use `require_manager_key` and are blocked at nginx.
+- Never return or log SNMP credentials outside `GET /devices/{id}/credentials`; they are encrypted at rest with `EncryptedString`.
+- Edit `shared/` first, then run `python scripts/sync_shared.py`; never edit the vendored copies directly.
+- Keep the `duckdb` pin identical in `manager/requirements.txt` and `backend/requirements.txt`.
+- Schema changes are new Alembic revisions after the latest in `backend/alembic/versions/`.
 
 ## Architecture
 
