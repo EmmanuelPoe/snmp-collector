@@ -14,7 +14,7 @@ CI (`.github/workflows/ci.yml`) runs on every push and pull request. All jobs mu
 | `build-images` | `docker compose build` | `make build` |
 | `e2e-simulation` | `make up`, Playwright `npm test --prefix e2e` (`e2e/smoke.spec.js`), then `make simulation` | needs Docker; `make simulation` + `make clean-simulation` |
 
-The backend image has no pytest, so run backend tests on the host (`pip install -r backend/requirements.txt pytest`; Python 3.11 like CI). A local run on current `main` gave 227 passed in about 80 s. If agent tests fail with `ModuleNotFoundError: _cffi_backend`, the virtualenv is missing `cffi` for `cryptography`; reinstall the requirements in a fresh venv.
+The backend image has no pytest, so run backend tests on the host (`pip install -r backend/requirements.txt pytest`; Python 3.11 like CI). A local run on current `main` gave 227 passed in about 80 s. If agent tests fail with `ModuleNotFoundError: _cffi_backend`, the virtualenv is missing `cffi` for `cryptography`; `pip install cffi` (local run with it: 14 agent tests passed).
 
 ## Suites at a glance
 

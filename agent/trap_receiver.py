@@ -11,9 +11,21 @@ from pysnmp.hlapi.v3arch.asyncio import SnmpEngine
 
 log = logging.getLogger(__name__)
 
+_WELL_KNOWN_COMMUNITIES = {"public", "private"}
+
+
+def is_default_community(community: str) -> bool:
+    """True for vendor-default communities that anyone on the network can guess."""
+    return community.strip().lower() in _WELL_KNOWN_COMMUNITIES
+
 
 async def run_trap_listener(agent_id: str, trap_buffer) -> None:
     loop = asyncio.get_running_loop()
+    if is_default_community(agent_config.settings.trap_community):
+        log.warning(
+            "TRAP_COMMUNITY is a well-known default; any host that can reach the trap "
+            "port can inject traps. Set a unique TRAP_COMMUNITY in production."
+        )
     snmp_engine = SnmpEngine()
 
     snmp_config.add_transport(

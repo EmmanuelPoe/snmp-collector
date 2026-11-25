@@ -24,10 +24,10 @@ Read `CLAUDE.md` first (commands, services, constraints). The implementation pla
 
 **Add or rotate a secret**: support `NAME` and `NAME_FILE`, validate at startup, add to `.env.example`, `docker-compose.prod.yml` secrets, and `docs/runbooks/secret-rotation.md`.
 
-## Pitfalls (from CLAUDE.md "Known operational issues" and history)
+## Pitfalls
 
-- Agents get a new random ID suffix on restart, leaving stale "offline" registry entries that fire `agent_offline` alerts; persisting the ID in `data/agent-id/` is the fix.
-- Linux virtual interfaces on the simulator (`erspan0`, `gre0`, `sit0`, `tunl0`, …) trigger `interface_down` alerts; the evaluator does not filter them yet.
+- Agent identity lives in `data/agent-id/`; tests and scripts that recreate containers without that volume create new agent IDs (clear old ones with **Clear Offline**).
+- Interface-down alerts skip virtual interfaces by name prefix (`_VIRTUAL_IFACE_PREFIXES` in `alert_evaluator.py`); add new prefixes there.
 - DuckDB has one writer (manager, global lock). Opening it read-write anywhere else corrupts the design; backend access is read-only.
 - Dependabot proposes one-sided `duckdb` bumps; close or combine them.
 - Frontend changes do not appear in the Docker stack until the frontend image is rebuilt.

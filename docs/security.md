@@ -32,7 +32,7 @@ This repository is public. It has the most mature security posture of the projec
 
 ## Known weak spots
 
-- `agent/config.py` defaults `trap_community` to `public`; set a real community (or SNMPv3) in deployments.
+- `TRAP_COMMUNITY` defaults to `public` (the simulator uses it); the agent logs a startup warning for well-known communities (`is_default_community` in `agent/trap_receiver.py`). Set a unique value in deployments.
 - `react-router` has a moderate advisory fixed only in v7 (a major upgrade); tracked separately from the high-severity gate.
 - The CSP is report-only, so it does not block anything yet.
 

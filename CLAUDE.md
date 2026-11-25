@@ -128,7 +128,8 @@ Copy `.env.example` to `.env`. Required variables beyond defaults:
 - `MANAGER_API_KEY` — shared secret between manager and agent (and backend's agent proxy calls)
 - Postgres credentials: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
 
-## Known operational issues
+## Operational notes
 
-- **Stale agent_offline alerts**: agents generate a new random ID suffix on each restart; old IDs remain in the registry as "offline" and keep firing alerts. Fix requires persisting agent ID across restarts (`data/agent-id/` file).
-- **Kernel interface alerts**: Linux virtual interfaces on the simulator (erspan0, gre0, sit0, tunl0, etc.) trigger `interface_down` alerts. These are always-down system interfaces, not real monitored links. The evaluator does not yet filter them out.
+- **Agent identity persists** in `data/agent-id/` (`AGENT_ID_PATH`). If that volume is lost, the agent registers with a new ID and the old one shows as offline; remove it with **Clear Offline** on the Agents page.
+- **Virtual interfaces are ignored by alerting**: `alert_evaluator.py` skips interfaces whose names start with `erspan`, `gre`, `sit`, `tunl`, `ip6tnl`, `bond` or `lo` (`_VIRTUAL_IFACE_PREFIXES`). Extend that tuple rather than adding special cases.
+- **Trap community**: `TRAP_COMMUNITY` defaults to `public` for the simulator; the agent logs a warning at startup when a well-known community is used.
