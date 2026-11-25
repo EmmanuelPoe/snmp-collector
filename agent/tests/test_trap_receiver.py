@@ -91,3 +91,11 @@ async def test_trap_listener_receives_and_buffers_a_v2c_trap(monkeypatch):
     assert varbinds[SYSUPTIME] == "4242"
     assert varbinds["1.3.6.1.6.3.1.1.4.1.0"] == LINK_DOWN
     assert row["received_at"]
+
+
+def test_default_communities_are_flagged():
+    from trap_receiver import is_default_community
+
+    assert is_default_community("public")
+    assert is_default_community(" Private ")
+    assert not is_default_community("n0c-traps-7f3a")

@@ -11,7 +11,7 @@ make build           # Rebuild containers
 make reset           # clean + build + up
 
 make migrate         # Run alembic migrations inside backend container
-make test            # Run manager pytest suite (only service with tests)
+make test            # Run the manager pytest suite in its container (other suites: see docs/testing.md)
 make simulation      # End-to-end SNMP collection test using the simulator
 make clean-simulation # Remove simulation test data from postgres
 
@@ -30,6 +30,32 @@ Run a single manager test:
 ```bash
 docker-compose exec manager pytest tests/test_ingest.py -v
 ```
+
+Every service has tests, and CI (`.github/workflows/ci.yml`) runs all of them plus lint, secret scan, dependency audit, image build and a Playwright + simulator end-to-end job. Run the same checks locally before pushing — see [docs/testing.md](docs/testing.md):
+```bash
+ruff check . && ruff format --check . && python scripts/check_shared.py
+(cd backend && python -m pytest -q)      # SQLite, no containers needed
+(cd agent && python -m pytest -q)
+npm run test:ci --prefix frontend
+```
+
+## Agent docs
+
+- [docs/architecture.md](docs/architecture.md) — services, ownership boundaries, data flow, where code lives
+- [docs/security.md](docs/security.md) — auth/RBAC, secrets, encryption, hardening, rules for changes
+- [docs/ui.md](docs/ui.md) — React app structure, navigation, theming, polling
+- [docs/testing.md](docs/testing.md) — every test suite, how to run it, what CI enforces
+- [docs/agent-guide.md](docs/agent-guide.md) — recipes and pitfalls for common changes
+- Existing planning/ops docs: [enterprise-readiness-roadmap.md](docs/enterprise-readiness-roadmap.md), [implementation-plan.md](docs/implementation-plan.md), [metrics-store-decision.md](docs/metrics-store-decision.md), [scale-benchmark.md](docs/scale-benchmark.md), [runbooks/](docs/runbooks/)
+
+## Rules for agents
+
+- Respect ownership: backend owns Postgres (via Alembic migrations), manager owns DuckDB writes. Never write DuckDB from the backend.
+- Every new backend route needs an auth dependency (`get_current_user` or `require_role(...)`); `/internal/*` routes use `require_manager_key` and are blocked at nginx.
+- Never return or log SNMP credentials outside `GET /devices/{id}/credentials`; they are encrypted at rest with `EncryptedString`.
+- Edit `shared/` first, then run `python scripts/sync_shared.py`; never edit the vendored copies directly.
+- Keep the `duckdb` pin identical in `manager/requirements.txt` and `backend/requirements.txt`.
+- Schema changes are new Alembic revisions after the latest in `backend/alembic/versions/`.
 
 ## Architecture
 
@@ -102,7 +128,8 @@ Copy `.env.example` to `.env`. Required variables beyond defaults:
 - `MANAGER_API_KEY` — shared secret between manager and agent (and backend's agent proxy calls)
 - Postgres credentials: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
 
-## Known operational issues
+## Operational notes
 
-- **Stale agent_offline alerts**: agents generate a new random ID suffix on each restart; old IDs remain in the registry as "offline" and keep firing alerts. Fix requires persisting agent ID across restarts (`data/agent-id/` file).
-- **Kernel interface alerts**: Linux virtual interfaces on the simulator (erspan0, gre0, sit0, tunl0, etc.) trigger `interface_down` alerts. These are always-down system interfaces, not real monitored links. The evaluator does not yet filter them out.
+- **Agent identity persists** in `data/agent-id/` (`AGENT_ID_PATH`). If that volume is lost, the agent registers with a new ID and the old one shows as offline; remove it with **Clear Offline** on the Agents page.
+- **Virtual interfaces are ignored by alerting**: `alert_evaluator.py` skips interfaces whose names start with `erspan`, `gre`, `sit`, `tunl`, `ip6tnl`, `bond` or `lo` (`_VIRTUAL_IFACE_PREFIXES`). Extend that tuple rather than adding special cases.
+- **Trap community**: `TRAP_COMMUNITY` defaults to `public` for the simulator; the agent logs a warning at startup when a well-known community is used.

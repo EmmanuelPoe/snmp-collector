@@ -160,7 +160,14 @@ SESSION_ABSOLUTE_HOURS=12       # hard cap on session lifetime regardless of act
 # Manager
 MANAGER_PUBLIC_URL=http://your-host:8001  # used in generated docker run one-liners
 SLOT_EXPIRY_HOURS=24                      # how long unclaimed agent tokens are valid
+
+# Agent — SNMP trap ingestion (opt-in)
+TRAP_ENABLED=false
+TRAP_LISTEN_PORT=162
+TRAP_COMMUNITY=public   # change in production: the agent warns when a default community is used
 ```
+
+The full list, including encryption, TLS, rate-limit and observability settings, is in `.env.example`; production deployments can pass secrets as files (`*_FILE` variables, see `docker-compose.prod.yml`).
 
 Generate strong secrets:
 ```bash
